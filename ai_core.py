@@ -16,6 +16,7 @@ import requests
 from google import genai
 from google.genai import types
 
+import admin_store
 import memory_manager as mem
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
@@ -156,6 +157,8 @@ def get_ai_reply(
     user_text: str,
     image_bytes: bytes | None = None,
     image_mime: str | None = None,
+    name: str | None = None,
+    source: str = "telegram",
 ) -> str:
     """Send a message as the given user and return Misumi AI's reply text.
 
@@ -163,11 +166,16 @@ def get_ai_reply(
     If image_bytes is given, it's attached to the message (e.g. a photo
     sent from the Mini App), and Misumi will look at it before replying.
 
+    `name` and `source` are optional metadata (display name, "telegram" or
+    "miniapp") recorded for the admin panel's stats/user list — purely
+    cosmetic, never sent to the model.
+
     If Gemini fails (quota exhausted, model retired, etc.) and GROK_API_KEY
     is configured, silently falls back to Grok so the user never sees an
     error — though Grok mode doesn't support image input or memory saves.
     """
     user_id = str(user_id)
+    admin_store.record_message(user_id, name=name, source=source)
     memory = mem.load_memory(user_id)
     memory_block = mem.format_memory_for_prompt(memory)
     system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
