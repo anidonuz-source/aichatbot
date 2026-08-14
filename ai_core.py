@@ -12,6 +12,7 @@ the Mini App.
 """
 import os
 
+import requests
 from google import genai
 from google.genai import types
 
@@ -21,6 +22,13 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 BOT_NAME = "Misumi AI"
 AUTHOR_HANDLE = "@QahramonovK"
+
+# Optional fallback: if Gemini fails (quota exhausted, model unavailable,
+# etc.), and a Grok API key is set, Misumi silently retries the same
+# message through xAI's Grok instead of showing an error.
+GROK_API_KEY = os.environ.get("GROK_API_KEY")
+GROK_MODEL = os.environ.get("GROK_MODEL", "grok-4.1-fast")
+GROK_URL = "https://api.x.ai/v1/chat/completions"
 
 MAX_HISTORY_TURNS = 30  # short-term context kept in RAM, per user
 
@@ -111,6 +119,38 @@ def _build_chat(user_id: str):
     return client.chats.create(model=GEMINI_MODEL, config=config, history=history)
 
 
+def _call_grok(system_instruction: str, user_text: str) -> str | None:
+    """Best-effort fallback through xAI's Grok. Returns None (never raises)
+    if GROK_API_KEY isn't set or the call fails, so callers can just check
+    for None and re-raise the original Gemini error.
+    """
+    if not GROK_API_KEY:
+        return None
+    try:
+        resp = requests.post(
+            GROK_URL,
+            headers={
+                "Authorization": f"Bearer {GROK_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": GROK_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": user_text},
+                ],
+                "temperature": 0.8,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[Grok fallback] failed: {e}")
+        return None
+
+
 def get_ai_reply(
     user_id: str,
     user_text: str,
@@ -122,35 +162,50 @@ def get_ai_reply(
     Shared by the Telegram bot handler and the Mini App's /api/chat route.
     If image_bytes is given, it's attached to the message (e.g. a photo
     sent from the Mini App), and Misumi will look at it before replying.
+
+    If Gemini fails (quota exhausted, model retired, etc.) and GROK_API_KEY
+    is configured, silently falls back to Grok so the user never sees an
+    error — though Grok mode doesn't support image input or memory saves.
     """
     user_id = str(user_id)
-    chat = _build_chat(user_id)
+    memory = mem.load_memory(user_id)
+    memory_block = mem.format_memory_for_prompt(memory)
+    system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
 
-    if image_bytes:
-        parts = [
-            types.Part.from_bytes(data=image_bytes, mime_type=image_mime or "image/jpeg"),
-            types.Part.from_text(text=user_text or "Rasmda nima bor?"),
-        ]
-        response = chat.send_message(parts)
-    else:
-        response = chat.send_message(user_text)
+    try:
+        chat = _build_chat(user_id)
 
-    for fn in (response.function_calls or []):
-        if fn.name != "save_memory":
-            continue
-        args = dict(fn.args)
-        category = args.get("category", "notes")
-        key = args.get("key")
-        value = args.get("value")
-        if key and value:
-            mem.update_memory(user_id, {category: {key: {"value": value}}})
-        response = chat.send_message(
-            types.Part.from_function_response(name="save_memory", response={"result": "ok"})
-        )
+        if image_bytes:
+            parts = [
+                types.Part.from_bytes(data=image_bytes, mime_type=image_mime or "image/jpeg"),
+                types.Part.from_text(text=user_text or "Rasmda nima bor?"),
+            ]
+            response = chat.send_message(parts)
+        else:
+            response = chat.send_message(user_text)
 
-    reply_text = (response.text or "...").strip()
-    _history[user_id] = chat.get_history()[-MAX_HISTORY_TURNS:]
-    return reply_text
+        for fn in (response.function_calls or []):
+            if fn.name != "save_memory":
+                continue
+            args = dict(fn.args)
+            category = args.get("category", "notes")
+            key = args.get("key")
+            value = args.get("value")
+            if key and value:
+                mem.update_memory(user_id, {category: {key: {"value": value}}})
+            response = chat.send_message(
+                types.Part.from_function_response(name="save_memory", response={"result": "ok"})
+            )
+
+        reply_text = (response.text or "...").strip()
+        _history[user_id] = chat.get_history()[-MAX_HISTORY_TURNS:]
+        return reply_text
+
+    except Exception as gemini_error:
+        fallback = _call_grok(system_instruction, user_text or "Salom")
+        if fallback:
+            return fallback
+        raise gemini_error
 
 
 def reset_user(user_id: str) -> None:
