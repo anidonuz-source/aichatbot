@@ -115,6 +115,21 @@ def api_chat():
         except Exception:
             return jsonify({"error": "Invalid image"}), 400
 
+    # If the user is asking us to *generate* an image (and isn't attaching
+    # one for us to look at), route to image generation instead of chat.
+    if not image_bytes and ai_core.wants_image(message):
+        try:
+            gen_bytes, gen_mime = ai_core.generate_image_reply(
+                str(user_id), message, name=user.get("first_name"), source="miniapp"
+            )
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        gen_b64 = base64.b64encode(gen_bytes).decode("ascii")
+        return jsonify({
+            "reply": "",
+            "generated_image": f"data:{gen_mime};base64,{gen_b64}",
+        })
+
     try:
         reply = ai_core.get_ai_reply(
             str(user_id),
