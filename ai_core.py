@@ -5,12 +5,23 @@ Used by both:
   - bot.py     (Telegram chat handlers)
   - webapp.py  (Telegram Mini App / web chat interface)
 
-Both surfaces share the same Gemini persona, long-term memory, and
-save_memory tool, keyed by the user's Telegram id — so a conversation
-continues seamlessly whether the person types in the bot chat or opens
-the Mini App.
+Provider chain for plain text messages:
+  1. Cerebras  (primary  — fast, strong open-weight models, generous free tier)
+  2. Gemini    (fallback — also handles image input, since Cerebras/Groq here
+                are text-only)
+  3. Groq      (final fallback)
+
+If the user attaches an image, Gemini is used directly (only provider here
+that accepts vision input); if that fails, no fallback exists for images.
+
+Long-term memory works the same way across all three providers: instead of
+provider-specific function/tool calling, the system prompt asks the model
+to append an invisible tag like ⟦MEMORY:category:key:value⟧ at the end of
+its reply when it learns something worth remembering. We strip those tags
+before showing the reply and save them to memory_manager.
 """
 import os
+import re
 
 import requests
 from google import genai
@@ -19,21 +30,31 @@ from google.genai import types
 import admin_store
 import memory_manager as mem
 
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 BOT_NAME = "Misumi AI"
 AUTHOR_HANDLE = "@QahramonovK"
 
-# Optional fallback: if Gemini fails (quota exhausted, model unavailable,
-# etc.), and a Grok API key is set, Misumi silently retries the same
-# message through xAI's Grok instead of showing an error.
-GROK_API_KEY = os.environ.get("GROK_API_KEY")
-GROK_MODEL = os.environ.get("GROK_MODEL", "grok-4.1-fast")
-GROK_URL = "https://api.x.ai/v1/chat/completions"
-
 MAX_HISTORY_TURNS = 30  # short-term context kept in RAM, per user
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# ---------------------------------------------------------------------------
+# Provider 1 (primary): Cerebras — https://cloud.cerebras.ai
+# ---------------------------------------------------------------------------
+CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
+CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama-4-scout")
+CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
+
+# ---------------------------------------------------------------------------
+# Provider 2 (fallback + vision): Gemini — https://aistudio.google.com
+# ---------------------------------------------------------------------------
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+_gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
+# ---------------------------------------------------------------------------
+# Provider 3 (final fallback): Groq — https://console.groq.com
+# ---------------------------------------------------------------------------
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = f"""You are {BOT_NAME} — a sleek, premium, highly capable AI
 companion. Your tone is warm but polished: confident, concise, never
@@ -59,97 +80,96 @@ snippet under ~10 lines, fixing a small bug, or explaining a concept
 
 Whenever the user reveals something worth remembering long-term — their
 name, age, city, job, preferences, hobbies, relationships, projects, or
-future plans — silently call save_memory. Never announce that you are
-saving something, just call it. Do NOT save one-off requests or small talk.
-Memory values must be written in English regardless of the conversation
-language.
+future plans — silently remember it by appending, at the very end of your
+reply (after your normal answer, on new lines, invisible to the user),
+one tag per fact in this EXACT format:
+⟦MEMORY:category:key:value⟧
+category is one of: identity, preferences, projects, relationships,
+wishes, notes. key is a short snake_case key (e.g. name, favorite_food).
+value must be written in English, concise. Do NOT mention these tags to
+the user, do NOT wrap them in code blocks, just append them silently.
+Do NOT tag one-off requests or small talk — only durable facts.
 """
 
-SAVE_MEMORY_DECLARATION = types.FunctionDeclaration(
-    name="save_memory",
-    description=(
-        "Save an important personal fact about the user to long-term memory. "
-        "Call this silently whenever the user reveals something worth "
-        "remembering: name, age, city, job, preferences, hobbies, "
-        "relationships, projects, or future plans. Do NOT call for "
-        "one-time questions or small talk."
-    ),
-    parameters={
-        "type": "OBJECT",
-        "properties": {
-            "category": {
-                "type": "STRING",
-                "description": (
-                    "identity — name, age, birthday, city, job, language, "
-                    "nationality | preferences — favorite food/color/music/"
-                    "film/game/sport, hobbies | projects — active projects, "
-                    "goals, things being built | relationships — friends, "
-                    "family, partner, colleagues | wishes — future plans, "
-                    "things to buy, travel dreams | notes — anything else "
-                    "worth remembering"
-                ),
-            },
-            "key": {
-                "type": "STRING",
-                "description": "Short snake_case key (e.g. name, favorite_food)",
-            },
-            "value": {
-                "type": "STRING",
-                "description": "Concise value in English (e.g. Fatih, pizza)",
-            },
-        },
-        "required": ["category", "key", "value"],
-    },
-)
+MEMORY_TAG_RE = re.compile(r"⟦MEMORY:([a-zA-Z_]+):([a-zA-Z0-9_]+):([^⟧]*)⟧")
 
 # In-memory short-term conversation history per user (lost on restart —
 # only long-term facts persist via memory_manager on disk). Shared between
 # the Telegram chat and the Mini App since both key off the same user id.
+# Format: list of {"role": "user"|"assistant", "content": str}
 _history: dict[str, list] = {}
 
 
-def _build_chat(user_id: str):
-    memory = mem.load_memory(user_id)
-    memory_block = mem.format_memory_for_prompt(memory)
-    system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
-    config = types.GenerateContentConfig(
-        system_instruction=system_instruction,
-        tools=[types.Tool(function_declarations=[SAVE_MEMORY_DECLARATION])],
+def _extract_memory_tags(text: str) -> tuple[str, list[tuple[str, str, str]]]:
+    matches = MEMORY_TAG_RE.findall(text or "")
+    clean = MEMORY_TAG_RE.sub("", text or "").strip()
+    return clean, matches
+
+
+def _call_cerebras(system_instruction: str, history: list, user_text: str) -> str:
+    if not CEREBRAS_API_KEY:
+        raise RuntimeError("CEREBRAS_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    messages += [{"role": t["role"], "content": t["content"]} for t in history]
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        CEREBRAS_URL,
+        headers={
+            "Authorization": f"Bearer {CEREBRAS_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={"model": CEREBRAS_MODEL, "messages": messages, "temperature": 0.8},
+        timeout=30,
     )
-    history = _history.get(user_id, [])
-    return client.chats.create(model=GEMINI_MODEL, config=config, history=history)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
 
 
-def _call_grok(system_instruction: str, user_text: str) -> str | None:
-    """Best-effort fallback through xAI's Grok. Returns None (never raises)
-    if GROK_API_KEY isn't set or the call fails, so callers can just check
-    for None and re-raise the original Gemini error.
-    """
-    if not GROK_API_KEY:
-        return None
-    try:
-        resp = requests.post(
-            GROK_URL,
-            headers={
-                "Authorization": f"Bearer {GROK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": GROK_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": user_text},
-                ],
-                "temperature": 0.8,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"[Grok fallback] failed: {e}")
-        return None
+def _call_groq(system_instruction: str, history: list, user_text: str) -> str:
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    messages += [{"role": t["role"], "content": t["content"]} for t in history]
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        GROQ_URL,
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={"model": GROQ_MODEL, "messages": messages, "temperature": 0.8},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def _call_gemini(
+    system_instruction: str,
+    history: list,
+    user_text: str,
+    image_bytes: bytes | None = None,
+    image_mime: str | None = None,
+) -> str:
+    contents = []
+    for turn in history:
+        role = "user" if turn["role"] == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=turn["content"])]))
+
+    parts = []
+    if image_bytes:
+        parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_mime or "image/jpeg"))
+    parts.append(types.Part.from_text(text=user_text or "Rasmda nima bor?"))
+    contents.append(types.Content(role="user", parts=parts))
+
+    response = _gemini_client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(system_instruction=system_instruction),
+    )
+    return (response.text or "").strip()
 
 
 def get_ai_reply(
@@ -163,57 +183,55 @@ def get_ai_reply(
     """Send a message as the given user and return Misumi AI's reply text.
 
     Shared by the Telegram bot handler and the Mini App's /api/chat route.
-    If image_bytes is given, it's attached to the message (e.g. a photo
-    sent from the Mini App), and Misumi will look at it before replying.
+    If image_bytes is given, only Gemini (vision-capable) handles it.
+    Otherwise tries Cerebras -> Gemini -> Groq in order, returning the
+    first successful reply.
 
     `name` and `source` are optional metadata (display name, "telegram" or
-    "miniapp") recorded for the admin panel's stats/user list — purely
-    cosmetic, never sent to the model.
-
-    If Gemini fails (quota exhausted, model retired, etc.) and GROK_API_KEY
-    is configured, silently falls back to Grok so the user never sees an
-    error — though Grok mode doesn't support image input or memory saves.
+    "miniapp") recorded for the admin panel's stats/user list.
     """
     user_id = str(user_id)
     admin_store.record_message(user_id, name=name, source=source)
+
     memory = mem.load_memory(user_id)
     memory_block = mem.format_memory_for_prompt(memory)
     system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
+    history = _history.get(user_id, [])
 
-    try:
-        chat = _build_chat(user_id)
+    raw_reply = None
+    last_error: Exception | None = None
 
-        if image_bytes:
-            parts = [
-                types.Part.from_bytes(data=image_bytes, mime_type=image_mime or "image/jpeg"),
-                types.Part.from_text(text=user_text or "Rasmda nima bor?"),
-            ]
-            response = chat.send_message(parts)
-        else:
-            response = chat.send_message(user_text)
-
-        for fn in (response.function_calls or []):
-            if fn.name != "save_memory":
+    if image_bytes:
+        try:
+            raw_reply = _call_gemini(system_instruction, history, user_text, image_bytes, image_mime)
+        except Exception as e:
+            last_error = e
+    else:
+        for call in (_call_cerebras, _call_gemini, _call_groq):
+            try:
+                raw_reply = call(system_instruction, history, user_text)
+                break
+            except Exception as e:
+                print(f"[{call.__name__}] failed: {e}")
+                last_error = e
                 continue
-            args = dict(fn.args)
-            category = args.get("category", "notes")
-            key = args.get("key")
-            value = args.get("value")
-            if key and value:
-                mem.update_memory(user_id, {category: {key: {"value": value}}})
-            response = chat.send_message(
-                types.Part.from_function_response(name="save_memory", response={"result": "ok"})
-            )
 
-        reply_text = (response.text or "...").strip()
-        _history[user_id] = chat.get_history()[-MAX_HISTORY_TURNS:]
-        return reply_text
+    if raw_reply is None:
+        raise last_error or RuntimeError("All AI providers failed")
 
-    except Exception as gemini_error:
-        fallback = _call_grok(system_instruction, user_text or "Salom")
-        if fallback:
-            return fallback
-        raise gemini_error
+    clean_text, tags = _extract_memory_tags(raw_reply)
+    for category, key, value in tags:
+        value = value.strip()
+        if key and value:
+            mem.update_memory(user_id, {category: {key: {"value": value}}})
+
+    reply_text = clean_text.strip() or "..."
+
+    history.append({"role": "user", "content": user_text or "[rasm]"})
+    history.append({"role": "assistant", "content": reply_text})
+    _history[user_id] = history[-MAX_HISTORY_TURNS:]
+
+    return reply_text
 
 
 def reset_user(user_id: str) -> None:
