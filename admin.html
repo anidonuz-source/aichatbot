@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ bot_name }} · Admin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b0b0d;
+    --ink-2:#141417;
+    --panel:#1b1b1f;
+    --hairline:rgba(201,162,39,0.16);
+    --brass:#c9a227;
+    --brass-soft:#8a7228;
+    --plum:#3b2f4a;
+    --paper:#f2efe9;
+    --paper-dim:#a9a6a0;
+    --danger:#c9524a;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(201,162,39,0.07), transparent 60%),
+      var(--ink);
+    color:var(--paper);
+    font-family:'Manrope',sans-serif;
+    display:flex;
+    flex-direction:column;
+    min-height:100%;
+  }
+
+  header{
+    flex:0 0 auto;
+    padding:calc(18px + var(--safe-top)) 20px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    border-bottom:1px solid var(--hairline);
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+  .mark{width:28px;height:28px;flex:0 0 auto;}
+  .mark svg{width:100%;height:100%;display:block;}
+  .titles{display:flex;flex-direction:column;line-height:1.15;}
+  .titles .name{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:21px;
+    letter-spacing:0.02em;
+    color:var(--paper);
+  }
+  .titles .sub{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.09em;
+    text-transform:uppercase;
+    color:var(--brass-soft);
+    margin-top:2px;
+  }
+
+  main{flex:1 1 auto; padding:18px 16px calc(24px + var(--safe-bottom)); overflow-y:auto;}
+
+  #gate{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; gap:10px; padding:60px 24px;
+  }
+  #gate svg{width:34px;height:34px;color:var(--danger);}
+  #gate h2{font-family:'Cormorant Garamond',serif; font-size:22px; margin:6px 0 0; color:var(--paper);}
+  #gate p{font-size:13px; color:var(--paper-dim); max-width:260px; line-height:1.6;}
+
+  #dash{display:none;}
+
+  .stats-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;
+  }
+  .stat-card{
+    background:var(--panel); border:1px solid var(--hairline); border-radius:14px;
+    padding:14px 16px;
+  }
+  .stat-card .num{
+    font-family:'Cormorant Garamond',serif; font-weight:600; font-size:26px; color:var(--brass);
+    line-height:1.1;
+  }
+  .stat-card .label{
+    font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.07em;
+    text-transform:uppercase; color:var(--paper-dim); margin-top:4px;
+  }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--hairline); border-radius:14px;
+    padding:14px 16px; margin-bottom:16px;
+  }
+  .panel-row{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .panel-row .txt .t{font-size:14px; font-weight:600; color:var(--paper);}
+  .panel-row .txt .d{font-size:12px; color:var(--paper-dim); margin-top:2px; line-height:1.4;}
+
+  .switch{
+    position:relative; width:44px; height:26px; flex:0 0 auto; cursor:pointer;
+  }
+  .switch input{display:none;}
+  .switch .track{
+    position:absolute; inset:0; border-radius:14px; background:rgba(255,255,255,0.08);
+    border:1px solid var(--hairline); transition:background .2s ease;
+  }
+  .switch .thumb{
+    position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%;
+    background:var(--paper-dim); transition:transform .2s ease, background .2s ease;
+  }
+  .switch input:checked + .track{background:rgba(201,82,74,0.25); border-color:var(--danger);}
+  .switch input:checked + .track + .thumb{transform:translateX(18px); background:var(--danger);}
+
+  .section-title{
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:0.09em;
+    text-transform:uppercase; color:var(--brass-soft); margin:20px 2px 10px;
+  }
+
+  .search{
+    width:100%; padding:10px 14px; border-radius:12px; border:1px solid var(--hairline);
+    background:var(--ink-2); color:var(--paper); font-family:'Manrope',sans-serif;
+    font-size:13.5px; outline:none; margin-bottom:12px;
+  }
+  .search::placeholder{color:var(--paper-dim);}
+
+  .user-card{
+    background:var(--panel); border:1px solid var(--hairline); border-radius:14px;
+    padding:12px 14px; margin-bottom:10px;
+  }
+  .user-top{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .user-name{font-size:14px; font-weight:600; color:var(--paper);}
+  .user-id{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--paper-dim); margin-top:2px;}
+  .user-meta{
+    display:flex; gap:12px; margin-top:8px; font-size:11px; color:var(--paper-dim);
+    font-family:'JetBrains Mono',monospace;
+  }
+  .badges{display:flex; gap:6px;}
+  .badge{
+    font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.05em;
+    text-transform:uppercase; padding:3px 7px; border-radius:20px; border:1px solid var(--hairline);
+    color:var(--paper-dim);
+  }
+  .badge.premium{color:var(--brass); border-color:rgba(201,162,39,0.4);}
+  .badge.blocked{color:var(--danger); border-color:rgba(201,82,74,0.4);}
+
+  .user-actions{display:flex; gap:8px; margin-top:10px;}
+  .action-btn{
+    flex:1; padding:8px 10px; border-radius:10px; border:1px solid var(--hairline);
+    background:rgba(255,255,255,0.02); color:var(--paper-dim); font-size:12px;
+    font-family:'Manrope',sans-serif; font-weight:600; cursor:pointer; text-align:center;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .action-btn:active{transform:scale(0.97);}
+  .action-btn.premium-on{color:var(--brass); border-color:rgba(201,162,39,0.4);}
+  .action-btn.block-on{color:var(--danger); border-color:rgba(201,82,74,0.4);}
+
+  .empty{text-align:center; color:var(--paper-dim); font-size:13px; padding:30px 10px;}
+  .loading{text-align:center; color:var(--paper-dim); font-size:13px; padding:30px 10px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">
+    <svg viewBox="0 0 30 30" fill="none">
+      <circle cx="15" cy="6" r="2.4" fill="#c9a227"/>
+      <circle cx="6" cy="22" r="2.4" fill="#c9a227"/>
+      <circle cx="24" cy="22" r="2.4" fill="#c9a227"/>
+    </svg>
+  </div>
+  <div class="titles">
+    <div class="name">{{ bot_name }}</div>
+    <div class="sub">Admin panel</div>
+  </div>
+</header>
+
+<main>
+  <div id="gate" style="display:none;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
+    <h2>Ruxsat yo'q</h2>
+    <p>Bu sahifa faqat botning administratori uchun. Agar bu xato deb hisoblasangiz, ADMIN_ID sozlamasini tekshiring.</p>
+  </div>
+
+  <div id="loading" class="loading">Yuklanmoqda…</div>
+
+  <div id="dash">
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <div class="panel">
+      <div class="panel-row">
+        <div class="txt">
+          <div class="t">Texnik ishlar rejimi</div>
+          <div class="d">Yoqilsa, faqat siz botdan foydalana olasiz — boshqalarga xabar ko'rsatiladi.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="maintenanceToggle">
+          <span class="track"></span>
+          <span class="thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section-title">Foydalanuvchilar</div>
+    <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
+    <div id="usersList"></div>
+  </div>
+</main>
+
+<script>
+  const tg = window.Telegram?.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+  const initData = tg?.initData || '';
+
+  const gateEl = document.getElementById('gate');
+  const loadingEl = document.getElementById('loading');
+  const dashEl = document.getElementById('dash');
+  const statsGrid = document.getElementById('statsGrid');
+  const maintenanceToggle = document.getElementById('maintenanceToggle');
+  const usersList = document.getElementById('usersList');
+  const searchInput = document.getElementById('searchInput');
+
+  let allUsers = [];
+
+  async function api(path, body) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ initData, ...body })
+    });
+    if (res.status === 403 || res.status === 401) throw new Error('unauthorized');
+    return res.json();
+  }
+
+  function renderStats(stats) {
+    statsGrid.innerHTML = `
+      <div class="stat-card"><div class="num">${stats.total_users}</div><div class="label">Foydalanuvchilar</div></div>
+      <div class="stat-card"><div class="num">${stats.total_messages}</div><div class="label">Xabarlar</div></div>
+      <div class="stat-card"><div class="num">${stats.premium_count}</div><div class="label">Premium</div></div>
+      <div class="stat-card"><div class="num">${stats.blocked_count}</div><div class="label">Bloklangan</div></div>
+    `;
+    maintenanceToggle.checked = !!stats.maintenance;
+  }
+
+  function renderUsers(users) {
+    if (!users.length) {
+      usersList.innerHTML = '<div class="empty">Hozircha foydalanuvchilar yo\'q.</div>';
+      return;
+    }
+    usersList.innerHTML = users.map(u => `
+      <div class="user-card" data-id="${u.id}">
+        <div class="user-top">
+          <div>
+            <div class="user-name">${escapeHtml(u.name)}</div>
+            <div class="user-id">ID: ${u.id} · ${u.source === 'miniapp' ? 'Mini App' : 'Telegram'}</div>
+          </div>
+          <div class="badges">
+            ${u.premium ? '<span class="badge premium">Premium</span>' : ''}
+            ${u.blocked ? '<span class="badge blocked">Bloklangan</span>' : ''}
+          </div>
+        </div>
+        <div class="user-meta">
+          <span>${u.message_count} xabar</span>
+          <span>Oxirgi: ${u.last_seen || '—'}</span>
+        </div>
+        <div class="user-actions">
+          <button class="action-btn ${u.premium ? 'premium-on' : ''}" data-action="premium">${u.premium ? '✦ Premium faol' : 'Premium berish'}</button>
+          <button class="action-btn ${u.blocked ? 'block-on' : ''}" data-action="block">${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s ?? '';
+    return d.innerHTML;
+  }
+
+  function applyFilter() {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) { renderUsers(allUsers); return; }
+    renderUsers(allUsers.filter(u =>
+      u.name.toLowerCase().includes(q) || u.id.includes(q)
+    ));
+  }
+
+  searchInput.addEventListener('input', applyFilter);
+
+  usersList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.action-btn');
+    if (!btn) return;
+    const card = e.target.closest('.user-card');
+    const userId = card.dataset.id;
+    const action = btn.dataset.action;
+    tg?.HapticFeedback?.impactOccurred('light');
+    btn.style.opacity = '0.5';
+    try {
+      if (action === 'premium') {
+        const r = await api('/api/admin/toggle-premium', { user_id: userId });
+        const u = allUsers.find(x => x.id === userId);
+        if (u) u.premium = r.premium;
+      } else if (action === 'block') {
+        const r = await api('/api/admin/toggle-block', { user_id: userId });
+        const u = allUsers.find(x => x.id === userId);
+        if (u) u.blocked = r.blocked;
+      }
+      const stats = await api('/api/admin/stats', {});
+      renderStats(stats);
+      applyFilter();
+    } catch (err) {
+      btn.style.opacity = '1';
+    }
+  });
+
+  maintenanceToggle.addEventListener('change', async () => {
+    tg?.HapticFeedback?.impactOccurred('medium');
+    try {
+      await api('/api/admin/maintenance', { value: maintenanceToggle.checked });
+    } catch (err) {
+      maintenanceToggle.checked = !maintenanceToggle.checked;
+    }
+  });
+
+  async function init() {
+    try {
+      const [stats, usersRes] = await Promise.all([
+        api('/api/admin/stats', {}),
+        api('/api/admin/users', {})
+      ]);
+      allUsers = usersRes.users || [];
+      renderStats(stats);
+      renderUsers(allUsers);
+      loadingEl.style.display = 'none';
+      dashEl.style.display = 'block';
+    } catch (err) {
+      loadingEl.style.display = 'none';
+      gateEl.style.display = 'flex';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
