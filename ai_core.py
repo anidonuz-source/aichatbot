@@ -49,6 +49,11 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
+# Image generation — "Nano Banana". Imagen models are being retired
+# (shutdown Aug 17, 2026), so this uses generate_content with an
+# IMAGE response modality instead of the older generate_images API.
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+
 # ---------------------------------------------------------------------------
 # Provider 3 (final fallback): Groq — https://console.groq.com
 # ---------------------------------------------------------------------------
@@ -92,6 +97,39 @@ Do NOT tag one-off requests or small talk — only durable facts.
 """
 
 MEMORY_TAG_RE = re.compile(r"⟦MEMORY:([a-zA-Z_]+):([a-zA-Z0-9_]+):([^⟧]*)⟧")
+
+# Keyword-based detection for "draw me / generate an image of ..." requests,
+# across Uzbek, Russian, and English phrasing. Kept simple and explicit
+# (like the YouTube-link intent check) rather than relying on the chat
+# model to decide, so we never silently skip a real image request.
+IMAGE_REQUEST_RE = re.compile(
+    r"\b("
+    r"rasm(?:ini|ni)?\s*(chiz|yasa|chizib|yasab)|"
+    r"surat(?:ini|ni)?\s*(chiz|yasa|chizib|yasab)|"
+    r"rasm\s*yarat|surat\s*yarat|"
+    r"нарисуй|нарисуйте|сгенерируй\s*(изображение|картинку)|"
+    r"generate\s+(an?\s+)?image|draw\s+(me\s+)?(a|an)\b|create\s+(an?\s+)?image"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def wants_image(text: str) -> bool:
+    return bool(text) and bool(IMAGE_REQUEST_RE.search(text))
+
+
+def _call_gemini_image(prompt: str) -> tuple[bytes, str]:
+    """Generate an image with Gemini ("Nano Banana"). Returns (bytes, mime_type).
+    Raises if no image came back (e.g. blocked by safety filters)."""
+    response = _gemini_client.models.generate_content(
+        model=GEMINI_IMAGE_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(response_modalities=["IMAGE"]),
+    )
+    for part in response.parts:
+        if getattr(part, "inline_data", None) and part.inline_data.data:
+            return part.inline_data.data, part.inline_data.mime_type or "image/png"
+    raise RuntimeError("Gemini rasm qaytarmadi (ehtimol xavfsizlik filtri to'sdi)")
 
 # In-memory short-term conversation history per user (lost on restart —
 # only long-term facts persist via memory_manager on disk). Shared between
@@ -232,6 +270,30 @@ def get_ai_reply(
     _history[user_id] = history[-MAX_HISTORY_TURNS:]
 
     return reply_text
+
+
+def generate_image_reply(
+    user_id: str,
+    prompt: str,
+    name: str | None = None,
+    source: str = "telegram",
+) -> tuple[bytes, str]:
+    """Generate an image for the given prompt and record it in the user's
+    short-term history (as a text placeholder, since we don't replay raw
+    image bytes back into the chat context). Returns (image_bytes, mime_type).
+    Raises on failure — caller should catch and show a friendly error.
+    """
+    user_id = str(user_id)
+    admin_store.record_message(user_id, name=name, source=source)
+
+    image_bytes, mime_type = _call_gemini_image(prompt)
+
+    history = _history.get(user_id, [])
+    history.append({"role": "user", "content": prompt})
+    history.append({"role": "assistant", "content": "[rasm yaratib berdim]"})
+    _history[user_id] = history[-MAX_HISTORY_TURNS:]
+
+    return image_bytes, mime_type
 
 
 def reset_user(user_id: str) -> None:
