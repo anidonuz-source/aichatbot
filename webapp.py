@@ -8,6 +8,7 @@ for certain which Telegram user is talking — no separate login needed.
 
 Docs: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -60,11 +61,12 @@ def api_chat():
     body = request.get_json(silent=True) or {}
     init_data = body.get("initData", "")
     message = (body.get("message") or "").strip()
+    image_data_url = body.get("image")  # optional: "data:image/jpeg;base64,...."
 
     data = verify_init_data(init_data)
     if not data:
         return jsonify({"error": "Unauthorized"}), 401
-    if not message:
+    if not message and not image_data_url:
         return jsonify({"error": "Empty message"}), 400
 
     user = data.get("user", {})
@@ -72,8 +74,18 @@ def api_chat():
     if not user_id:
         return jsonify({"error": "No user id"}), 400
 
+    image_bytes = None
+    image_mime = None
+    if image_data_url and image_data_url.startswith("data:"):
+        try:
+            header, b64data = image_data_url.split(",", 1)
+            image_mime = header.split(";")[0].replace("data:", "") or "image/jpeg"
+            image_bytes = base64.b64decode(b64data)
+        except Exception:
+            return jsonify({"error": "Invalid image"}), 400
+
     try:
-        reply = ai_core.get_ai_reply(str(user_id), message)
+        reply = ai_core.get_ai_reply(str(user_id), message, image_bytes, image_mime)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
