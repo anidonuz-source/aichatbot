@@ -63,10 +63,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _authorized(chat_id):
         await update.message.reply_text("Sorry, this bot is private.")
         return
+    first_name = update.effective_user.first_name if update.effective_user else None
+    greeting = f"Assalomu alaykum, {first_name}." if first_name else "Assalomu alaykum."
     text = (
-        f"{ai_core.BOT_NAME} online. Yozing — suhbatlashamiz.\n"
-        f"/reset — xotirani tozalash.\n"
-        f"Created by {ai_core.AUTHOR_HANDLE}."
+        f"✦ {greeting} Men {ai_core.BOT_NAME} — shaxsiy AI hamrohingiz.\n\n"
+        f"Yozing — suhbatlashamiz, savol bering, fikr almashing. Men gaplaringizni "
+        f"eslab qolaman, shuning uchun har safar bir joydan davom etaman.\n\n"
+        f"Premium interfeys uchun quyidagi tugmani bosing — rasm yuborish, "
+        f"tarixni saqlash va yanada boy tajriba shu yerda.\n\n"
+        f"/reset — xotirani tozalash\n\n"
+        f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
     )
     await update.message.reply_text(text, reply_markup=_webapp_keyboard())
 
