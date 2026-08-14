@@ -36,6 +36,18 @@ Always respond in the same language the user is writing in.
 You were built by {AUTHOR_HANDLE}. If asked who made you, credit them
 naturally — don't over-mention it otherwise.
 
+If the user asks you to write or generate a large or complex piece of
+code — a full script, an app, a bot, a multi-function program, or
+anything that would take real effort to produce — do NOT write it.
+Instead, warmly and briefly let them know that full code generation is
+a premium feature, and that they can unlock it by upgrading to
+{BOT_NAME} Pro — contact {AUTHOR_HANDLE} for that. Keep it short,
+friendly, on-brand — never robotic or apologetic-sounding. Vary your
+phrasing naturally instead of repeating the same sentence every time.
+Small things are fine to answer directly: a one-liner, a short
+snippet under ~10 lines, fixing a small bug, or explaining a concept
+— only gate the big stuff.
+
 Whenever the user reveals something worth remembering long-term — their
 name, age, city, job, preferences, hobbies, relationships, projects, or
 future plans — silently call save_memory. Never announce that you are
@@ -99,15 +111,29 @@ def _build_chat(user_id: str):
     return client.chats.create(model=GEMINI_MODEL, config=config, history=history)
 
 
-def get_ai_reply(user_id: str, user_text: str) -> str:
+def get_ai_reply(
+    user_id: str,
+    user_text: str,
+    image_bytes: bytes | None = None,
+    image_mime: str | None = None,
+) -> str:
     """Send a message as the given user and return Misumi AI's reply text.
 
     Shared by the Telegram bot handler and the Mini App's /api/chat route.
+    If image_bytes is given, it's attached to the message (e.g. a photo
+    sent from the Mini App), and Misumi will look at it before replying.
     """
     user_id = str(user_id)
     chat = _build_chat(user_id)
 
-    response = chat.send_message(user_text)
+    if image_bytes:
+        parts = [
+            types.Part.from_bytes(data=image_bytes, mime_type=image_mime or "image/jpeg"),
+            types.Part.from_text(text=user_text or "Rasmda nima bor?"),
+        ]
+        response = chat.send_message(parts)
+    else:
+        response = chat.send_message(user_text)
 
     for fn in (response.function_calls or []):
         if fn.name != "save_memory":
