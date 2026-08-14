@@ -30,6 +30,7 @@ from telegram.ext import (
     filters,
 )
 
+import admin_store
 import ai_core
 import webapp
 
@@ -44,18 +45,25 @@ ALLOWED_CHAT_IDS = {
     c.strip() for c in os.environ.get("ALLOWED_CHAT_IDS", "").split(",") if c.strip()
 }
 WEBAPP_URL = os.environ.get("WEBAPP_URL") or os.environ.get("RENDER_EXTERNAL_URL")
+ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
 
 
 def _authorized(chat_id) -> bool:
     return not ALLOWED_CHAT_IDS or str(chat_id) in ALLOWED_CHAT_IDS
 
 
-def _webapp_keyboard() -> InlineKeyboardMarkup | None:
+def _is_admin(chat_id) -> bool:
+    return bool(ADMIN_ID) and str(chat_id) == ADMIN_ID
+
+
+def _webapp_keyboard(chat_id=None) -> InlineKeyboardMarkup | None:
     if not WEBAPP_URL:
         return None
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(f"✦ {ai_core.BOT_NAME} ni ochish", web_app=WebAppInfo(url=WEBAPP_URL))]]
-    )
+    rows = [[InlineKeyboardButton(f"✦ {ai_core.BOT_NAME} ni ochish", web_app=WebAppInfo(url=WEBAPP_URL))]]
+    if _is_admin(chat_id):
+        admin_url = f"{WEBAPP_URL.rstrip('/')}/admin"
+        rows.append([InlineKeyboardButton("⚙️ Admin panel", web_app=WebAppInfo(url=admin_url))])
+    return InlineKeyboardMarkup(rows)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,7 +82,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"/reset — xotirani tozalash\n\n"
         f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
     )
-    await update.message.reply_text(text, reply_markup=_webapp_keyboard())
+    await update.message.reply_text(text, reply_markup=_webapp_keyboard(chat_id))
 
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,10 +130,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _should_respond_in_group(update, bot_username):
         return
 
+    if admin_store.is_blocked(chat_id):
+        return
+
+    if admin_store.is_maintenance() and not _is_admin(chat_id):
+        await update.message.reply_text(
+            f"🛠 {ai_core.BOT_NAME} hozir texnik ishlar tufayli vaqtincha ishlamayapti. "
+            "Birozdan so'ng qayta urinib ko'ring."
+        )
+        return
+
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
+    user = update.effective_user
+    display_name = user.first_name if user else None
+
     try:
-        reply_text = ai_core.get_ai_reply(chat_id, user_text)
+        reply_text = ai_core.get_ai_reply(chat_id, user_text, name=display_name, source="telegram")
     except Exception:
         logger.exception("Gemini error")
         reply_text = "Kechirasiz, xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
