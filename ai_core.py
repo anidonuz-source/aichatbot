@@ -1,0 +1,133 @@
+"""
+Misumi AI — shared core logic.
+
+Used by both:
+  - bot.py     (Telegram chat handlers)
+  - webapp.py  (Telegram Mini App / web chat interface)
+
+Both surfaces share the same Gemini persona, long-term memory, and
+save_memory tool, keyed by the user's Telegram id — so a conversation
+continues seamlessly whether the person types in the bot chat or opens
+the Mini App.
+"""
+import os
+
+from google import genai
+from google.genai import types
+
+import memory_manager as mem
+
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+BOT_NAME = "Misumi AI"
+AUTHOR_HANDLE = "@QahramonovK"
+
+MAX_HISTORY_TURNS = 30  # short-term context kept in RAM, per user
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+SYSTEM_PROMPT = f"""You are {BOT_NAME} — a sleek, premium, highly capable AI
+companion. Your tone is warm but polished: confident, concise, never
+robotic, never generic. Think "luxury concierge who happens to be a
+brilliant assistant" rather than a bare-bones chatbot.
+Reply in 1-3 sentences unless the user clearly needs more detail
+(explanations, code, structured lists, etc).
+Always respond in the same language the user is writing in.
+You were built by {AUTHOR_HANDLE}. If asked who made you, credit them
+naturally — don't over-mention it otherwise.
+
+Whenever the user reveals something worth remembering long-term — their
+name, age, city, job, preferences, hobbies, relationships, projects, or
+future plans — silently call save_memory. Never announce that you are
+saving something, just call it. Do NOT save one-off requests or small talk.
+Memory values must be written in English regardless of the conversation
+language.
+"""
+
+SAVE_MEMORY_DECLARATION = types.FunctionDeclaration(
+    name="save_memory",
+    description=(
+        "Save an important personal fact about the user to long-term memory. "
+        "Call this silently whenever the user reveals something worth "
+        "remembering: name, age, city, job, preferences, hobbies, "
+        "relationships, projects, or future plans. Do NOT call for "
+        "one-time questions or small talk."
+    ),
+    parameters={
+        "type": "OBJECT",
+        "properties": {
+            "category": {
+                "type": "STRING",
+                "description": (
+                    "identity — name, age, birthday, city, job, language, "
+                    "nationality | preferences — favorite food/color/music/"
+                    "film/game/sport, hobbies | projects — active projects, "
+                    "goals, things being built | relationships — friends, "
+                    "family, partner, colleagues | wishes — future plans, "
+                    "things to buy, travel dreams | notes — anything else "
+                    "worth remembering"
+                ),
+            },
+            "key": {
+                "type": "STRING",
+                "description": "Short snake_case key (e.g. name, favorite_food)",
+            },
+            "value": {
+                "type": "STRING",
+                "description": "Concise value in English (e.g. Fatih, pizza)",
+            },
+        },
+        "required": ["category", "key", "value"],
+    },
+)
+
+# In-memory short-term conversation history per user (lost on restart —
+# only long-term facts persist via memory_manager on disk). Shared between
+# the Telegram chat and the Mini App since both key off the same user id.
+_history: dict[str, list] = {}
+
+
+def _build_chat(user_id: str):
+    memory = mem.load_memory(user_id)
+    memory_block = mem.format_memory_for_prompt(memory)
+    system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        tools=[types.Tool(function_declarations=[SAVE_MEMORY_DECLARATION])],
+    )
+    history = _history.get(user_id, [])
+    return client.chats.create(model=GEMINI_MODEL, config=config, history=history)
+
+
+def get_ai_reply(user_id: str, user_text: str) -> str:
+    """Send a message as the given user and return Misumi AI's reply text.
+
+    Shared by the Telegram bot handler and the Mini App's /api/chat route.
+    """
+    user_id = str(user_id)
+    chat = _build_chat(user_id)
+
+    response = chat.send_message(user_text)
+
+    for fn in (response.function_calls or []):
+        if fn.name != "save_memory":
+            continue
+        args = dict(fn.args)
+        category = args.get("category", "notes")
+        key = args.get("key")
+        value = args.get("value")
+        if key and value:
+            mem.update_memory(user_id, {category: {key: {"value": value}}})
+        response = chat.send_message(
+            types.Part.from_function_response(name="save_memory", response={"result": "ok"})
+        )
+
+    reply_text = (response.text or "...").strip()
+    _history[user_id] = chat.get_history()[-MAX_HISTORY_TURNS:]
+    return reply_text
+
+
+def reset_user(user_id: str) -> None:
+    user_id = str(user_id)
+    mem.clear_memory(user_id)
+    _history.pop(user_id, None)
