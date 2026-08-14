@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ bot_name }}</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b0b0d;
+    --ink-2:#141417;
+    --panel:#1b1b1f;
+    --hairline:rgba(201,162,39,0.16);
+    --brass:#c9a227;
+    --brass-soft:#8a7228;
+    --plum:#3b2f4a;
+    --paper:#f2efe9;
+    --paper-dim:#a9a6a0;
+    --danger:#c9524a;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(201,162,39,0.07), transparent 60%),
+      var(--ink);
+    color:var(--paper);
+    font-family:'Manrope',sans-serif;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    flex:0 0 auto;
+    padding:calc(18px + var(--safe-top)) 20px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    border-bottom:1px solid var(--hairline);
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+  .mark{
+    width:30px;height:30px;flex:0 0 auto;position:relative;
+  }
+  .mark svg{width:100%;height:100%;display:block;}
+  .mark .dot{fill:var(--brass);}
+  .titles{display:flex;flex-direction:column;line-height:1.15;}
+  .titles .name{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:22px;
+    letter-spacing:0.02em;
+    color:var(--paper);
+  }
+  .titles .sub{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:0.09em;
+    text-transform:uppercase;
+    color:var(--brass-soft);
+    margin-top:2px;
+  }
+  .header-actions{margin-left:auto;display:flex;gap:8px;}
+  .icon-btn{
+    width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--hairline);
+    background:rgba(255,255,255,0.02);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--paper-dim);
+    cursor:pointer;
+    transition:border-color .2s ease, color .2s ease;
+  }
+  .icon-btn:active{transform:scale(0.94);}
+  .icon-btn:hover{border-color:var(--brass); color:var(--brass);}
+
+  /* ---------- Chat area ---------- */
+  main{
+    flex:1 1 auto;
+    overflow-y:auto;
+    padding:20px 16px 12px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    scroll-behavior:smooth;
+  }
+  .welcome{
+    margin:auto 0;
+    text-align:center;
+    padding:24px 12px;
+    opacity:0;
+    animation: rise .7s ease forwards .1s;
+  }
+  .welcome .glyph{
+    width:46px;height:46px;margin:0 auto 18px;
+  }
+  .welcome h1{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:28px;
+    margin:0 0 8px;
+    color:var(--paper);
+  }
+  .welcome p{
+    font-size:13.5px;
+    color:var(--paper-dim);
+    max-width:280px;
+    margin:0 auto;
+    line-height:1.6;
+  }
+
+  .row{display:flex; opacity:0; animation: rise .45s ease forwards;}
+  .row.user{justify-content:flex-end;}
+  .row.ai{justify-content:flex-start;}
+  .bubble{
+    max-width:78%;
+    padding:11px 15px;
+    font-size:14.5px;
+    line-height:1.5;
+    white-space:pre-wrap;
+    word-wrap:break-word;
+  }
+  .row.user .bubble{
+    background:linear-gradient(155deg, var(--plum), #2c2337);
+    border:1px solid rgba(201,162,39,0.22);
+    border-radius:16px 16px 4px 16px;
+    color:#f4eef2;
+  }
+  .row.ai .bubble{
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    border-radius:16px 16px 16px 4px;
+    color:var(--paper);
+  }
+
+  .typing{display:flex; gap:5px; padding:6px 4px;}
+  .typing span{
+    width:5px;height:5px;border-radius:50%;
+    background:var(--brass);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  .typing span:nth-child(2){animation-delay:.15s; transform:translateY(2px);}
+  .typing span:nth-child(3){animation-delay:.3s;}
+
+  @keyframes pulse{
+    0%,60%,100%{opacity:.25; transform:translateY(0);}
+    30%{opacity:1;}
+  }
+  @keyframes rise{
+    from{opacity:0; transform:translateY(8px);}
+    to{opacity:1; transform:translateY(0);}
+  }
+
+  /* ---------- Composer ---------- */
+  footer{
+    flex:0 0 auto;
+    padding:12px 14px calc(14px + var(--safe-bottom));
+    border-top:1px solid var(--hairline);
+    background:linear-gradient(0deg, rgba(255,255,255,0.02), transparent);
+  }
+  .composer{
+    display:flex;
+    align-items:flex-end;
+    gap:8px;
+    background:var(--ink-2);
+    border:1px solid var(--hairline);
+    border-radius:22px;
+    padding:6px 6px 6px 16px;
+  }
+  .composer textarea{
+    flex:1;
+    resize:none;
+    border:none;
+    outline:none;
+    background:transparent;
+    color:var(--paper);
+    font-family:'Manrope',sans-serif;
+    font-size:14.5px;
+    line-height:1.4;
+    max-height:110px;
+    padding:8px 0;
+  }
+  .composer textarea::placeholder{color:var(--paper-dim);}
+  .send-btn{
+    width:38px;height:38px;border-radius:50%;flex:0 0 auto;
+    border:none;
+    background:var(--brass);
+    color:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    transition:transform .15s ease, opacity .15s ease;
+  }
+  .send-btn:active{transform:scale(0.9);}
+  .send-btn:disabled{opacity:0.35; pointer-events:none;}
+  .send-btn svg{width:16px;height:16px;}
+
+  .credit{
+    text-align:center;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9.5px;
+    letter-spacing:0.08em;
+    color:rgba(169,166,160,0.55);
+    padding-top:10px;
+  }
+  .credit a{color:var(--brass-soft); text-decoration:none;}
+
+  main::-webkit-scrollbar{width:4px;}
+  main::-webkit-scrollbar-thumb{background:var(--hairline); border-radius:4px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">
+    <svg viewBox="0 0 30 30" fill="none">
+      <circle class="dot" cx="15" cy="6" r="2.4"/>
+      <circle class="dot" cx="6" cy="22" r="2.4"/>
+      <circle class="dot" cx="24" cy="22" r="2.4"/>
+    </svg>
+  </div>
+  <div class="titles">
+    <div class="name">{{ bot_name }}</div>
+    <div class="sub">Shaxsiy AI hamrohingiz</div>
+  </div>
+  <div class="header-actions">
+    <div class="icon-btn" id="resetBtn" title="Suhbatni tozalash">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+    </div>
+  </div>
+</header>
+
+<main id="chat">
+  <div class="welcome" id="welcome">
+    <div class="glyph">
+      <svg viewBox="0 0 30 30" fill="none">
+        <circle cx="15" cy="6" r="2.6" fill="#c9a227"/>
+        <circle cx="6" cy="22" r="2.6" fill="#c9a227" opacity="0.7"/>
+        <circle cx="24" cy="22" r="2.6" fill="#c9a227" opacity="0.7"/>
+      </svg>
+    </div>
+    <h1 id="welcomeName">Xush kelibsiz.</h1>
+    <p>Nima haqida bo'lmasin — savol bering, fikr almashing yoki shunchaki suhbatlashing. Men eslab qolaman.</p>
+  </div>
+</main>
+
+<footer>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="Xabar yozing..."></textarea>
+    <button class="send-btn" id="sendBtn" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+    </button>
+  </div>
+  <div class="credit">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">{{ author }}</a></div>
+</footer>
+
+<script>
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    document.documentElement.style.setProperty('--safe-top', (tg.safeAreaInset?.top || 0) + 'px');
+  }
+
+  const chatEl = document.getElementById('chat');
+  const welcomeEl = document.getElementById('welcome');
+  const inputEl = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const welcomeName = document.getElementById('welcomeName');
+
+  const firstName = tg?.initDataUnsafe?.user?.first_name;
+  if (firstName) welcomeName.textContent = `Xush kelibsiz, ${firstName}.`;
+
+  function scrollToBottom(){
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function addRow(role, text){
+    if (welcomeEl.parentNode) welcomeEl.remove();
+    const row = document.createElement('div');
+    row.className = `row ${role}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatEl.appendChild(row);
+    scrollToBottom();
+    return bubble;
+  }
+
+  function addTyping(){
+    if (welcomeEl.parentNode) welcomeEl.remove();
+    const row = document.createElement('div');
+    row.className = 'row ai';
+    row.id = 'typingRow';
+    row.innerHTML = `<div class="bubble typing"><span></span><span></span><span></span></div>`;
+    chatEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function removeTyping(){
+    document.getElementById('typingRow')?.remove();
+  }
+
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px';
+    sendBtn.disabled = inputEl.value.trim().length === 0;
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+
+  sendBtn.addEventListener('click', send);
+
+  async function send(){
+    const text = inputEl.value.trim();
+    if (!text) return;
+    tg?.HapticFeedback?.impactOccurred('light');
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+    addRow('user', text);
+    addTyping();
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ initData: tg?.initData || '', message: text })
+      });
+      const data = await res.json();
+      removeTyping();
+      if (!res.ok) {
+        addRow('ai', 'Kechirasiz, xatolik yuz berdi. Birozdan so\'ng qayta urinib ko\'ring.');
+      } else {
+        addRow('ai', data.reply);
+      }
+    } catch (err) {
+      removeTyping();
+      addRow('ai', 'Ulanishda xatolik. Internetni tekshirib, qayta urinib ko\'ring.');
+    }
+  }
+
+  resetBtn.addEventListener('click', async () => {
+    tg?.HapticFeedback?.impactOccurred('medium');
+    try {
+      await fetch('/api/reset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ initData: tg?.initData || '' })
+      });
+    } catch (e) {}
+    chatEl.innerHTML = '';
+    chatEl.appendChild(welcomeEl);
+  });
+</script>
+</body>
+</html>
