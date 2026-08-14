@@ -79,12 +79,41 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Xotira tozalandi.")
 
 
+def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
+    """In group chats, only respond when explicitly addressed: a reply to
+    the bot's own message, an @mention of the bot, or the word 'misumi'
+    (or 'misumi ai') anywhere in the text. Private chats always respond.
+    """
+    message = update.message
+    if update.effective_chat.type == "private":
+        return True
+
+    # Reply to one of the bot's own messages.
+    if message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.is_bot:
+        if bot_username and message.reply_to_message.from_user.username == bot_username:
+            return True
+
+    text = (message.text or "").lower()
+
+    if bot_username and f"@{bot_username.lower()}" in text:
+        return True
+
+    if "misumi ai" in text or "misumi" in text:
+        return True
+
+    return False
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not _authorized(chat_id):
         return
     user_text = update.message.text
     if not user_text:
+        return
+
+    bot_username = context.bot.username
+    if not _should_respond_in_group(update, bot_username):
         return
 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
