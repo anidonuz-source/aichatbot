@@ -746,6 +746,8 @@
       removeTyping();
       if (!res.ok) {
         addRow('ai', 'Kechirasiz, xatolik yuz berdi. Birozdan so\'ng qayta urinib ko\'ring.');
+      } else if (data.generated_image) {
+        addRow('ai', '', data.generated_image);
       } else {
         addRow('ai', data.reply);
       }
