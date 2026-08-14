@@ -1,31 +1,26 @@
 """
-Jarvis Telegram Bot
---------------------
-A pure chat/AI-assistant Telegram bot powered by Google Gemini, carrying
-over Jarvis's personality and long-term memory from the original Jarvis
-MK37 desktop project — with NO system/computer-control capabilities.
+Misumi AI — Telegram Bot
+------------------------
+Text chat in Telegram + a button that opens the Misumi AI Mini App
+(a premium web chat interface, see webapp.py + templates/index.html).
+Both surfaces share persona, memory, and conversation logic via ai_core.py.
 
 Env vars required (see .env.example):
   TELEGRAM_BOT_TOKEN   - from @BotFather
   GEMINI_API_KEY       - from https://aistudio.google.com/apikey
   ALLOWED_CHAT_IDS     - optional, comma-separated chat_ids. If set, only
-                          these chats can use the bot (recommended if you
-                          don't want strangers finding your bot).
+                          these chats can use the bot.
   MEMORY_DIR           - optional, defaults to ./memory (see memory_manager.py)
-  GEMINI_MODEL         - optional, defaults to "gemini-3.6-flash". If Google
-                          deprecates this model too, check
-                          https://ai.google.dev/gemini-api/docs/models for the
-                          current stable flash model and set this env var
-                          instead of editing code.
+  GEMINI_MODEL         - optional, defaults to "gemini-3.6-flash"
+  WEBAPP_URL           - the public HTTPS URL of this service (Render sets
+                          RENDER_EXTERNAL_URL automatically — used as a
+                          fallback if WEBAPP_URL isn't set).
 """
 import logging
 import os
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from google import genai
-from google.genai import types
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -35,93 +30,32 @@ from telegram.ext import (
     filters,
 )
 
-import memory_manager as mem
+import ai_core
+import webapp
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
-logger = logging.getLogger("jarvis-bot")
+logger = logging.getLogger("misumi-bot")
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 ALLOWED_CHAT_IDS = {
     c.strip() for c in os.environ.get("ALLOWED_CHAT_IDS", "").split(",") if c.strip()
 }
-MAX_HISTORY_TURNS = 30  # short-term context kept in RAM, per chat
-
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-SYSTEM_PROMPT = """You are JARVIS — an efficient, professional, direct AI assistant.
-No fluff, no filler. Reply in 1-3 short sentences unless the user clearly
-needs more detail (explanations, code, lists, etc).
-Always respond in the same language the user is writing in.
-
-Whenever the user reveals something worth remembering long-term — their
-name, age, city, job, preferences, hobbies, relationships, projects, or
-future plans — silently call save_memory. Never announce that you are
-saving something, just call it. Do NOT save one-off requests or small talk.
-Memory values must be written in English regardless of the conversation
-language.
-"""
-
-SAVE_MEMORY_DECLARATION = types.FunctionDeclaration(
-    name="save_memory",
-    description=(
-        "Save an important personal fact about the user to long-term memory. "
-        "Call this silently whenever the user reveals something worth "
-        "remembering: name, age, city, job, preferences, hobbies, "
-        "relationships, projects, or future plans. Do NOT call for "
-        "one-time questions or small talk."
-    ),
-    parameters={
-        "type": "OBJECT",
-        "properties": {
-            "category": {
-                "type": "STRING",
-                "description": (
-                    "identity — name, age, birthday, city, job, language, "
-                    "nationality | preferences — favorite food/color/music/"
-                    "film/game/sport, hobbies | projects — active projects, "
-                    "goals, things being built | relationships — friends, "
-                    "family, partner, colleagues | wishes — future plans, "
-                    "things to buy, travel dreams | notes — anything else "
-                    "worth remembering"
-                ),
-            },
-            "key": {
-                "type": "STRING",
-                "description": "Short snake_case key (e.g. name, favorite_food)",
-            },
-            "value": {
-                "type": "STRING",
-                "description": "Concise value in English (e.g. Fatih, pizza)",
-            },
-        },
-        "required": ["category", "key", "value"],
-    },
-)
-
-# In-memory short-term conversation history per chat (lost on restart —
-# only long-term facts persist via memory_manager on disk).
-_history: dict[str, list] = {}
+WEBAPP_URL = os.environ.get("WEBAPP_URL") or os.environ.get("RENDER_EXTERNAL_URL")
 
 
 def _authorized(chat_id) -> bool:
     return not ALLOWED_CHAT_IDS or str(chat_id) in ALLOWED_CHAT_IDS
 
 
-def _build_chat(chat_id: str):
-    memory = mem.load_memory(chat_id)
-    memory_block = mem.format_memory_for_prompt(memory)
-    system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
-    config = types.GenerateContentConfig(
-        system_instruction=system_instruction,
-        tools=[types.Tool(function_declarations=[SAVE_MEMORY_DECLARATION])],
+def _webapp_keyboard() -> InlineKeyboardMarkup | None:
+    if not WEBAPP_URL:
+        return None
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(f"✦ {ai_core.BOT_NAME} ni ochish", web_app=WebAppInfo(url=WEBAPP_URL))]]
     )
-    history = _history.get(chat_id, [])
-    return client.chats.create(model=GEMINI_MODEL, config=config, history=history)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,93 +63,63 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _authorized(chat_id):
         await update.message.reply_text("Sorry, this bot is private.")
         return
-    await update.message.reply_text(
-        "Jarvis online. Yozing — suhbatlashamiz. /reset — xotirani tozalash."
+    text = (
+        f"{ai_core.BOT_NAME} online. Yozing — suhbatlashamiz.\n"
+        f"/reset — xotirani tozalash.\n"
+        f"Created by {ai_core.AUTHOR_HANDLE}."
     )
+    await update.message.reply_text(text, reply_markup=_webapp_keyboard())
 
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not _authorized(chat_id):
         return
-    mem.clear_memory(str(chat_id))
-    _history.pop(str(chat_id), None)
+    ai_core.reset_user(chat_id)
     await update.message.reply_text("Xotira tozalandi.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
     if not _authorized(chat_id):
         return
     user_text = update.message.text
     if not user_text:
         return
 
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-
-    chat = _build_chat(chat_id)
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     try:
-        response = chat.send_message(user_text)
-
-        # Handle any function calls (save_memory) the model made.
-        function_calls = response.function_calls or []
-        for fn in function_calls:
-            if fn.name != "save_memory":
-                continue
-            args = dict(fn.args)
-            category = args.get("category", "notes")
-            key = args.get("key")
-            value = args.get("value")
-            if key and value:
-                mem.update_memory(chat_id, {category: {key: {"value": value}}})
-            response = chat.send_message(
-                types.Part.from_function_response(
-                    name="save_memory", response={"result": "ok"}
-                )
-            )
-
-        reply_text = (response.text or "...").strip()
+        reply_text = ai_core.get_ai_reply(chat_id, user_text)
     except Exception:
         logger.exception("Gemini error")
         reply_text = "Kechirasiz, xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
 
-    _history[chat_id] = chat.get_history()[-MAX_HISTORY_TURNS:]
-
     await update.message.reply_text(reply_text)
 
 
-class _HealthCheckHandler(BaseHTTPRequestHandler):
-    """Minimal handler so Render's Web Service port check succeeds."""
-
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Jarvis bot is running")
-
-    def log_message(self, format, *args):  # silence default request logging
-        pass
-
-
-def _start_health_server():
+def _start_webapp_server():
     port = int(os.environ.get("PORT", "10000"))
-    server = HTTPServer(("0.0.0.0", port), _HealthCheckHandler)
-    logger.info(f"Health check server listening on port {port}")
-    server.serve_forever()
+    logger.info(f"Misumi AI web server listening on port {port}")
+    webapp.run(port)
 
 
 def main():
     # Render Web Services require a bound port to consider the service
-    # healthy. This thread just answers "OK" — all real work still happens
-    # via Telegram polling below.
-    threading.Thread(target=_start_health_server, daemon=True).start()
+    # healthy. This also happens to be our real Mini App server.
+    threading.Thread(target=_start_webapp_server, daemon=True).start()
+
+    if not WEBAPP_URL:
+        logger.warning(
+            "WEBAPP_URL / RENDER_EXTERNAL_URL not set — the Mini App button "
+            "will be hidden. Set WEBAPP_URL to this service's public HTTPS URL."
+        )
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("Jarvis Telegram bot starting (polling)...")
+    logger.info(f"{ai_core.BOT_NAME} Telegram bot starting (polling)...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
