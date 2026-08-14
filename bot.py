@@ -145,6 +145,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     display_name = user.first_name if user else None
 
+    if ai_core.wants_image(user_text):
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_PHOTO)
+        try:
+            image_bytes, _mime = ai_core.generate_image_reply(
+                chat_id, user_text, name=display_name, source="telegram"
+            )
+        except Exception:
+            logger.exception("Image generation error")
+            await update.message.reply_text(
+                "Kechirasiz, rasm yaratishda xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
+            )
+            return
+        await update.message.reply_photo(photo=image_bytes)
+        return
+
     try:
         reply_text = ai_core.get_ai_reply(chat_id, user_text, name=display_name, source="telegram")
     except Exception:
