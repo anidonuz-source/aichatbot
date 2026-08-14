@@ -17,9 +17,11 @@ from urllib.parse import parse_qsl
 
 from flask import Flask, jsonify, render_template, request
 
+import admin_store
 import ai_core
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
 
 app = Flask(__name__)
 
@@ -51,9 +53,30 @@ def verify_init_data(init_data: str) -> dict | None:
     return pairs
 
 
+def verify_admin(init_data: str) -> dict | None:
+    """Like verify_init_data, but also requires the user's id to match
+    ADMIN_ID. Returns None if unauthenticated, not the admin, or ADMIN_ID
+    isn't configured at all.
+    """
+    if not ADMIN_ID:
+        return None
+    data = verify_init_data(init_data)
+    if not data:
+        return None
+    user = data.get("user", {})
+    if str(user.get("id", "")) != ADMIN_ID:
+        return None
+    return data
+
+
 @app.route("/")
 def index():
     return render_template("index.html", bot_name=ai_core.BOT_NAME, author=ai_core.AUTHOR_HANDLE)
+
+
+@app.route("/admin")
+def admin_page():
+    return render_template("admin.html", bot_name=ai_core.BOT_NAME)
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -74,6 +97,14 @@ def api_chat():
     if not user_id:
         return jsonify({"error": "No user id"}), 400
 
+    if admin_store.is_blocked(user_id):
+        return jsonify({"error": "Blocked"}), 403
+
+    if admin_store.is_maintenance() and str(user_id) != ADMIN_ID:
+        return jsonify(
+            {"reply": f"🛠 {ai_core.BOT_NAME} hozir texnik ishlar tufayli vaqtincha ishlamayapti."}
+        )
+
     image_bytes = None
     image_mime = None
     if image_data_url and image_data_url.startswith("data:"):
@@ -85,7 +116,14 @@ def api_chat():
             return jsonify({"error": "Invalid image"}), 400
 
     try:
-        reply = ai_core.get_ai_reply(str(user_id), message, image_bytes, image_mime)
+        reply = ai_core.get_ai_reply(
+            str(user_id),
+            message,
+            image_bytes,
+            image_mime,
+            name=user.get("first_name"),
+            source="miniapp",
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -104,6 +142,57 @@ def api_reset():
     if user_id:
         ai_core.reset_user(str(user_id))
     return jsonify({"ok": True})
+
+
+@app.route("/api/admin/stats", methods=["POST"])
+def api_admin_stats():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(admin_store.get_stats())
+
+
+@app.route("/api/admin/users", methods=["POST"])
+def api_admin_users():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify({"users": admin_store.get_users()})
+
+
+@app.route("/api/admin/toggle-block", methods=["POST"])
+def api_admin_toggle_block():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    target_id = str(body.get("user_id", "")).strip()
+    if not target_id:
+        return jsonify({"error": "user_id required"}), 400
+    if target_id == ADMIN_ID:
+        return jsonify({"error": "Can't block the admin"}), 400
+    blocked = admin_store.toggle_block(target_id)
+    return jsonify({"user_id": target_id, "blocked": blocked})
+
+
+@app.route("/api/admin/toggle-premium", methods=["POST"])
+def api_admin_toggle_premium():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    target_id = str(body.get("user_id", "")).strip()
+    if not target_id:
+        return jsonify({"error": "user_id required"}), 400
+    premium = admin_store.toggle_premium(target_id)
+    return jsonify({"user_id": target_id, "premium": premium})
+
+
+@app.route("/api/admin/maintenance", methods=["POST"])
+def api_admin_maintenance():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    value = admin_store.set_maintenance(bool(body.get("value")))
+    return jsonify({"maintenance": value})
 
 
 @app.route("/health")
