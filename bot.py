@@ -16,6 +16,8 @@ Env vars required (see .env.example):
 """
 import logging
 import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from google import genai
 from google.genai import types
@@ -179,7 +181,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply_text)
 
 
+class _HealthCheckHandler(BaseHTTPRequestHandler):
+    """Minimal handler so Render's Web Service port check succeeds."""
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Jarvis bot is running")
+
+    def log_message(self, format, *args):  # silence default request logging
+        pass
+
+
+def _start_health_server():
+    port = int(os.environ.get("PORT", "10000"))
+    server = HTTPServer(("0.0.0.0", port), _HealthCheckHandler)
+    logger.info(f"Health check server listening on port {port}")
+    server.serve_forever()
+
+
 def main():
+    # Render Web Services require a bound port to consider the service
+    # healthy. This thread just answers "OK" — all real work still happens
+    # via Telegram polling below.
+    threading.Thread(target=_start_health_server, daemon=True).start()
+
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
