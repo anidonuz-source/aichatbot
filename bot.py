@@ -12,7 +12,11 @@ Env vars required (see .env.example):
                           these chats can use the bot (recommended if you
                           don't want strangers finding your bot).
   MEMORY_DIR           - optional, defaults to ./memory (see memory_manager.py)
-  GEMINI_MODEL         - optional, defaults to "gemini-2.5-flash"
+  GEMINI_MODEL         - optional, defaults to "gemini-3.6-flash". If Google
+                          deprecates this model too, check
+                          https://ai.google.dev/gemini-api/docs/models for the
+                          current stable flash model and set this env var
+                          instead of editing code.
 """
 import logging
 import os
@@ -41,7 +45,7 @@ logger = logging.getLogger("jarvis-bot")
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 ALLOWED_CHAT_IDS = {
     c.strip() for c in os.environ.get("ALLOWED_CHAT_IDS", "").split(",") if c.strip()
 }
