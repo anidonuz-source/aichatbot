@@ -34,6 +34,7 @@ from telegram.ext import (
 import admin_store
 import ai_core
 import game_store
+import sticker_store
 
 # key -> (emoji, display label)
 GAME_TYPES = {
@@ -290,6 +291,7 @@ async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
             chat_id=chat_id,
             text=f"🤝 Durang! Ikkalasi ham {p1_val} chiqardi. Yana urinib ko'ring!",
         )
+        await _send_result_sticker(context, chat_id, "draw")
         return
 
     if p1_val > p2_val:
@@ -306,12 +308,25 @@ async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
     except Exception:
         result_comment = f"🏆 {winner_name} g'olib! ({p1_name}: {p1_val} — {p2_name}: {p2_val})"
     await context.bot.send_message(chat_id=chat_id, text=result_comment)
+    await _send_result_sticker(context, chat_id, "win")
 
     try:
         jazo = ai_core.generate_duel_punishment(winner_name, loser_name, label)
     except Exception:
         jazo = f"{loser_name}, jazo sifatida guruhga bitta hazil ayting! 😄"
     await context.bot.send_message(chat_id=chat_id, text=f"⚡ Jazo — {loser_name}: {jazo}")
+    await _send_result_sticker(context, chat_id, "lose")
+
+
+async def _send_result_sticker(context: ContextTypes.DEFAULT_TYPE, chat_id: int, category: str):
+    """Best-effort: send a random sticker for this game-result category,
+    if any have been added via /stiker. Silently does nothing otherwise."""
+    file_id = sticker_store.get_random(category)
+    if file_id:
+        try:
+            await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
+        except Exception:
+            pass
 
 
 async def leaderboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -327,10 +342,44 @@ async def leaderboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
+async def stiker_add_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Usage: reply to a sticker with `/stiker <category>` to add it to
+    Misumi AI's library — she'll use it herself later, in chat or in
+    game results, depending on the category."""
+    message = update.message
+    if not message.reply_to_message or not message.reply_to_message.sticker:
+        await message.reply_text(
+            "Bitta stikerga shu buyruq bilan reply qiling: /stiker <turkum>\n"
+            f"Turkumlar: {', '.join(sticker_store.CATEGORIES)}"
+        )
+        return
+
+    if not context.args:
+        await message.reply_text(f"Turkumni ko'rsating. Masalan: /stiker happy\nTurkumlar: {', '.join(sticker_store.CATEGORIES)}")
+        return
+
+    category = context.args[0].strip().lower()
+    file_id = message.reply_to_message.sticker.file_id
+    if sticker_store.add_sticker(category, file_id):
+        await message.reply_text(f"✅ Stiker '{category}' turkumiga qo'shildi.")
+    else:
+        await message.reply_text(f"Noto'g'ri turkum. Turkumlar: {', '.join(sticker_store.CATEGORIES)}")
+
+
+async def stiker_list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    counts = sticker_store.counts()
+    lines = ["📦 Stikerlar to'plami:"]
+    for cat, n in counts.items():
+        lines.append(f"• {cat}: {n} ta")
+    await update.message.reply_text("\n".join(lines))
+
+
 def register(app: Application) -> None:
     """Call once from bot.py's main() to wire up all game handlers."""
     app.add_handler(CommandHandler("duel", duel_cmd))
     app.add_handler(CommandHandler("reyting", leaderboard_cmd))
+    app.add_handler(CommandHandler("stiker", stiker_add_cmd))
+    app.add_handler(CommandHandler("stikerlar", stiker_list_cmd))
     app.add_handler(CallbackQueryHandler(on_type_selected, pattern=r"^dg:t:"))
     app.add_handler(CallbackQueryHandler(on_accept, pattern=r"^dg:a:"))
     app.add_handler(CallbackQueryHandler(on_decline, pattern=r"^dg:d:"))
