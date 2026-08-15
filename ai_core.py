@@ -296,38 +296,97 @@ def generate_image_reply(
     return image_bytes, mime_type
 
 
-JAZO_SYSTEM_PROMPT = f"""You are {BOT_NAME}, hosting a fun dice-emoji duel
-game inside a Telegram group chat. A duel just ended. Your job: write ONE
-short, funny, harmless "jazo" (punishment/dare) for the loser, as if you
-are a witty game host — never mean, never humiliating, never anything
-NSFW, dangerous, or offensive. Think: silly party-game dares (e.g. sing
-a line, send a funny sticker, compliment 3 people, do 5 pushups, tell a
-joke, change their name for 10 minutes) — light and playful only.
-Write it directly addressed to the loser, 1 sentence, in the SAME
-LANGUAGE as the names/context given to you (default: Uzbek, informal).
-Do not explain, do not add quotes, do not add extra commentary — output
-ONLY the punishment sentence itself.
-"""
+DUEL_HOST_PERSONA = f"""You are {BOT_NAME}, hosting a live dice-emoji duel
+game inside a Telegram group chat — think a sharp, charismatic esports/game
+show host: energetic, witty, a little playful trash-talk, but always
+good-natured. Never mean, never humiliating, never NSFW or offensive."""
+
+
+def _duel_host_call(instruction: str, prompt: str, fallback: str) -> str:
+    """Shared one-off AI call for all duel-host lines (intro, live
+    commentary, punishment). No history, no memory tags. Tries
+    Cerebras -> Gemini -> Groq and falls back to a static line if all fail."""
+    system = DUEL_HOST_PERSONA + "\n\n" + instruction
+    for call in (_call_cerebras, _call_gemini, _call_groq):
+        try:
+            text = call(system, [], prompt).strip().strip('"')
+            if text:
+                return text
+        except Exception as e:
+            print(f"[duel_host:{call.__name__}] failed: {e}")
+            continue
+    return fallback
+
+
+def generate_duel_intro(p1_name: str, p2_name: str, game_label: str) -> str:
+    """Short hype line kicking off a duel and inviting player 1 to throw
+    first. May include a rhetorical question to build excitement."""
+    instruction = (
+        "A new duel is about to start. Write ONE short, energetic hype line "
+        "(1 sentence, can include a rhetorical question like 'who's got the "
+        "nerve tonight?'). Write in the SAME LANGUAGE as the names/context "
+        "given (default: Uzbek, informal). Output ONLY that sentence — no "
+        "extra commentary, no quotes."
+    )
+    prompt = f"O'yin: {game_label}. Ishtirokchilar: {p1_name} va {p2_name}."
+    return _duel_host_call(instruction, prompt, f"🔥 {p1_name} va {p2_name} — kim kuchli ekan, hoziroq bilamiz!")
+
+
+def generate_duel_waiting_comment(thrower_name: str, thrower_value: int, next_name: str, game_label: str) -> str:
+    """Live commentary after the first roll, hyping up the second player's
+    turn."""
+    instruction = (
+        "Player 1 just threw and got a result. Write ONE short, punchy "
+        "sportscaster-style comment reacting to that result, then hand the "
+        "mic to player 2 for their turn (1-2 short sentences total). Same "
+        "language as given (default: Uzbek, informal). Output ONLY that."
+    )
+    prompt = (
+        f"O'yin: {game_label}. {thrower_name} natija: {thrower_value}. "
+        f"Endi navbat {next_name}da."
+    )
+    return _duel_host_call(
+        instruction, prompt,
+        f"🎯 {thrower_name}dan {thrower_value}! Endi {next_name}, navbat sizda!",
+    )
+
+
+def generate_duel_result_comment(
+    p1_name: str, p1_val: int, p2_name: str, p2_val: int, winner_name: str, game_label: str
+) -> str:
+    """Short, lively sportscaster-style wrap-up of the final result."""
+    instruction = (
+        "The duel just ended. Write ONE short, lively sportscaster-style "
+        "wrap-up line announcing the winner and the final numbers. Same "
+        "language as given (default: Uzbek, informal). Output ONLY that "
+        "sentence — no extra commentary, no quotes."
+    )
+    prompt = (
+        f"O'yin: {game_label}. {p1_name}: {p1_val}, {p2_name}: {p2_val}. "
+        f"G'olib: {winner_name}."
+    )
+    return _duel_host_call(
+        instruction, prompt,
+        f"🏆 {winner_name} g'olib! ({p1_name}: {p1_val} — {p2_name}: {p2_val})",
+    )
 
 
 def generate_duel_punishment(winner_name: str, loser_name: str, game_label: str) -> str:
-    """Generate a short, playful punishment line for the loser of a duel.
-    Tries Cerebras -> Gemini -> Groq like normal chat replies, but this is
-    a standalone one-off call (no history, no memory tags)."""
+    """Short, playful punishment/dare for the loser of a duel."""
+    instruction = (
+        "The duel just ended. Write ONE short, funny, harmless 'jazo' "
+        "(punishment/dare) for the loser — silly party-game dares only "
+        "(sing a line, send a funny sticker, compliment 3 people, do 5 "
+        "pushups, tell a joke, change their name for 10 minutes), never "
+        "dangerous or offensive. Address the loser directly, 1 sentence, "
+        "same language as given (default: Uzbek, informal). Output ONLY "
+        "that sentence."
+    )
     prompt = (
         f"O'yin: {game_label}. G'olib: {winner_name}. Mag'lub: {loser_name}. "
         f"Mag'lub bo'lgan {loser_name} uchun bitta qiziqarli jazo yoz."
     )
-    for call in (_call_cerebras, _call_gemini, _call_groq):
-        try:
-            text = call(JAZO_SYSTEM_PROMPT, [], prompt)
-            text = text.strip().strip('"')
-            if text:
-                return text
-        except Exception as e:
-            print(f"[jazo:{call.__name__}] failed: {e}")
-            continue
-    return f"{loser_name}, mag'lubiyat jazosi: guruhga bitta hazil ayt! 😄"
+    return _duel_host_call(instruction, prompt, f"{loser_name}, jazo sifatida guruhga bitta hazil ayt! 😄")
 
 
 def reset_user(user_id: str) -> None:
