@@ -168,6 +168,8 @@ def _account_menu_text_and_kb(user_id) -> tuple[str, InlineKeyboardMarkup]:
         f"📱 Ulangan raqam: <code>{phone}</code>\n"
         f"💎 Holat: {'Misumi AI Pro' if pro else 'Oddiy (Pro emas)'}"
     )
+    if pro and userbot_store.get_settings(user_id).get("inner_ai"):
+        text += "\n\n💬 Saqlangan xabarlarga <code>.ai savolingiz</code> deb yozib AI bilan gaplasha olasiz."
     kb = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("📊 Hisob statistikasi", callback_data="ub:stats")],
@@ -182,44 +184,66 @@ def _services_menu_text_and_kb(user_id) -> tuple[str, InlineKeyboardMarkup]:
     pro = admin_store.is_premium(user_id)
     settings = userbot_store.get_settings(user_id)
 
-    if not pro:
-        text = (
-            "⚙️ <b>Xizmatlar</b>\n\n"
-            "🔒 Bu funksiyalar faqat <b>Misumi AI Pro</b> foydalanuvchilari uchun:\n\n"
-            "• Oflayn bo'lganingizda avtomatik AI javob\n"
-            "• Holatga qarab avtomatik bio yangilanishi\n\n"
-            "Pro sotib olish uchun so'rov yuboring — admin tasdiqlagach faollashadi."
-        )
-        kb = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("💎 Misumi AI Pro sotib olish", callback_data="ub:buy_pro")],
-                [InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:account")],
-            ]
-        )
-        return text, kb
-
     def _mark(v):
         return "🟢 Yoqilgan" if v else "🔴 O'chirilgan"
 
+    lines = [
+        "⚙️ <b>Xizmatlar</b>\n",
+        f"🤖 Oflayn avto-javob (bepul): {_mark(settings.get('auto_reply'))}",
+    ]
+    kb_rows = [
+        [InlineKeyboardButton(
+            f"{'🔴 O\u2019chirish' if settings.get('auto_reply') else '🟢 Yoqish'} — Avto-javob",
+            callback_data="ub:toggle:auto_reply",
+        )],
+    ]
+
+    if pro:
+        offline_min = settings.get("offline_minutes") or userbot_manager.DEFAULT_OFFLINE_MINUTES
+        lines.append(f"📝 Avto-bio (Pro): {_mark(settings.get('auto_bio'))}")
+        lines.append(f"🧠 Ichki AI yordamchisi (Pro): {_mark(settings.get('inner_ai'))}")
+        lines.append(f"🕐 Oflayn hisoblanish vaqti (Pro): {offline_min} daqiqa")
+        kb_rows.append([InlineKeyboardButton(
+            f"{'🔴 O\u2019chirish' if settings.get('auto_bio') else '🟢 Yoqish'} — Avto-bio",
+            callback_data="ub:toggle:auto_bio",
+        )])
+        kb_rows.append([InlineKeyboardButton(
+            f"{'🔴 O\u2019chirish' if settings.get('inner_ai') else '🟢 Yoqish'} — Ichki AI yordamchisi",
+            callback_data="ub:toggle:inner_ai",
+        )])
+        kb_rows.append([InlineKeyboardButton("🕐 Oflayn vaqtini sozlash", callback_data="ub:schedule")])
+    else:
+        lines.append("\n🔒 <b>Misumi AI Pro</b> bilan yana ko'proq narsa ochiladi:")
+        lines.append("• 📝 Avtomatik bio yangilanishi")
+        lines.append("• 🧠 Ichki AI yordamchisi — Saqlangan xabarlarga <code>.ai savolingiz</code> deb yozib AI bilan bevosita gaplashish")
+        lines.append("• 🕐 Oflayn hisoblanish vaqtini o'zingiz belgilash")
+        kb_rows.append([InlineKeyboardButton("💎 Misumi AI Pro sotib olish", callback_data="ub:buy_pro")])
+
+    kb_rows.append([InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:account")])
+    return "\n".join(lines), InlineKeyboardMarkup(kb_rows)
+
+
+def _schedule_menu_text_and_kb(user_id) -> tuple[str, InlineKeyboardMarkup]:
+    settings = userbot_store.get_settings(user_id)
+    current = settings.get("offline_minutes") or userbot_manager.DEFAULT_OFFLINE_MINUTES
     text = (
-        "⚙️ <b>Xizmatlar</b> (Misumi AI Pro faol 💎)\n\n"
-        f"🤖 Oflayn avto-javob: {_mark(settings.get('auto_reply'))}\n"
-        f"📝 Avto-bio: {_mark(settings.get('auto_bio'))}"
+        "🕐 <b>Oflayn hisoblanish vaqti</b>\n\n"
+        "Akkountingizda necha daqiqa harakat bo'lmasa, sizni 'oflayn' deb "
+        "hisoblab AI javob yoza boshlasin?"
     )
-    kb = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton(
-                f"{'🔴 O\u2019chirish' if settings.get('auto_reply') else '🟢 Yoqish'} — Avto-javob",
-                callback_data="ub:toggle:auto_reply",
-            )],
-            [InlineKeyboardButton(
-                f"{'🔴 O\u2019chirish' if settings.get('auto_bio') else '🟢 Yoqish'} — Avto-bio",
-                callback_data="ub:toggle:auto_bio",
-            )],
-            [InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:account")],
-        ]
-    )
-    return text, kb
+    options = [1, 3, 5, 10, 15, 30]
+    rows = []
+    row = []
+    for m in options:
+        label = f"{'✅ ' if m == current else ''}{m} daqiqa"
+        row.append(InlineKeyboardButton(label, callback_data=f"ub:setmin:{m}"))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:services")])
+    return text, InlineKeyboardMarkup(rows)
 
 
 async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -238,7 +262,8 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text = (
             "📊 <b>Hisob statistikasi</b>\n\n"
             f"🤖 Yuborilgan avto-javoblar: {stats.get('auto_replies_sent', 0)}\n"
-            f"📝 Bio yangilanishlar: {stats.get('bio_updates', 0)}"
+            f"📝 Bio yangilanishlar: {stats.get('bio_updates', 0)}\n"
+            f"🧠 Ichki AI suhbatlari: {stats.get('self_chat_replies', 0)}"
         )
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:account")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
@@ -249,15 +274,34 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
 
     elif data.startswith("ub:toggle:"):
-        if not admin_store.is_premium(user_id):
+        key = data.split(":", 2)[2]
+        pro_only_keys = {"auto_bio", "inner_ai"}
+        if key in pro_only_keys and not admin_store.is_premium(user_id):
             await query.answer("Bu funksiya faqat Misumi AI Pro uchun.", show_alert=True)
             return
-        key = data.split(":", 2)[2]
         new_settings = userbot_store.set_setting(user_id, key, not userbot_store.get_settings(user_id).get(key))
         if new_settings.get(key):
             await userbot_manager.start_userbot(user_id)
         await query.answer("Yangilandi ✅")
         text, kb = _services_menu_text_and_kb(user_id)
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
+
+    elif data == "ub:schedule":
+        if not admin_store.is_premium(user_id):
+            await query.answer("Bu funksiya faqat Misumi AI Pro uchun.", show_alert=True)
+            return
+        await query.answer()
+        text, kb = _schedule_menu_text_and_kb(user_id)
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
+
+    elif data.startswith("ub:setmin:"):
+        if not admin_store.is_premium(user_id):
+            await query.answer("Bu funksiya faqat Misumi AI Pro uchun.", show_alert=True)
+            return
+        minutes = int(data.split(":", 2)[2])
+        userbot_store.set_setting(user_id, "offline_minutes", minutes)
+        await query.answer(f"✅ {minutes} daqiqaga o'rnatildi")
+        text, kb = _schedule_menu_text_and_kb(user_id)
         await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
 
     elif data == "ub:buy_pro":
