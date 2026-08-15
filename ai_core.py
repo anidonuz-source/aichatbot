@@ -296,6 +296,40 @@ def generate_image_reply(
     return image_bytes, mime_type
 
 
+JAZO_SYSTEM_PROMPT = f"""You are {BOT_NAME}, hosting a fun dice-emoji duel
+game inside a Telegram group chat. A duel just ended. Your job: write ONE
+short, funny, harmless "jazo" (punishment/dare) for the loser, as if you
+are a witty game host — never mean, never humiliating, never anything
+NSFW, dangerous, or offensive. Think: silly party-game dares (e.g. sing
+a line, send a funny sticker, compliment 3 people, do 5 pushups, tell a
+joke, change their name for 10 minutes) — light and playful only.
+Write it directly addressed to the loser, 1 sentence, in the SAME
+LANGUAGE as the names/context given to you (default: Uzbek, informal).
+Do not explain, do not add quotes, do not add extra commentary — output
+ONLY the punishment sentence itself.
+"""
+
+
+def generate_duel_punishment(winner_name: str, loser_name: str, game_label: str) -> str:
+    """Generate a short, playful punishment line for the loser of a duel.
+    Tries Cerebras -> Gemini -> Groq like normal chat replies, but this is
+    a standalone one-off call (no history, no memory tags)."""
+    prompt = (
+        f"O'yin: {game_label}. G'olib: {winner_name}. Mag'lub: {loser_name}. "
+        f"Mag'lub bo'lgan {loser_name} uchun bitta qiziqarli jazo yoz."
+    )
+    for call in (_call_cerebras, _call_gemini, _call_groq):
+        try:
+            text = call(JAZO_SYSTEM_PROMPT, [], prompt)
+            text = text.strip().strip('"')
+            if text:
+                return text
+        except Exception as e:
+            print(f"[jazo:{call.__name__}] failed: {e}")
+            continue
+    return f"{loser_name}, mag'lubiyat jazosi: guruhga bitta hazil ayt! 😄"
+
+
 def reset_user(user_id: str) -> None:
     user_id = str(user_id)
     mem.clear_memory(user_id)
