@@ -85,8 +85,19 @@ def _default_account(phone: str) -> dict:
         "phone": phone,
         "session": None,
         "connected_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "settings": {"auto_reply": False, "auto_bio": False, "inner_ai": False, "offline_minutes": None},
-        "stats": {"auto_replies_sent": 0, "bio_updates": 0, "self_chat_replies": 0},
+        "settings": {
+            "auto_reply": False,
+            "auto_bio": False,
+            "inner_ai": False,
+            "offline_minutes": None,
+            "signature": True,
+            "keywords": {},       # {"narx": "1 oylik obuna narxi 50 000 so'm"} — Pro
+            "blacklist": [],      # [user_id, ...] — never auto-reply to these — Pro
+            "stats_digest": None, # None | "daily" | "weekly" — Pro
+            "voice_reply": False, # transcribe + answer voice notes — Pro
+        },
+        "stats": {"auto_replies_sent": 0, "bio_updates": 0, "self_chat_replies": 0, "keyword_replies_sent": 0, "voice_replies_sent": 0},
+        "last_digest_at": None,
     }
 
 
@@ -174,3 +185,108 @@ def get_all_connected_owner_ids() -> list[str]:
         for owner_id, acc in _load()["accounts"].items()
         if acc.get("session")
     ]
+
+
+# ---------------------------------------------------------------------------
+# Keyword-triggered canned replies (Pro) — e.g. "narx" -> fixed answer,
+# sent instantly instead of calling the AI.
+# ---------------------------------------------------------------------------
+
+def get_keywords(owner_id) -> dict:
+    account = _load()["accounts"].get(str(owner_id))
+    if not account:
+        return {}
+    return account.get("settings", {}).get("keywords", {})
+
+
+def set_keyword(owner_id, keyword: str, reply: str) -> dict:
+    owner_id = str(owner_id)
+    keyword = keyword.strip().lower()
+    data = _load()
+    account = data["accounts"].get(owner_id)
+    if not account:
+        return {}
+    keywords = account.setdefault("settings", {}).setdefault("keywords", {})
+    keywords[keyword] = reply.strip()
+    data["accounts"][owner_id] = account
+    _save(data)
+    return keywords
+
+
+def remove_keyword(owner_id, keyword: str) -> dict:
+    owner_id = str(owner_id)
+    keyword = keyword.strip().lower()
+    data = _load()
+    account = data["accounts"].get(owner_id)
+    if not account:
+        return {}
+    keywords = account.setdefault("settings", {}).setdefault("keywords", {})
+    keywords.pop(keyword, None)
+    data["accounts"][owner_id] = account
+    _save(data)
+    return keywords
+
+
+# ---------------------------------------------------------------------------
+# Blacklist (Pro) — never auto-reply to these Telegram user ids.
+# ---------------------------------------------------------------------------
+
+def get_blacklist(owner_id) -> list[int]:
+    account = _load()["accounts"].get(str(owner_id))
+    if not account:
+        return []
+    return account.get("settings", {}).get("blacklist", [])
+
+
+def add_blacklist(owner_id, user_id: int) -> list[int]:
+    owner_id = str(owner_id)
+    data = _load()
+    account = data["accounts"].get(owner_id)
+    if not account:
+        return []
+    blacklist = account.setdefault("settings", {}).setdefault("blacklist", [])
+    if user_id not in blacklist:
+        blacklist.append(user_id)
+    data["accounts"][owner_id] = account
+    _save(data)
+    return blacklist
+
+
+def remove_blacklist(owner_id, user_id: int) -> list[int]:
+    owner_id = str(owner_id)
+    data = _load()
+    account = data["accounts"].get(owner_id)
+    if not account:
+        return []
+    blacklist = account.setdefault("settings", {}).setdefault("blacklist", [])
+    if user_id in blacklist:
+        blacklist.remove(user_id)
+    data["accounts"][owner_id] = account
+    _save(data)
+    return blacklist
+
+
+def is_blacklisted(owner_id, user_id: int) -> bool:
+    return user_id in get_blacklist(owner_id)
+
+
+# ---------------------------------------------------------------------------
+# Stats digest (Pro) — periodic summary auto-sent to Saved Messages.
+# ---------------------------------------------------------------------------
+
+def get_last_digest_at(owner_id) -> str | None:
+    account = _load()["accounts"].get(str(owner_id))
+    if not account:
+        return None
+    return account.get("last_digest_at")
+
+
+def set_last_digest_at(owner_id, iso_timestamp: str) -> None:
+    owner_id = str(owner_id)
+    data = _load()
+    account = data["accounts"].get(owner_id)
+    if not account:
+        return
+    account["last_digest_at"] = iso_timestamp
+    data["accounts"][owner_id] = account
+    _save(data)
