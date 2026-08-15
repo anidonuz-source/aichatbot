@@ -3,26 +3,31 @@ Misumi AI — userbot manager (Telethon / MTProto layer).
 
 Lets a bot user "AI ga akkount ulash" — connect their own personal
 Telegram account so that, when they're away, Misumi AI answers their
-private messages *from their own account* and can keep their bio
-freshly updated. This is a Misumi AI Pro feature (see admin_store /
-userbot_store premium checks in bot.py).
+private messages *from their own account*.
+
+Feature tiers:
+  - Auto-reply when offline/AFK — FREE, available to every connected
+    account.
+  - Auto-bio updates, and a customizable "away after N minutes"
+    schedule — Misumi AI Pro only (see admin_store.is_premium).
 
 Two moving parts:
 
-1. Login flow (`LoginFlow`) — a short-lived Telethon client used only
-   to walk through phone -> code -> (2FA password) -> session string.
-   One in-memory instance per chat while the person is mid-login.
+1. Login flow — a short-lived Telethon client used only to walk
+   through phone -> code -> (2FA password) -> session string. One
+   in-memory instance per chat while the person is mid-login.
 
 2. Runtime clients (`start_userbot` / `stop_userbot`) — long-lived
    Telethon clients, one per connected owner, that listen for incoming
    private messages and reply with AI when the owner is AFK, and
-   periodically refresh the account bio.
+   (Pro only) periodically refresh the account bio.
 
 "AFK / offline" is approximated the way most userbot AFK-reply tools
 do it: we track the last time the *real* human sent a message from
 their own device (an outgoing Telethon event). If nothing was sent
-manually in the last OFFLINE_THRESHOLD_SECONDS, the owner is treated
-as away and Misumi AI is allowed to answer for them.
+manually in the last N minutes (DEFAULT_OFFLINE_MINUTES, customizable
+by Pro users), the owner is treated as away and Misumi AI is allowed
+to answer for them. Free accounts always use the default.
 """
 import asyncio
 import logging
@@ -46,8 +51,8 @@ logger = logging.getLogger("misumi-userbot")
 API_ID = int(os.environ.get("TELEGRAM_API_ID", "0") or "0")
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
 
-OFFLINE_THRESHOLD_SECONDS = 5 * 60  # no manual activity for 5 min = "away"
-BIO_REFRESH_SECONDS = 45 * 60       # how often auto-bio may rotate
+DEFAULT_OFFLINE_MINUTES = 3   # no manual activity for 3 min = "away" (free default)
+BIO_REFRESH_SECONDS = 45 * 60  # how often auto-bio may rotate (Pro only)
 
 # owner_id (str) -> {"client": TelegramClient, "last_active": float, "task": Task}
 _active: dict[str, dict] = {}
@@ -133,19 +138,29 @@ def _mark_active(owner_id: str) -> None:
         entry["last_active"] = time.time()
 
 
+def _offline_minutes(owner_id: str) -> int:
+    """Pro users can customize how many minutes of silence count as
+    'away'; free users get the default."""
+    if not admin_store.is_premium(owner_id):
+        return DEFAULT_OFFLINE_MINUTES
+    settings = userbot_store.get_settings(owner_id)
+    return int(settings.get("offline_minutes") or DEFAULT_OFFLINE_MINUTES)
+
+
 def _is_away(owner_id: str) -> bool:
     entry = _active.get(owner_id)
     if not entry:
         return False
-    return (time.time() - entry["last_active"]) >= OFFLINE_THRESHOLD_SECONDS
+    threshold = _offline_minutes(owner_id) * 60
+    return (time.time() - entry["last_active"]) >= threshold
 
 
 async def _handle_incoming(owner_id: str, event) -> None:
+    # Auto-reply when offline is a FREE feature — available to every
+    # connected account, no Pro check here.
     settings = userbot_store.get_settings(owner_id)
     if not settings.get("auto_reply"):
         return
-    if not admin_store.is_premium(owner_id):
-        return  # Pro-only feature
     if not _is_away(owner_id):
         return  # owner is around, let them answer themselves
 
@@ -172,6 +187,7 @@ async def _handle_incoming(owner_id: str, event) -> None:
 
 
 async def _bio_loop(owner_id: str, client: TelegramClient) -> None:
+    # Auto-bio stays a Misumi AI Pro-only feature.
     while owner_id in _active:
         try:
             await asyncio.sleep(BIO_REFRESH_SECONDS + random.randint(0, 300))
@@ -200,6 +216,44 @@ async def _bio_loop(owner_id: str, client: TelegramClient) -> None:
             logger.exception("Userbot bio loop error (owner=%s)", owner_id)
 
 
+SELF_CHAT_PREFIX = ".ai"  # send ".ai <savol>" to Saved Messages to talk to Misumi AI
+
+
+async def _handle_self_chat(owner_id: str, event) -> None:
+    """Lets the owner chat with Misumi AI privately, inside their own
+    account, by sending '.ai <question>' to Saved Messages (self-chat).
+    Misumi AI Pro feature."""
+    settings = userbot_store.get_settings(owner_id)
+    if not settings.get("inner_ai"):
+        return
+    if not admin_store.is_premium(owner_id):
+        return
+
+    entry = _active.get(owner_id)
+    if not entry or event.chat_id != entry.get("my_id"):
+        return  # only reacts inside Saved Messages, not other chats
+
+    text = (event.raw_text or "").strip()
+    if not text.lower().startswith(SELF_CHAT_PREFIX):
+        return
+    query = text[len(SELF_CHAT_PREFIX):].strip()
+    if not query:
+        return
+
+    memory_key = f"ub_self_{owner_id}"
+    try:
+        reply = ai_core.get_ai_reply(memory_key, query, name="Siz", source="userbot-self")
+    except Exception:
+        logger.exception("Userbot self-chat AI error (owner=%s)", owner_id)
+        return
+
+    try:
+        await event.client.send_message(event.chat_id, f"🤖 {reply}")
+        userbot_store.bump_stat(owner_id, "self_chat_replies")
+    except Exception:
+        logger.exception("Userbot self-chat send error (owner=%s)", owner_id)
+
+
 async def start_userbot(owner_id) -> bool:
     """Starts (or restarts) the background client for an already-connected
     owner. Safe to call more than once — no-ops if already running."""
@@ -219,7 +273,8 @@ async def start_userbot(owner_id) -> bool:
         await client.disconnect()
         return False
 
-    _active[owner_id] = {"client": client, "last_active": time.time(), "task": None}
+    me = await client.get_me()
+    _active[owner_id] = {"client": client, "last_active": time.time(), "task": None, "my_id": me.id}
 
     @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
     async def _on_incoming(event, _owner_id=owner_id):
@@ -228,6 +283,7 @@ async def start_userbot(owner_id) -> bool:
     @client.on(events.NewMessage(outgoing=True))
     async def _on_outgoing(event, _owner_id=owner_id):
         _mark_active(_owner_id)  # real human is actively using the account
+        await _handle_self_chat(_owner_id, event)
 
     _active[owner_id]["task"] = asyncio.get_event_loop().create_task(
         _bio_loop(owner_id, client)
