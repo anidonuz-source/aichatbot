@@ -3,15 +3,23 @@ Misumi AI — duel game (🎲🎯🏀⚽🎳🎰).
 
 Group members can challenge each other (PvP, via /duel as a reply to
 someone's message) or challenge Misumi AI herself (PvE, plain /duel).
-Uses Telegram's native send_dice — the animated emoji whose numeric
-result is generated server-side by Telegram itself, so it's provably
-fair for both sides. Whoever rolls higher wins; the loser gets a
-short, funny "jazo" (dare) written by the AI. Results feed a
-persistent win/loss leaderboard (game_store.py).
+
+Players throw their OWN dice: after picking a game type, each human
+sends the matching emoji as a normal message — Telegram itself turns
+that into an animated dice roll with a server-side random result, so
+it's genuinely the player's own throw (not the bot rolling for them),
+and provably fair. When the opponent is Misumi AI, she rolls for
+herself via send_dice.
+
+Misumi AI acts as a live host throughout: an AI-written hype intro,
+a live comment handing off between throws, a wrap-up comment on the
+result, and a short AI-written "jazo" (dare) for the loser. Results
+feed a persistent win/loss leaderboard (game_store.py).
 
 Wired into bot.py via register(app).
 """
 import asyncio
+import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -19,6 +27,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
+    filters,
 )
 
 import admin_store
@@ -35,24 +45,23 @@ GAME_TYPES = {
     "slot": ("🎰", "Slot mashina"),
 }
 
-# Telegram's dice animations run for roughly this many seconds before
-# settling on their final value — wait this long before the next roll /
-# the result message so it doesn't spoil or overlap the animation.
+# How long Telegram's dice animation roughly takes to settle — used only
+# for the bot's own PvE throw, so its message doesn't feel instant/unfair.
 DICE_DELAY = {
-    "🎲": 3.5,
-    "🎯": 3.5,
-    "🏀": 3.0,
-    "⚽": 3.0,
-    "🎳": 3.5,
-    "🎰": 4.0,
+    "🎲": 3.5, "🎯": 3.5, "🏀": 3.0, "⚽": 3.0, "🎳": 3.5, "🎰": 4.0,
 }
 
 BOT_PLAYER_ID = "bot"  # sentinel target_id meaning "play against Misumi AI"
 
+# duel_id -> duel state (see _start_duel)
+_active_duels: dict[str, dict] = {}
+# (chat_id, user_id) -> duel_id — who we're currently waiting to throw
+_waiting: dict[tuple[int, int], str] = {}
+
 
 def _game_type_keyboard(challenger_id: str, target_id: str) -> InlineKeyboardMarkup:
     buttons, row = [], []
-    for i, (key, (emoji, label)) in enumerate(GAME_TYPES.items()):
+    for key, (emoji, label) in GAME_TYPES.items():
         row.append(InlineKeyboardButton(f"{emoji} {label}", callback_data=f"dg:t:{challenger_id}:{target_id}:{key}"))
         if len(row) == 2:
             buttons.append(row)
@@ -113,7 +122,7 @@ async def on_type_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if target_id == BOT_PLAYER_ID:
         await query.edit_message_text(f"🎮 {challenger_name} vs {ai_core.BOT_NAME} — {label} {emoji}")
-        await _run_duel(
+        await _start_duel(
             context, query.message.chat_id, emoji, label,
             int(challenger_id), challenger_name,
             None, ai_core.BOT_NAME,
@@ -159,7 +168,7 @@ async def on_accept(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await query.edit_message_text(f"✅ Duel boshlandi: {challenger_name} vs {target_name} — {label} {emoji}")
-    await _run_duel(
+    await _start_duel(
         context, query.message.chat_id, emoji, label,
         int(challenger_id), challenger_name,
         int(target_id), target_name,
@@ -178,7 +187,7 @@ async def on_decline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("❌ Taklif rad etildi.")
 
 
-async def _run_duel(
+async def _start_duel(
     context: ContextTypes.DEFAULT_TYPE,
     chat_id: int,
     emoji: str,
@@ -188,18 +197,89 @@ async def _run_duel(
     p2_id: int | None,
     p2_name: str,
 ):
-    """Roll for both sides via Telegram's native dice (server-side random,
-    fair for both players), announce the winner, and post an AI-written
-    punishment for the loser. p2_id=None means the opponent is the bot."""
-    delay = DICE_DELAY.get(emoji, 3.5)
+    """Set up duel state and prompt player 1 to throw their own dice
+    (or, in PvE, prompt the human and let the bot roll right after)."""
+    duel_id = uuid.uuid4().hex
+    _active_duels[duel_id] = {
+        "chat_id": chat_id, "emoji": emoji, "label": label,
+        "p1_id": p1_id, "p1_name": p1_name, "p1_val": None,
+        "p2_id": p2_id, "p2_name": p2_name, "p2_val": None,
+        "turn": "p1",
+    }
+    _waiting[(chat_id, p1_id)] = duel_id
 
-    p1_msg = await context.bot.send_dice(chat_id=chat_id, emoji=emoji)
-    p1_val = p1_msg.dice.value
-    await asyncio.sleep(delay)
+    try:
+        intro = ai_core.generate_duel_intro(p1_name, p2_name, label)
+    except Exception:
+        intro = f"🔥 {p1_name} va {p2_name} — kim kuchli ekan, hoziroq bilamiz!"
 
-    p2_msg = await context.bot.send_dice(chat_id=chat_id, emoji=emoji)
-    p2_val = p2_msg.dice.value
-    await asyncio.sleep(delay)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"{intro}\n\n{emoji} {p1_name}, boshlang — shu emojini o'zingiz yuboring!",
+    )
+
+
+async def on_player_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if not message or not message.dice:
+        return
+
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+    key = (chat_id, user_id)
+    duel_id = _waiting.get(key)
+    if not duel_id:
+        return  # this dice throw isn't part of any duel we're waiting on
+
+    duel = _active_duels.get(duel_id)
+    if not duel:
+        _waiting.pop(key, None)
+        return
+
+    if message.dice.emoji != duel["emoji"]:
+        await message.reply_text(f"Bu duelda {duel['emoji']} kerak — o'shani yuboring 🙂")
+        return
+
+    value = message.dice.value
+    _waiting.pop(key, None)
+
+    if duel["turn"] == "p1":
+        duel["p1_val"] = value
+
+        if duel["p2_id"] is None:
+            # PvE — Misumi AI rolls for herself right after.
+            await asyncio.sleep(1.0)
+            bot_msg = await context.bot.send_dice(chat_id=chat_id, emoji=duel["emoji"])
+            await asyncio.sleep(DICE_DELAY.get(duel["emoji"], 3.5))
+            duel["p2_val"] = bot_msg.dice.value
+            await _finish_duel(context, duel_id)
+        else:
+            duel["turn"] = "p2"
+            _waiting[(chat_id, duel["p2_id"])] = duel_id
+            try:
+                comment = ai_core.generate_duel_waiting_comment(
+                    duel["p1_name"], value, duel["p2_name"], duel["label"]
+                )
+            except Exception:
+                comment = f"🎯 {duel['p1_name']}dan {value}! Endi {duel['p2_name']}, navbat sizda!"
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{comment}\n\n{duel['emoji']} {duel['p2_name']}, o'zingiz yuboring!",
+            )
+    else:
+        duel["p2_val"] = value
+        await _finish_duel(context, duel_id)
+
+
+async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
+    duel = _active_duels.pop(duel_id, None)
+    if not duel:
+        return
+
+    chat_id = duel["chat_id"]
+    label = duel["label"]
+    p1_id, p1_name, p1_val = duel["p1_id"], duel["p1_name"], duel["p1_val"]
+    p2_id, p2_name, p2_val = duel["p2_id"], duel["p2_name"], duel["p2_val"]
 
     p1_id_s = str(p1_id) if p1_id else None
     p2_id_s = str(p2_id) if p2_id else None
@@ -219,16 +299,18 @@ async def _run_duel(
 
     game_store.record_result(winner_id, winner_name, loser_id, loser_name)
 
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"🏆 {winner_name} g'olib bo'ldi! ({p1_name}: {p1_val} — {p2_name}: {p2_val})",
-    )
+    try:
+        result_comment = ai_core.generate_duel_result_comment(
+            p1_name, p1_val, p2_name, p2_val, winner_name, label
+        )
+    except Exception:
+        result_comment = f"🏆 {winner_name} g'olib! ({p1_name}: {p1_val} — {p2_name}: {p2_val})"
+    await context.bot.send_message(chat_id=chat_id, text=result_comment)
 
     try:
         jazo = ai_core.generate_duel_punishment(winner_name, loser_name, label)
     except Exception:
         jazo = f"{loser_name}, jazo sifatida guruhga bitta hazil ayting! 😄"
-
     await context.bot.send_message(chat_id=chat_id, text=f"⚡ Jazo — {loser_name}: {jazo}")
 
 
@@ -252,3 +334,6 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(on_type_selected, pattern=r"^dg:t:"))
     app.add_handler(CallbackQueryHandler(on_accept, pattern=r"^dg:a:"))
     app.add_handler(CallbackQueryHandler(on_decline, pattern=r"^dg:d:"))
+    # Dice messages have no .text, so this never collides with
+    # handle_message's filters.TEXT handler in bot.py.
+    app.add_handler(MessageHandler(filters.Dice(), on_player_dice))
