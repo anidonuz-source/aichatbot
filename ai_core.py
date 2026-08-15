@@ -20,6 +20,7 @@ to append an invisible tag like ⟦MEMORY:category:key:value⟧ at the end of
 its reply when it learns something worth remembering. We strip those tags
 before showing the reply and save them to memory_manager.
 """
+import asyncio
 import os
 import random
 import re
@@ -201,6 +202,63 @@ def pop_last_sticker(user_id: str) -> str | None:
 
 def pop_last_reaction(user_id: str) -> str | None:
     return _last_reaction.pop(str(user_id), None)
+
+
+async def deliver_ai_reply(
+    bot,
+    chat_id,
+    user_id: str,
+    reply_text: str,
+    reply_to_message_id: int | None = None,
+) -> None:
+    """Send a get_ai_reply() result the same way everywhere it's used:
+    text (possibly split into human-like bursts), then a sticker and/or
+    a reaction if the model asked for one, with a bare "🙂" fallback if
+    all three come up empty. Shared by bot.py's handle_message and
+    game.py's addressed-sticker/GIF replies so both surfaces behave
+    identically instead of duplicating this logic.
+    """
+    from telegram import ReactionTypeEmoji
+    from telegram.constants import ChatAction
+
+    reply_text = (reply_text or "").strip()
+    if reply_text and reply_text != "...":
+        bursts = split_into_bursts(reply_text)
+        first_kwargs = {"chat_id": chat_id, "text": bursts[0]}
+        if reply_to_message_id:
+            first_kwargs["reply_to_message_id"] = reply_to_message_id
+        await bot.send_message(**first_kwargs)
+        for chunk in bursts[1:]:
+            await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            await asyncio.sleep(min(2.5, 0.5 + len(chunk) / 40))
+            await bot.send_message(chat_id=chat_id, text=chunk)
+
+    sticker_category = pop_last_sticker(user_id)
+    sticker_sent = False
+    if sticker_category:
+        file_id = sticker_store.get_random(sticker_category)
+        if file_id:
+            try:
+                await bot.send_sticker(chat_id=chat_id, sticker=file_id)
+                sticker_sent = True
+            except Exception:
+                pass
+
+    reaction_emoji = pop_last_reaction(user_id)
+    reaction_sent = False
+    if reaction_emoji and reply_to_message_id:
+        try:
+            await bot.set_message_reaction(
+                chat_id=chat_id,
+                message_id=reply_to_message_id,
+                reaction=[ReactionTypeEmoji(reaction_emoji)],
+            )
+            reaction_sent = True
+        except Exception:
+            pass
+
+    if not reply_text.strip("." ) and not sticker_sent and not reaction_sent:
+        await bot.send_message(chat_id=chat_id, text="🙂")
 
 
 # Roughly matches sentence boundaries for burst-splitting a reply into
