@@ -32,6 +32,7 @@ from telegram.ext import (
 
 import admin_store
 import ai_core
+import game
 import webapp
 
 logging.basicConfig(
@@ -79,7 +80,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"eslab qolaman, shuning uchun har safar bir joydan davom etaman.\n\n"
         f"Premium interfeys uchun quyidagi tugmani bosing — rasm yuborish, "
         f"tarixni saqlash va yanada boy tajriba shu yerda.\n\n"
-        f"/reset — xotirani tozalash\n\n"
+        f"/reset — xotirani tozalash\n"
+        f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
+        f"/reyting — o'yin reytingi\n\n"
         f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
     )
     await update.message.reply_text(text, reply_markup=_webapp_keyboard(chat_id))
@@ -189,6 +192,7 @@ def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
+    game.register(app)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     logger.info(f"{ai_core.BOT_NAME} Telegram bot starting (polling)...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
