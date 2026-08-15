@@ -254,6 +254,13 @@ async def on_player_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bot_msg = await context.bot.send_dice(chat_id=chat_id, emoji=duel["emoji"])
             await asyncio.sleep(DICE_DELAY.get(duel["emoji"], 3.5))
             duel["p2_val"] = bot_msg.dice.value
+            try:
+                own_reaction = ai_core.generate_pve_own_throw_reaction(
+                    duel["p2_val"], duel["p1_name"], value, duel["label"]
+                )
+                await context.bot.send_message(chat_id=chat_id, text=own_reaction)
+            except Exception:
+                pass
             await _finish_duel(context, duel_id)
         else:
             duel["turn"] = "p2"
@@ -285,6 +292,7 @@ async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
 
     p1_id_s = str(p1_id) if p1_id else None
     p2_id_s = str(p2_id) if p2_id else None
+    is_pve = p2_id is None  # PvE always has p1 = human, p2 = Misumi AI herself
 
     if p1_val == p2_val:
         game_store.record_result(p1_id_s, p1_name, p2_id_s, p2_name, draw=True)
@@ -323,6 +331,12 @@ async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
             kind, dare_text = "joke", f"Tan olaman, {winner_name} — bugun siz kuchli edingiz! 👏"
         await context.bot.send_message(chat_id=chat_id, text=f"⚡ Men yutqazdim, jazoimni bajaraman:\n\n{dare_text}")
         await _send_result_sticker(context, chat_id, "lose")
+        if is_pve:
+            try:
+                banter = ai_core.generate_pve_banter(False, winner_name, label)
+                await context.bot.send_message(chat_id=chat_id, text=banter)
+            except Exception:
+                pass
         return
 
     try:
@@ -331,6 +345,12 @@ async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
         jazo = f"{loser_name}, jazo sifatida guruhga bitta hazil ayting! 😄"
     await context.bot.send_message(chat_id=chat_id, text=f"⚡ Jazo — {loser_name}: {jazo}")
     await _send_result_sticker(context, chat_id, "lose")
+    if is_pve:
+        try:
+            banter = ai_core.generate_pve_banter(True, loser_name, label)
+            await context.bot.send_message(chat_id=chat_id, text=banter)
+        except Exception:
+            pass
 
 
 async def _send_result_sticker(context: ContextTypes.DEFAULT_TYPE, chat_id: int, category: str):
@@ -441,6 +461,8 @@ async def collect_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user = update.effective_user
+    if user and not ai_core.check_rate_limit(chat_id, user.id):
+        return
     display_name = user.first_name if user else None
     prompt = f"[sticker: {message.sticker.emoji or 'no emoji'}]"
     try:
@@ -477,6 +499,8 @@ async def collect_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user = update.effective_user
+    if user and not ai_core.check_rate_limit(chat_id, user.id):
+        return
     display_name = user.first_name if user else None
     prompt = "[GIF yubordi]"
     try:
