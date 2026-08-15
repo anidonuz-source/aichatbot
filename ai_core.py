@@ -21,6 +21,7 @@ its reply when it learns something worth remembering. We strip those tags
 before showing the reply and save them to memory_manager.
 """
 import os
+import random
 import re
 
 import requests
@@ -425,22 +426,91 @@ def generate_duel_result_comment(
     )
 
 
-def generate_duel_punishment(winner_name: str, loser_name: str, game_label: str) -> str:
-    """Short, playful punishment/dare for the loser of a duel."""
+def generate_duel_punishment(winner_name: str, loser_name: str, game_label: str, kind: str | None = None) -> str:
+    """Short, playful punishment/dare for the loser of a duel — announced
+    for a HUMAN loser to actually go do themselves in the group.
+
+    `kind` seeds which flavor of dare to write (see HUMAN_DARE_KINDS); if
+    omitted, one is picked at random so dares don't always land on the
+    same "compliment 3 people" default."""
+    kind = kind or random.choice(HUMAN_DARE_KINDS)
+    seed = HUMAN_DARE_SEEDS.get(kind, HUMAN_DARE_SEEDS["compliment_someone"])
     instruction = (
         "The duel just ended. Write ONE short, funny, harmless 'jazo' "
-        "(punishment/dare) for the loser — silly party-game dares only "
-        "(sing a line, send a funny sticker, compliment 3 people, do 5 "
-        "pushups, tell a joke, change their name for 10 minutes), never "
-        "dangerous or offensive. Address the loser directly, 1 sentence, "
-        "same language as given (default: Uzbek, informal). Output ONLY "
-        "that sentence."
+        f"(punishment/dare) for the loser — specifically this kind of dare: {seed} "
+        "Never dangerous, never offensive, never humiliating. Address the "
+        "loser directly, 1 sentence, same language as given (default: "
+        "Uzbek, informal). Output ONLY that sentence."
     )
     prompt = (
         f"O'yin: {game_label}. G'olib: {winner_name}. Mag'lub: {loser_name}. "
         f"Mag'lub bo'lgan {loser_name} uchun bitta qiziqarli jazo yoz."
     )
     return _duel_host_call(instruction, prompt, f"{loser_name}, jazo sifatida guruhga bitta hazil ayt! 😄")
+
+
+# Dare flavors a losing HUMAN can be handed — picked at random so the
+# jazo doesn't always default to the same "compliment someone" dare.
+HUMAN_DARE_KINDS = [
+    "compliment_someone", "joke", "confession", "poem",
+    "dance_emoji", "pushup", "sing_line", "tongue_twister",
+    "riddle", "nickname",
+]
+HUMAN_DARE_SEEDS = {
+    "compliment_someone": "they must compliment the winner, or another random person in the group, right now in chat.",
+    "joke": "they must tell a joke to the group right now.",
+    "confession": "they must confess one silly, harmless 'secret' or embarrassing-but-mild fact to the group.",
+    "poem": "they must write a short 2-line poem about losing, right now in chat.",
+    "dance_emoji": "they must describe themselves dancing using only emojis, right now in chat.",
+    "pushup": "they must do 10 pushups and report back with a message once done.",
+    "sing_line": "they must type out one line of a song they like, right now in chat.",
+    "tongue_twister": "they must type a tongue-twister three times in a row without a typo.",
+    "riddle": "they must ask the group a riddle and wait for someone to solve it.",
+    "nickname": "they must change their Telegram display name to something silly for the next 10 minutes.",
+}
+
+# Dares MISUMI AI HERSELF can actually carry out when she's the one who
+# loses a PvE duel — deliberately a smaller set than the human list above,
+# since "do 10 pushups" means nothing coming from a bot. Every one of
+# these is something she can genuinely write and send as her own message,
+# not just describe.
+BOT_DARE_KINDS = ["praise_winner", "praise_group", "joke", "poem", "confession"]
+BOT_DARE_SEEDS = {
+    "praise_winner": "Write a genuine, warm, specific compliment TO the winner, addressed directly to them by name — this IS the compliment itself, not a description of one.",
+    "praise_group": "Write one warm, funny compliment to the whole group at once — this IS the compliment itself, not a description of one.",
+    "joke": "Tell an actual short joke right now — this IS the joke itself, not a description of one.",
+    "poem": "Write an actual short 2-4 line poem about losing gracefully, addressed to the winner — this IS the poem itself.",
+    "confession": "Share one silly, harmless 'confession' about yourself as an AI (e.g. a quirky preference) — this IS the confession itself.",
+}
+
+
+def generate_bot_dare(winner_name: str, game_label: str, kind: str | None = None) -> tuple[str, str]:
+    """When Misumi AI herself loses a PvE duel, she doesn't just announce
+    a dare for someone else to do — she performs it. Returns
+    (kind, executed_text): kind is which dare got picked, executed_text
+    is the actual praise/joke/poem/confession itself, ready to send as
+    her own message. If told to praise someone ('meni maqta', 'guruhni
+    maqta'), the output IS the praise — not a promise to praise."""
+    kind = kind or random.choice(BOT_DARE_KINDS)
+    seed = BOT_DARE_SEEDS.get(kind, BOT_DARE_SEEDS["joke"])
+    instruction = (
+        "You just lost a duel game you played against a human. As your own "
+        f"loser's dare, do this now: {seed} Same language as given (default: "
+        "Uzbek, informal). Write in YOUR OWN voice as the one who lost — "
+        "warm, a little playfully embarrassed about losing, but genuine. "
+        "Output ONLY the dare content itself — no meta-commentary like "
+        "'here is my dare', no quotes."
+    )
+    prompt = f"O'yin: {game_label}. G'olib: {winner_name}. Siz (Misumi AI) yutqazdingiz."
+    fallback = {
+        "praise_winner": f"Tan olaman, {winner_name} — bugun chindan ham kuchli o'ynadingiz! 👏",
+        "praise_group": "Yutqazdim, lekin shu guruhda o'ynash har doim zavqli — hammangiz zo'rsiz! 🙌",
+        "joke": "Yutqazdim... lekin hech bo'lmasa hazilni yutib oldim: nega kompyuter sovuq qotadi? Chunki Windows'ini ochib qo'yishadi 😄",
+        "poem": f"Kub aylandi, baxt kulmadi,\n{winner_name} g'olib, men esa kuldim.",
+        "confession": "Bir sirim bor: har safar kub aylanganda ichimda picha hayajonlanaman 😅",
+    }.get(kind, "Yutqazdim, lekin kayfiyat yaxshi! 😄")
+    text = _duel_host_call(instruction, prompt, fallback)
+    return kind, text
 
 
 def reset_user(user_id: str) -> None:
