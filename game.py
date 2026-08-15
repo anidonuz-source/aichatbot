@@ -368,10 +368,45 @@ async def stiker_add_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stiker_list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     counts = sticker_store.counts()
-    lines = ["📦 Stikerlar to'plami:"]
+    lines = ["📦 Stiker/GIF to'plami:"]
     for cat, n in counts.items():
         lines.append(f"• {cat}: {n} ta")
     await update.message.reply_text("\n".join(lines))
+
+
+async def collect_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Passive, silent collector — runs on every sticker any group member
+    sends, no command needed. Sorted by the sticker's own emoji into a
+    mood category (unrecognized emoji -> 'general'), so the library
+    grows on its own the more the group actually uses stickers, exactly
+    like a real member would pick things up over time. Never replies,
+    never errors out loud — a failure here must not disrupt the chat."""
+    message = update.message
+    if not message or not message.sticker:
+        return
+    if admin_store.is_blocked(update.effective_chat.id):
+        return
+    try:
+        category = sticker_store.category_for_emoji(message.sticker.emoji)
+        sticker_store.add_sticker(category, message.sticker.file_id)
+    except Exception:
+        pass
+
+
+async def collect_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Same as collect_sticker but for GIFs (Telegram calls them
+    'animation'). No emoji to sort by, so they all go into one pool —
+    still useful, since a real person doesn't categorize every GIF
+    they've ever seen either, they just remember the good ones."""
+    message = update.message
+    if not message or not message.animation:
+        return
+    if admin_store.is_blocked(update.effective_chat.id):
+        return
+    try:
+        sticker_store.add_gif(message.animation.file_id)
+    except Exception:
+        pass
 
 
 def register(app: Application) -> None:
@@ -386,3 +421,8 @@ def register(app: Application) -> None:
     # Dice messages have no .text, so this never collides with
     # handle_message's filters.TEXT handler in bot.py.
     app.add_handler(MessageHandler(filters.Dice(), on_player_dice))
+    # Passive background collectors — group=1 so they run in a separate
+    # handler group and never block/compete with the /stiker command or
+    # anything else reacting to the same message.
+    app.add_handler(MessageHandler(filters.Sticker.ALL, collect_sticker), group=1)
+    app.add_handler(MessageHandler(filters.ANIMATION, collect_gif), group=1)
