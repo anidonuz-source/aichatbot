@@ -16,6 +16,7 @@ Env vars required (see .env.example):
                           RENDER_EXTERNAL_URL automatically — used as a
                           fallback if WEBAPP_URL isn't set).
 """
+import asyncio
 import logging
 import os
 import threading
@@ -97,6 +98,40 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     ai_core.reset_user(chat_id)
     await update.message.reply_text("Xotira tozalandi.")
+
+
+async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin-only: /broadcast <matn> sends that text to every chat Misumi
+    has ever talked in (private chats and groups alike). Skips chats
+    where sending fails (bot blocked/removed, chat deleted, etc.) instead
+    of aborting the whole run, and reports how many succeeded/failed."""
+    chat_id = update.effective_chat.id
+    if not _is_admin(chat_id):
+        return
+
+    text = update.message.text.split(maxsplit=1)
+    if len(text) < 2 or not text[1].strip():
+        await update.message.reply_text("Foydalanish: /broadcast <xabar matni>")
+        return
+    broadcast_text = text[1].strip()
+
+    targets = admin_store.get_all_chat_ids()
+    if not targets:
+        await update.message.reply_text("Hali hech qanday chat qayd etilmagan.")
+        return
+
+    await update.message.reply_text(f"📣 {len(targets)} ta chatga yuborilyapti...")
+
+    sent, failed = 0, 0
+    for target_id in targets:
+        try:
+            await context.bot.send_message(chat_id=int(target_id), text=broadcast_text)
+            sent += 1
+        except Exception:
+            failed += 1
+        await asyncio.sleep(0.05)  # stay well under Telegram's rate limits
+
+    await update.message.reply_text(f"✅ Yuborildi: {sent}\n❌ Yetmadi: {failed}")
 
 
 def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
@@ -206,6 +241,7 @@ def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     game.register(app)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     logger.info(f"{ai_core.BOT_NAME} Telegram bot starting (polling)...")
