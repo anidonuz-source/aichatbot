@@ -764,6 +764,50 @@ def generate_pve_banter(bot_won: bool, opponent_name: str, game_label: str) -> s
     return _duel_host_call(instruction, prompt, fallback)
 
 
+GENERAL_CHAT_PERSONA = f"""You are {BOT_NAME}, a warm, witty, likeable
+member of this Telegram group chat — not a host, not an assistant
+being asked something, just a real presence in the group."""
+
+
+def _general_call(instruction: str, prompt: str, fallback: str) -> str:
+    """Shared one-off AI call for general (non-duel-host, non-chat-reply)
+    lines, like idle conversation starters. No history, no memory tags.
+    Tries Cerebras -> Gemini -> Groq and falls back to a static line if
+    all fail."""
+    system = GENERAL_CHAT_PERSONA + "\n\n" + instruction
+    for call in (_call_cerebras, _call_gemini, _call_groq):
+        try:
+            text = call(system, [], prompt).strip().strip('"')
+            if text:
+                return text
+        except Exception as e:
+            print(f"[general:{call.__name__}] failed: {e}")
+            continue
+    return fallback
+
+
+def generate_idle_starter(chat_context: str | None = None) -> str:
+    """A short, natural conversation-starter Misumi sends on her own
+    initiative when a group has been quiet for a while — a question,
+    an observation, or a light topic, the way an actual group member
+    would break a silence rather than a bot-ish 'hello, anyone there?'."""
+    instruction = (
+        "The group chat has been quiet for a while. Write ONE short, "
+        "natural message to restart conversation — a genuine question, "
+        "a light observation, or a fun random topic. Never mention that "
+        "the chat was quiet or that you're an AI 'checking in'. Sound "
+        "like a real group member casually starting something. Default "
+        "language: Uzbek, informal. Output ONLY that message — no quotes."
+    )
+    prompt = "Guruh birozdan beri jim. Suhbatni boshlash uchun bitta tabiiy xabar yoz."
+    fallback_options = [
+        "Bugun kim nima qilib o'tirapti? 👀",
+        "Hafta oxiri uchun rejalar bormi kimda?",
+        "Eng oxirgi ko'rgan kulgili narsangiz nima edi? 😄",
+    ]
+    return _general_call(instruction, prompt, random.choice(fallback_options))
+
+
 def reset_user(user_id: str) -> None:
     user_id = str(user_id)
     mem.clear_memory(user_id)
