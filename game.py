@@ -310,6 +310,20 @@ async def _finish_duel(context: ContextTypes.DEFAULT_TYPE, duel_id: str):
     await context.bot.send_message(chat_id=chat_id, text=result_comment)
     await _send_result_sticker(context, chat_id, "win")
 
+    # loser_id is None only when the loser is Misumi AI herself (PvE,
+    # p2_id is always None for the bot side) — a real human loser always
+    # has a real Telegram id. When she's the one who lost, she performs
+    # her own dare for real instead of just announcing one for someone
+    # else to do.
+    if loser_id is None:
+        try:
+            kind, dare_text = ai_core.generate_bot_dare(winner_name, label)
+        except Exception:
+            kind, dare_text = "joke", f"Tan olaman, {winner_name} — bugun siz kuchli edingiz! 👏"
+        await context.bot.send_message(chat_id=chat_id, text=f"⚡ Men yutqazdim, jazoimni bajaraman:\n\n{dare_text}")
+        await _send_result_sticker(context, chat_id, "lose")
+        return
+
     try:
         jazo = ai_core.generate_duel_punishment(winner_name, loser_name, label)
     except Exception:
