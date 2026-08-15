@@ -19,6 +19,7 @@ feed a persistent win/loss leaderboard (game_store.py).
 Wired into bot.py via register(app).
 """
 import asyncio
+import time
 import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -388,37 +389,104 @@ async def stiker_list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
+# Last time (unix seconds) any tracked message happened in a given chat.
+# In-memory only — doesn't need to survive a restart. Feeds a future
+# "group's been quiet, say something" feature; for now just recorded.
+_last_activity: dict[int, float] = {}
+
+
+def touch_activity(chat_id: int) -> None:
+    _last_activity[chat_id] = time.time()
+
+
+def seconds_since_activity(chat_id: int) -> float | None:
+    ts = _last_activity.get(chat_id)
+    return None if ts is None else time.time() - ts
+
+
+def _is_reply_to_misumi(message, bot_username: str | None) -> bool:
+    replied = message.reply_to_message
+    if not replied or not replied.from_user or not replied.from_user.is_bot:
+        return False
+    return bool(bot_username) and replied.from_user.username == bot_username
+
+
 async def collect_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Passive, silent collector — runs on every sticker any group member
-    sends, no command needed. Sorted by the sticker's own emoji into a
-    mood category (unrecognized emoji -> 'general'), so the library
-    grows on its own the more the group actually uses stickers, exactly
-    like a real member would pick things up over time. Never replies,
-    never errors out loud — a failure here must not disrupt the chat."""
+    """Runs on every sticker any group member sends, no command needed.
+    Silently sorts it into the library by emoji (unrecognized -> 'general'),
+    growing the collection the more the group actually uses stickers —
+    same as a real member would pick things up over time.
+
+    If the sticker is sent as a reply to one of Misumi's own messages
+    (i.e. addressed to her, the way you'd reply-sticker a friend), she
+    also actually reacts to it like a real person would — text, a
+    sticker/GIF of her own, or a tap reaction, via the normal AI reply
+    pipeline. Otherwise stays completely silent, never errors out loud —
+    a failure here must not disrupt the chat."""
     message = update.message
     if not message or not message.sticker:
         return
-    if admin_store.is_blocked(update.effective_chat.id):
+    chat_id = update.effective_chat.id
+    if admin_store.is_blocked(chat_id):
         return
+    touch_activity(chat_id)
     try:
         category = sticker_store.category_for_emoji(message.sticker.emoji)
         sticker_store.add_sticker(category, message.sticker.file_id)
     except Exception:
         pass
 
+    bot_username = context.bot.username
+    if not _is_reply_to_misumi(message, bot_username):
+        return
+
+    user = update.effective_user
+    display_name = user.first_name if user else None
+    prompt = f"[sticker: {message.sticker.emoji or 'no emoji'}]"
+    try:
+        reply_text = ai_core.get_ai_reply(chat_id, prompt, name=display_name, source="telegram")
+    except Exception:
+        return
+    try:
+        await ai_core.deliver_ai_reply(
+            context.bot, chat_id, chat_id, reply_text, reply_to_message_id=message.message_id
+        )
+    except Exception:
+        pass
+
 
 async def collect_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Same as collect_sticker but for GIFs (Telegram calls them
-    'animation'). No emoji to sort by, so they all go into one pool —
-    still useful, since a real person doesn't categorize every GIF
-    they've ever seen either, they just remember the good ones."""
+    'animation'). No emoji to sort by, so they all go into one shared
+    pool. Also replies through the normal AI pipeline when the GIF is
+    sent as a reply to Misumi herself."""
     message = update.message
     if not message or not message.animation:
         return
-    if admin_store.is_blocked(update.effective_chat.id):
+    chat_id = update.effective_chat.id
+    if admin_store.is_blocked(chat_id):
         return
+    touch_activity(chat_id)
     try:
         sticker_store.add_gif(message.animation.file_id)
+    except Exception:
+        pass
+
+    bot_username = context.bot.username
+    if not _is_reply_to_misumi(message, bot_username):
+        return
+
+    user = update.effective_user
+    display_name = user.first_name if user else None
+    prompt = "[GIF yubordi]"
+    try:
+        reply_text = ai_core.get_ai_reply(chat_id, prompt, name=display_name, source="telegram")
+    except Exception:
+        return
+    try:
+        await ai_core.deliver_ai_reply(
+            context.bot, chat_id, chat_id, reply_text, reply_to_message_id=message.message_id
+        )
     except Exception:
         pass
 
