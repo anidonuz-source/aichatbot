@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{{ bot_name }}</title>
+<meta name="theme-color" content="#0b0b0d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Misumi AI</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
@@ -30,6 +34,9 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
+  @supports (height: 100dvh){
+    html,body{height:100dvh;}
+  }
   body{
     margin:0;
     background:
@@ -43,6 +50,47 @@
   }
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+  }
+  :focus-visible{outline:2px solid var(--brass); outline-offset:2px; border-radius:2px;}
+  textarea:focus-visible{outline:none;}
+
+  /* ---------- App shell (desktop sidebar + centered chat column) ---------- */
+  .app-shell{
+    flex:1 1 auto;
+    min-height:0;
+    width:100%;
+    max-width:1320px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:row;
+    position:relative;
+  }
+  .chat-shell{
+    flex:1 1 auto;
+    min-width:0;
+    min-height:0;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+  @media (min-width:880px){
+    .scrim{display:none;}
+    #menuBtn{display:none;}
+    .drawer{
+      position:static;
+      transform:none;
+      width:272px;
+      flex:0 0 272px;
+      height:100%;
+      box-shadow:none;
+    }
+    header{padding-left:28px; padding-right:28px;}
+    main{align-items:center; padding-left:32px; padding-right:32px;}
+    .row{width:100%; max-width:720px;}
+    .welcome{width:100%; max-width:520px;}
+    footer{padding-left:32px; padding-right:32px;}
+    .composer{max-width:720px; margin:0 auto;}
+    .credit{max-width:720px; margin:0 auto;}
   }
 
   /* ---------- Header ---------- */
@@ -217,6 +265,23 @@
     margin:0 auto;
     line-height:1.6;
   }
+  .welcome-chips{
+    display:flex; flex-wrap:wrap; justify-content:center; gap:8px;
+    max-width:360px; margin:20px auto 0;
+  }
+  .chip{
+    font-family:'Manrope',sans-serif;
+    font-size:12.5px; font-weight:600;
+    color:var(--paper-dim);
+    background:rgba(255,255,255,0.02);
+    border:1px solid var(--hairline);
+    padding:8px 14px;
+    border-radius:20px;
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .chip:hover{border-color:var(--brass); color:var(--brass); background:var(--brass-dim);}
+  .chip:active{transform:scale(0.96);}
 
   .row{display:flex; opacity:0; animation: rise .45s ease forwards;}
   .row.user{justify-content:flex-end;}
@@ -407,6 +472,7 @@
 </head>
 <body>
 
+<div class="app-shell">
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer">
   <div class="drawer-head">
@@ -417,9 +483,10 @@
     </button>
   </div>
   <div class="session-list" id="sessionList"></div>
-  <div class="drawer-foot">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">{{ author }}</a></div>
+  <div class="drawer-foot">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">Nuriddin</a></div>
 </aside>
 
+<div class="chat-shell">
 <header>
   <div class="icon-btn" id="menuBtn" title="Suhbatlar">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
@@ -432,7 +499,7 @@
     </svg>
   </div>
   <div class="titles">
-    <div class="name" id="sessionTitle">{{ bot_name }}</div>
+    <div class="name" id="sessionTitle">Misumi AI</div>
     <div class="sub">Shaxsiy AI hamrohingiz</div>
   </div>
   <div class="header-actions">
@@ -453,6 +520,12 @@
     </div>
     <h1 id="welcomeName">Xush kelibsiz.</h1>
     <p>Nima haqida bo'lmasin — savol bering, fikr almashing yoki shunchaki suhbatlashing. Men eslab qolaman.</p>
+    <div class="welcome-chips" id="welcomeChips">
+      <button class="chip" type="button">Film tavsiya qil</button>
+      <button class="chip" type="button">Sayohat rejasini tuz</button>
+      <button class="chip" type="button">Insho yozishda yordam ber</button>
+      <button class="chip" type="button">Qiziqarli fakt ayt</button>
+    </div>
   </div>
 </main>
 
@@ -475,8 +548,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
     </button>
   </div>
-  <div class="credit">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">{{ author }}</a></div>
+  <div class="credit">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">Nuriddin</a></div>
 </footer>
+</div>
+</div>
 
 <script>
   const tg = window.Telegram?.WebApp;
@@ -510,6 +585,15 @@
 
   const firstName = tg?.initDataUnsafe?.user?.first_name;
   if (firstName) welcomeName.textContent = `Xush kelibsiz, ${firstName}.`;
+
+  document.getElementById('welcomeChips')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    tg?.HapticFeedback?.impactOccurred('light');
+    inputEl.value = chip.textContent.trim();
+    updateSendState();
+    send();
+  });
 
   // ---------- Session storage (per-device, local only) ----------
   // Note: this only organizes the chat *display* into separate threads.
@@ -606,7 +690,7 @@
   function renderChatFromSession(){
     chatEl.innerHTML = '';
     const s = currentSession();
-    sessionTitleEl.textContent = s?.title || '{{ bot_name }}';
+    sessionTitleEl.textContent = s?.title || 'Misumi AI';
     if (!s || s.messages.length === 0) {
       chatEl.appendChild(welcomeEl);
       return;
