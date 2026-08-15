@@ -85,8 +85,8 @@ def _default_account(phone: str) -> dict:
         "phone": phone,
         "session": None,
         "connected_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "settings": {"auto_reply": False, "auto_bio": False},
-        "stats": {"auto_replies_sent": 0, "bio_updates": 0},
+        "settings": {"auto_reply": False, "auto_bio": False, "inner_ai": False, "offline_minutes": None},
+        "stats": {"auto_replies_sent": 0, "bio_updates": 0, "self_chat_replies": 0},
     }
 
 
@@ -135,13 +135,13 @@ def get_settings(owner_id) -> dict:
     return account.get("settings", {"auto_reply": False, "auto_bio": False})
 
 
-def set_setting(owner_id, key: str, value: bool) -> dict:
+def set_setting(owner_id, key: str, value) -> dict:
     owner_id = str(owner_id)
     data = _load()
     account = data["accounts"].get(owner_id)
     if not account:
         return {"auto_reply": False, "auto_bio": False}
-    account.setdefault("settings", {})[key] = bool(value)
+    account.setdefault("settings", {})[key] = value
     data["accounts"][owner_id] = account
     _save(data)
     return account["settings"]
