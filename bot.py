@@ -84,7 +84,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"/reset — xotirani tozalash\n"
         f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
         f"/reyting — o'yin reytingi\n"
-        f"/stiker — stikerga reply qilib, uni menga o'rgatish\n\n"
+        f"/stiker — stikerga reply qilib, uni aniq turkumga qo'shish "
+        f"(qolganini o'zim guruhda ko'rganimcha yig'ib olaman)\n\n"
         f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
     )
     await update.message.reply_text(text, reply_markup=_webapp_keyboard(chat_id))
@@ -171,16 +172,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Gemini error")
         reply_text = "Kechirasiz, xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
 
-    await update.message.reply_text(reply_text)
+    if reply_text:
+        await update.message.reply_text(reply_text)
 
     sticker_category = ai_core.pop_last_sticker(chat_id)
+    sticker_sent = False
     if sticker_category:
         file_id = sticker_store.get_random(sticker_category)
         if file_id:
             try:
                 await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
+                sticker_sent = True
             except Exception:
                 logger.exception("Sticker send error")
+
+    # Guarantee the user always gets *something* back: if the model chose
+    # a sticker-only reaction but that category's library is still empty
+    # (or the send failed), fall back to a short text reply instead of
+    # leaving the chat silent.
+    if not reply_text and not sticker_sent:
+        await update.message.reply_text("🙂")
 
 
 def _start_webapp_server():
