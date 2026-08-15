@@ -29,6 +29,7 @@ from google.genai import types
 
 import admin_store
 import memory_manager as mem
+import sticker_store
 
 BOT_NAME = "Misumi AI"
 AUTHOR_HANDLE = "@QahramonovK"
@@ -94,7 +95,18 @@ wishes, notes. key is a short snake_case key (e.g. name, favorite_food).
 value must be written in English, concise. Do NOT mention these tags to
 the user, do NOT wrap them in code blocks, just append them silently.
 Do NOT tag one-off requests or small talk — only durable facts.
+
+If — and only if — your reply carries a clear, strong mood (genuinely
+funny, sweet/loving, sad, surprising, impressive, or similar), you MAY
+append one more tag, after any memory tags, in this EXACT format:
+⟦STICKER:category⟧
+category must be exactly one of: {", ".join(sticker_store.CHAT_CATEGORIES)}.
+Use this rarely (most replies need none at all) — only when a sticker
+would genuinely land, never mechanically. Never mention this tag to the
+user, never wrap it in code blocks.
 """
+
+STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
 
 MEMORY_TAG_RE = re.compile(r"⟦MEMORY:([a-zA-Z_]+):([a-zA-Z0-9_]+):([^⟧]*)⟧")
 
@@ -137,11 +149,31 @@ def _call_gemini_image(prompt: str) -> tuple[bytes, str]:
 # Format: list of {"role": "user"|"assistant", "content": str}
 _history: dict[str, list] = {}
 
+# Sticker category picked for a user's last reply (if any), stashed here
+# since get_ai_reply's return type must stay a plain string for webapp.py.
+# bot.py calls pop_last_sticker() right after get_ai_reply() to pick it up
+# and actually send the sticker (the Mini App has no use for it and never
+# calls pop_last_sticker, so it just sits unused there — harmless).
+_last_sticker: dict[str, str] = {}
+
+
+def pop_last_sticker(user_id: str) -> str | None:
+    return _last_sticker.pop(str(user_id), None)
+
 
 def _extract_memory_tags(text: str) -> tuple[str, list[tuple[str, str, str]]]:
     matches = MEMORY_TAG_RE.findall(text or "")
     clean = MEMORY_TAG_RE.sub("", text or "").strip()
     return clean, matches
+
+
+def _extract_sticker_tag(text: str) -> tuple[str, str | None]:
+    match = STICKER_TAG_RE.search(text or "")
+    clean = STICKER_TAG_RE.sub("", text or "").strip()
+    category = match.group(1) if match else None
+    if category and category not in sticker_store.CHAT_CATEGORIES:
+        category = None
+    return clean, category
 
 
 def _call_cerebras(system_instruction: str, history: list, user_text: str) -> str:
@@ -262,6 +294,12 @@ def get_ai_reply(
         value = value.strip()
         if key and value:
             mem.update_memory(user_id, {category: {key: {"value": value}}})
+
+    clean_text, sticker_category = _extract_sticker_tag(clean_text)
+    if sticker_category:
+        _last_sticker[user_id] = sticker_category
+    else:
+        _last_sticker.pop(user_id, None)
 
     reply_text = clean_text.strip() or "..."
 
