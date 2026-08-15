@@ -146,9 +146,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    user = update.effective_user
+    if user and not ai_core.check_rate_limit(chat_id, user.id):
+        if ai_core.should_warn(chat_id, user.id):
+            await update.message.reply_text("Biroz sekinroq yozing 🙂")
+        return
+
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
-    user = update.effective_user
     display_name = user.first_name if user else None
 
     if ai_core.wants_image(user_text):
