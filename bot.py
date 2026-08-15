@@ -198,11 +198,25 @@ def _services_menu_text_and_kb(user_id) -> tuple[str, InlineKeyboardMarkup]:
         )],
     ]
 
+    if settings.get("auto_reply"):
+        sig_note = (
+            " (birinchi xabarga qo'shiladi)" if not pro else
+            " — o'chirish mumkin, pastda"
+        )
+        lines.append(f"✉️ Oflayn bildirishnoma imzosi{sig_note}: {_mark(settings.get('signature', True))}")
+
     if pro:
         offline_min = settings.get("offline_minutes") or userbot_manager.DEFAULT_OFFLINE_MINUTES
         lines.append(f"📝 Avto-bio (Pro): {_mark(settings.get('auto_bio'))}")
         lines.append(f"🧠 Ichki AI yordamchisi (Pro): {_mark(settings.get('inner_ai'))}")
+        lines.append(f"🎙 Ovozli xabarga javob (Pro): {_mark(settings.get('voice_reply'))}")
         lines.append(f"🕐 Oflayn hisoblanish vaqti (Pro): {offline_min} daqiqa")
+        n_kw = len(settings.get("keywords", {}))
+        n_bl = len(settings.get("blacklist", []))
+        digest = settings.get("stats_digest")
+        lines.append(f"🔑 Kalit so'zlar (Pro): {n_kw} ta sozlangan")
+        lines.append(f"🚫 Qora ro'yxat (Pro): {n_bl} kishi")
+        lines.append(f"📊 Statistika hisoboti (Pro): {digest or 'o\u2019chirilgan'}")
         kb_rows.append([InlineKeyboardButton(
             f"{'🔴 O\u2019chirish' if settings.get('auto_bio') else '🟢 Yoqish'} — Avto-bio",
             callback_data="ub:toggle:auto_bio",
@@ -211,12 +225,33 @@ def _services_menu_text_and_kb(user_id) -> tuple[str, InlineKeyboardMarkup]:
             f"{'🔴 O\u2019chirish' if settings.get('inner_ai') else '🟢 Yoqish'} — Ichki AI yordamchisi",
             callback_data="ub:toggle:inner_ai",
         )])
+        kb_rows.append([InlineKeyboardButton(
+            f"{'🔴 O\u2019chirish' if settings.get('voice_reply') else '🟢 Yoqish'} — Ovozli xabarga javob",
+            callback_data="ub:toggle:voice_reply",
+        )])
+        if settings.get("auto_reply"):
+            kb_rows.append([InlineKeyboardButton(
+                f"{'🔴 O\u2019chirish' if settings.get('signature', True) else '🟢 Yoqish'} — Oflayn imzo",
+                callback_data="ub:toggle:signature",
+            )])
         kb_rows.append([InlineKeyboardButton("🕐 Oflayn vaqtini sozlash", callback_data="ub:schedule")])
+        lines.append(
+            "\n<i>Kalit so'z, qora ro'yxat va statistika hisobotini sozlash uchun "
+            "ulangan akkountingizda Saqlangan xabarlarga yozing:</i>\n"
+            "<code>.kw narx | 1 oylik obuna narxi 50 000 so'm</code>\n"
+            "<code>.block @username</code> / <code>.unblock @username</code>\n"
+            "<code>.stats daily</code> / <code>.stats weekly</code> / <code>.stats off</code>"
+        )
     else:
         lines.append("\n🔒 <b>Misumi AI Pro</b> bilan yana ko'proq narsa ochiladi:")
         lines.append("• 📝 Avtomatik bio yangilanishi")
         lines.append("• 🧠 Ichki AI yordamchisi — Saqlangan xabarlarga <code>.ai savolingiz</code> deb yozib AI bilan bevosita gaplashish")
+        lines.append("• 🎙 Ovozli xabarlarni tinglab, o'rniga javob yozish")
+        lines.append("• 🔑 Kalit so'zga tayyor javob (masalan \"narx\" desa avtomatik javob)")
+        lines.append("• 🚫 Tanlangan odamlarga avto-javob yubormaslik (qora ro'yxat)")
+        lines.append("• 📊 Kunlik/haftalik statistika hisoboti Saqlangan xabarlarga")
         lines.append("• 🕐 Oflayn hisoblanish vaqtini o'zingiz belgilash")
+        lines.append("• ✉️ Oflayn imzo yozuvini o'chirish (bepulda har doim ko'rinadi)")
         kb_rows.append([InlineKeyboardButton("💎 Misumi AI Pro sotib olish", callback_data="ub:buy_pro")])
 
     kb_rows.append([InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:account")])
@@ -262,6 +297,8 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text = (
             "📊 <b>Hisob statistikasi</b>\n\n"
             f"🤖 Yuborilgan avto-javoblar: {stats.get('auto_replies_sent', 0)}\n"
+            f"🔑 Kalit so'z javoblari: {stats.get('keyword_replies_sent', 0)}\n"
+            f"🎙 Ovozli xabar javoblari: {stats.get('voice_replies_sent', 0)}\n"
             f"📝 Bio yangilanishlar: {stats.get('bio_updates', 0)}\n"
             f"🧠 Ichki AI suhbatlari: {stats.get('self_chat_replies', 0)}"
         )
@@ -275,7 +312,7 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif data.startswith("ub:toggle:"):
         key = data.split(":", 2)[2]
-        pro_only_keys = {"auto_bio", "inner_ai"}
+        pro_only_keys = {"auto_bio", "inner_ai", "signature", "voice_reply"}
         if key in pro_only_keys and not admin_store.is_premium(user_id):
             await query.answer("Bu funksiya faqat Misumi AI Pro uchun.", show_alert=True)
             return
