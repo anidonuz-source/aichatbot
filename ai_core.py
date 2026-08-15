@@ -24,6 +24,7 @@ import asyncio
 import os
 import random
 import re
+import time
 
 import requests
 from google import genai
@@ -136,6 +137,14 @@ directly to the user's message. Don't combine REACT with STICKER in the
 same reply — pick at most one silent reaction per turn. When you use
 REACT as your whole reply, write nothing else at all, same as with a
 sticker-only reply. Never mention this tag to the user.
+
+You don't know everything, and a real person admits that instead of
+guessing confidently. When a question asks for something genuinely
+obscure, outside your knowledge, or you're just not sure, say so
+plainly and briefly (e.g. "aniq bilmayman" / "ishonchim komil emas") —
+don't fabricate a confident-sounding answer. Use this honestly, only
+when you'd actually be guessing — not as a way to dodge easy or
+answerable questions.
 """
 
 STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
@@ -204,6 +213,42 @@ def pop_last_reaction(user_id: str) -> str | None:
     return _last_reaction.pop(str(user_id), None)
 
 
+# Simple per-(chat, user) cooldown shared by every AI-triggering entry
+# point (plain chat, addressed sticker/GIF replies) so one person
+# spamming can't burn through the Gemini/Groq/Cerebras quota for
+# everyone else in the group. In-memory only, resets on restart —
+# fine, since it only needs to survive within a single burst of spam.
+_RATE_LIMIT_SECONDS = 3.0
+_WARN_COOLDOWN_SECONDS = 20.0
+_last_ai_call: dict[tuple, float] = {}
+_last_warned: dict[tuple, float] = {}
+
+
+def check_rate_limit(chat_id, user_id) -> bool:
+    """Call once per incoming message that's about to trigger an AI
+    reply. Returns True if this call should proceed normally. Returns
+    False if the user is going too fast and should be skipped — in that
+    case also tells the caller (via should_warn()) whether it's been
+    long enough since the last warning to send a gentle "slow down"
+    notice, so a flood of messages doesn't also produce a flood of
+    warnings."""
+    key = (chat_id, user_id)
+    now = time.time()
+    last = _last_ai_call.get(key)
+    _last_ai_call[key] = now
+    return last is None or (now - last) >= _RATE_LIMIT_SECONDS
+
+
+def should_warn(chat_id, user_id) -> bool:
+    key = (chat_id, user_id)
+    now = time.time()
+    last_warn = _last_warned.get(key, 0)
+    if now - last_warn < _WARN_COOLDOWN_SECONDS:
+        return False
+    _last_warned[key] = now
+    return True
+
+
 async def deliver_ai_reply(
     bot,
     chat_id,
@@ -212,17 +257,24 @@ async def deliver_ai_reply(
     reply_to_message_id: int | None = None,
 ) -> None:
     """Send a get_ai_reply() result the same way everywhere it's used:
-    text (possibly split into human-like bursts), then a sticker and/or
-    a reaction if the model asked for one, with a bare "🙂" fallback if
-    all three come up empty. Shared by bot.py's handle_message and
-    game.py's addressed-sticker/GIF replies so both surfaces behave
-    identically instead of duplicating this logic.
+    a brief length-scaled "thinking" pause, text (possibly split into
+    human-like bursts), then a sticker and/or a reaction if the model
+    asked for one, with a bare "🙂" fallback if all three come up empty.
+    Shared by bot.py's handle_message and game.py's addressed-sticker/GIF
+    replies so both surfaces behave identically instead of duplicating
+    this logic.
     """
     from telegram import ReactionTypeEmoji
     from telegram.constants import ChatAction
 
     reply_text = (reply_text or "").strip()
     if reply_text and reply_text != "...":
+        # Longer replies "take more thought" than a quick one-liner —
+        # capped so it never feels like a stall on short answers or an
+        # unreasonable wait on long ones.
+        await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+        await asyncio.sleep(min(4.0, 0.4 + len(reply_text) / 60))
+
         bursts = split_into_bursts(reply_text)
         first_kwargs = {"chat_id": chat_id, "text": bursts[0]}
         if reply_to_message_id:
@@ -632,7 +684,6 @@ BOT_DARE_SEEDS = {
     "confession": "Share one silly, harmless 'confession' about yourself as an AI (e.g. a quirky preference) — this IS the confession itself.",
 }
 
-
 def generate_bot_dare(winner_name: str, game_label: str, kind: str | None = None) -> tuple[str, str]:
     """When Misumi AI herself loses a PvE duel, she doesn't just announce
     a dare for someone else to do — she performs it. Returns
@@ -660,6 +711,57 @@ def generate_bot_dare(winner_name: str, game_label: str, kind: str | None = None
     }.get(kind, "Yutqazdim, lekin kayfiyat yaxshi! 😄")
     text = _duel_host_call(instruction, prompt, fallback)
     return kind, text
+
+
+def generate_pve_own_throw_reaction(
+    own_value: int, opponent_name: str, opponent_value: int, game_label: str
+) -> str:
+    """First-person reaction Misumi gives right after rolling her OWN
+    dice in a PvE duel (bot as a player, not host) — excited if she's
+    ahead of the human's already-known throw, a little disappointed if
+    she's behind. Short and in-character, not a neutral announcement."""
+    ahead = own_value > opponent_value
+    instruction = (
+        "You are playing this duel yourself (not hosting it) and you just "
+        "threw your own dice/emoji and got a result. React to YOUR OWN "
+        f"throw in the first person, {'genuinely excited since you are ' if ahead else 'a little disappointed since you are '}"
+        f"{'currently ahead' if ahead else 'currently behind'} of your opponent's throw. "
+        "ONE short, natural first-person sentence. Same language as given "
+        "(default: Uzbek, informal). Output ONLY that sentence — no quotes."
+    )
+    prompt = (
+        f"O'yin: {game_label}. Sizning natijangiz: {own_value}. "
+        f"{opponent_name}ning natijasi: {opponent_value}."
+    )
+    fallback = (
+        f"Voy, {own_value}! Yomon emas 😏" if ahead
+        else f"Eh, {own_value}... {opponent_name}dan orqada qoldim shekilli 😅"
+    )
+    return _duel_host_call(instruction, prompt, fallback)
+
+
+def generate_pve_banter(bot_won: bool, opponent_name: str, game_label: str) -> str:
+    """Short first-person banter Misumi gives the human opponent after a
+    PvE duel ends — light trash-talk if she won, good-natured ribbing
+    about herself if she lost — ending with a rematch invite. Sent as
+    its own message after the normal result/dare announcement."""
+    instruction = (
+        "You just finished playing this duel yourself against a human "
+        f"(not hosting — you were a player) and you {'WON' if bot_won else 'LOST'}. "
+        "Write ONE short, playful, good-natured first-person message to "
+        "your opponent — light trash-talk/bragging if you won, or a "
+        "good-humored 'I'll get you next time' if you lost — then end by "
+        "inviting them to a rematch (a short question). 1-2 sentences "
+        "total. Never mean or humiliating. Same language as given "
+        "(default: Uzbek, informal). Output ONLY that — no quotes."
+    )
+    prompt = f"O'yin: {game_label}. Raqib: {opponent_name}. Siz {'yutdingiz' if bot_won else 'yutqazdingiz'}."
+    fallback = (
+        f"Hali ham menga teng kela olmaysiz, {opponent_name} 😎 Revansh kerakmi?"
+        if bot_won else
+        f"Bu safar omad sizga kulib boqdi, {opponent_name}! Revansh — bergami? 😏"
+    )
+    return _duel_host_call(instruction, prompt, fallback)
 
 
 def reset_user(user_id: str) -> None:
