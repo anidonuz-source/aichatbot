@@ -63,6 +63,14 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Curated subset of Telegram's allowed message-reaction emoji (the API
+# only accepts a fixed set — this list is deliberately small and mapped
+# to common chat moods rather than using the full ~80-emoji set).
+REACTION_EMOJIS = [
+    "👍", "❤", "🔥", "👏", "😁", "🤔", "🎉", "🤩", "🙏",
+    "😍", "🤣", "💯", "😢", "😱", "🥰", "😎", "🤝", "💔", "😭", "👀",
+]
+
 SYSTEM_PROMPT = f"""You are {BOT_NAME} — a sleek, premium, highly capable AI
 companion. Your tone is warm but polished: confident, concise, never
 robotic, never generic. Think "luxury concierge who happens to be a
@@ -115,9 +123,23 @@ all: your entire reply is just the ⟦STICKER:category⟧ tag on its own,
 no words before or after it. Only do this when a plain sticker really
 is the most natural human reaction — don't do it for questions,
 requests, or anything that actually needs an answer.
+
+Some messages don't deserve a written reply at all — just a quick tap
+of a reaction, the way a real person taps an emoji on someone's message
+instead of typing anything (a short funny remark, good news, an
+impressive result, a compliment). When that fits better than a sticker
+or actual words, append, after any other tags, in this EXACT format:
+⟦REACT:emoji⟧
+emoji must be exactly one of: {", ".join(REACTION_EMOJIS)}. This reacts
+directly to the user's message. Don't combine REACT with STICKER in the
+same reply — pick at most one silent reaction per turn. When you use
+REACT as your whole reply, write nothing else at all, same as with a
+sticker-only reply. Never mention this tag to the user.
 """
 
 STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
+
+REACTION_TAG_RE = re.compile(r"⟦REACT:([^\⟧\s]{1,4})⟧")
 
 MEMORY_TAG_RE = re.compile(r"⟦MEMORY:([a-zA-Z_]+):([a-zA-Z0-9_]+):([^⟧]*)⟧")
 
@@ -167,9 +189,63 @@ _history: dict[str, list] = {}
 # calls pop_last_sticker, so it just sits unused there — harmless).
 _last_sticker: dict[str, str] = {}
 
+# Same pattern as _last_sticker, but for a reaction emoji to tap on the
+# user's own message (Telegram's native reaction feature) instead of
+# sending a sticker.
+_last_reaction: dict[str, str] = {}
+
 
 def pop_last_sticker(user_id: str) -> str | None:
     return _last_sticker.pop(str(user_id), None)
+
+
+def pop_last_reaction(user_id: str) -> str | None:
+    return _last_reaction.pop(str(user_id), None)
+
+
+# Roughly matches sentence boundaries for burst-splitting a reply into
+# multiple short messages (see split_into_bursts). Deliberately simple —
+# splits on '.', '!', '?' followed by whitespace. Not perfect for every
+# abbreviation/decimal edge case, but good enough for casual chat text,
+# and the caller only applies it to short, single-paragraph replies.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def split_into_bursts(text: str, chance: float = 0.5) -> list[str]:
+    """Sometimes split a short, plain reply into 2-3 separate messages
+    sent back to back, the way a real person fires off a few quick
+    messages instead of one perfectly formatted paragraph. Returns a
+    list of 1+ chunks — callers should send each with a short pause
+    (and a fresh 'typing...') between them when the list has more than
+    one element.
+
+    Deliberately conservative: skips anything that looks structured
+    (code fences, bullet/numbered lists, multiple existing paragraphs)
+    since splitting those would break the formatting, and skips replies
+    that are already short or very long. `chance` is the probability of
+    actually splitting when eligible — so not every casual reply gets
+    fragmented, keeping the pattern from feeling mechanical."""
+    text = (text or "").strip()
+    if not text:
+        return [text]
+
+    if "```" in text or "\n" in text:
+        return [text]  # structured/multi-paragraph content — leave intact
+
+    if any(text.lstrip().startswith(p) for p in ("- ", "• ", "* ")) or re.match(r"^\d+[.)]\s", text):
+        return [text]
+
+    if len(text) < 40 or len(text) > 220:
+        return [text]
+
+    parts = [p.strip() for p in _SENTENCE_SPLIT_RE.split(text) if p.strip()]
+    if len(parts) < 2 or len(parts) > 3:
+        return [text]
+
+    if random.random() > chance:
+        return [text]
+
+    return parts
 
 
 def _extract_memory_tags(text: str) -> tuple[str, list[tuple[str, str, str]]]:
@@ -185,6 +261,15 @@ def _extract_sticker_tag(text: str) -> tuple[str, str | None]:
     if category and category not in sticker_store.CHAT_CATEGORIES:
         category = None
     return clean, category
+
+
+def _extract_reaction_tag(text: str) -> tuple[str, str | None]:
+    match = REACTION_TAG_RE.search(text or "")
+    clean = REACTION_TAG_RE.sub("", text or "").strip()
+    emoji = match.group(1) if match else None
+    if emoji and emoji not in REACTION_EMOJIS:
+        emoji = None
+    return clean, emoji
 
 
 def _call_cerebras(system_instruction: str, history: list, user_text: str) -> str:
@@ -312,12 +397,18 @@ def get_ai_reply(
     else:
         _last_sticker.pop(user_id, None)
 
-    # A sticker-only reaction (no text at all) is valid when a sticker
-    # tag is present — bot.py checks for this empty string and skips
-    # sending a text message, sending only the sticker. Only fall back
-    # to "..." when there's truly nothing to send either way.
+    clean_text, reaction_emoji = _extract_reaction_tag(clean_text)
+    if reaction_emoji and not sticker_category:
+        _last_reaction[user_id] = reaction_emoji
+    else:
+        _last_reaction.pop(user_id, None)
+
+    # A sticker-only or reaction-only reply (no text at all) is valid
+    # when one of those tags is present — bot.py checks for this empty
+    # string and skips sending a text message. Only fall back to "..."
+    # when there's truly nothing to send at all.
     reply_text = clean_text.strip()
-    if not reply_text and not sticker_category:
+    if not reply_text and not sticker_category and not reaction_emoji:
         reply_text = "..."
 
     history.append({"role": "user", "content": user_text or "[rasm]"})
