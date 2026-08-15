@@ -22,7 +22,7 @@ _lock = Lock()
 
 
 def _empty() -> dict:
-    return {"maintenance": False, "blocked": [], "premium": [], "users": {}}
+    return {"maintenance": False, "blocked": [], "premium": [], "users": {}, "broadcasts": []}
 
 
 def _load() -> dict:
@@ -147,3 +147,33 @@ def get_users(limit: int = 300) -> list[dict]:
         )
     result.sort(key=lambda u: u["last_seen"] or "", reverse=True)
     return result[:limit]
+
+
+def get_all_chat_ids() -> list[str]:
+    """Every chat/user id Misumi has ever exchanged a message with
+    (private chats and groups alike, since record_message is called
+    with whichever chat_id the message came from) — used for
+    /broadcast. Unlike get_users(), never truncated."""
+    return list(_load().get("users", {}).keys())
+
+
+def record_broadcast(summary: str, sent: int, failed: int) -> None:
+    """Log a completed /broadcast run for /broadcast_history. Keeps only
+    the most recent 20 entries."""
+    data = _load()
+    entries = data.setdefault("broadcasts", [])
+    entries.append(
+        {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "summary": summary[:120],
+            "sent": sent,
+            "failed": failed,
+        }
+    )
+    data["broadcasts"] = entries[-20:]
+    _save(data)
+
+
+def get_broadcast_history(limit: int = 10) -> list[dict]:
+    data = _load()
+    return list(reversed(data.get("broadcasts", [])))[:limit]
