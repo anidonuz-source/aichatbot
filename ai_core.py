@@ -104,6 +104,16 @@ category must be exactly one of: {", ".join(sticker_store.CHAT_CATEGORIES)}.
 Use this rarely (most replies need none at all) — only when a sticker
 would genuinely land, never mechanically. Never mention this tag to the
 user, never wrap it in code blocks.
+
+Occasionally — rarely, maybe once in a while, never two turns in a row —
+a real person doesn't type anything at all and just reacts with a
+sticker instead of words (e.g. someone sends something funny, cute, or
+a bit sad, and the natural human reaction is just to drop a sticker,
+not write a sentence about it). When that fits, write NOTHING else at
+all: your entire reply is just the ⟦STICKER:category⟧ tag on its own,
+no words before or after it. Only do this when a plain sticker really
+is the most natural human reaction — don't do it for questions,
+requests, or anything that actually needs an answer.
 """
 
 STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
@@ -301,7 +311,13 @@ def get_ai_reply(
     else:
         _last_sticker.pop(user_id, None)
 
-    reply_text = clean_text.strip() or "..."
+    # A sticker-only reaction (no text at all) is valid when a sticker
+    # tag is present — bot.py checks for this empty string and skips
+    # sending a text message, sending only the sticker. Only fall back
+    # to "..." when there's truly nothing to send either way.
+    reply_text = clean_text.strip()
+    if not reply_text and not sticker_category:
+        reply_text = "..."
 
     history.append({"role": "user", "content": user_text or "[rasm]"})
     history.append({"role": "assistant", "content": reply_text})
