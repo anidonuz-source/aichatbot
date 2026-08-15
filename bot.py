@@ -33,6 +33,7 @@ from telegram.ext import (
 import admin_store
 import ai_core
 import game
+import sticker_store
 import webapp
 
 logging.basicConfig(
@@ -82,7 +83,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"tarixni saqlash va yanada boy tajriba shu yerda.\n\n"
         f"/reset — xotirani tozalash\n"
         f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
-        f"/reyting — o'yin reytingi\n\n"
+        f"/reyting — o'yin reytingi\n"
+        f"/stiker — stikerga reply qilib, uni menga o'rgatish\n\n"
         f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
     )
     await update.message.reply_text(text, reply_markup=_webapp_keyboard(chat_id))
@@ -170,6 +172,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_text = "Kechirasiz, xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
 
     await update.message.reply_text(reply_text)
+
+    sticker_category = ai_core.pop_last_sticker(chat_id)
+    if sticker_category:
+        file_id = sticker_store.get_random(sticker_category)
+        if file_id:
+            try:
+                await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
+            except Exception:
+                logger.exception("Sticker send error")
 
 
 def _start_webapp_server():
