@@ -16,12 +16,11 @@ Env vars required (see .env.example):
                           RENDER_EXTERNAL_URL automatically — used as a
                           fallback if WEBAPP_URL isn't set).
 """
-import asyncio
 import logging
 import os
 import threading
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -173,44 +172,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Gemini error")
         reply_text = "Kechirasiz, xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
 
-    if reply_text:
-        bursts = ai_core.split_into_bursts(reply_text)
-        await update.message.reply_text(bursts[0])
-        for chunk in bursts[1:]:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-            await asyncio.sleep(min(2.5, 0.5 + len(chunk) / 40))
-            await context.bot.send_message(chat_id=chat_id, text=chunk)
-
-    sticker_category = ai_core.pop_last_sticker(chat_id)
-    sticker_sent = False
-    if sticker_category:
-        file_id = sticker_store.get_random(sticker_category)
-        if file_id:
-            try:
-                await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
-                sticker_sent = True
-            except Exception:
-                logger.exception("Sticker send error")
-
-    reaction_emoji = ai_core.pop_last_reaction(chat_id)
-    reaction_sent = False
-    if reaction_emoji:
-        try:
-            await context.bot.set_message_reaction(
-                chat_id=chat_id,
-                message_id=update.message.message_id,
-                reaction=[ReactionTypeEmoji(reaction_emoji)],
-            )
-            reaction_sent = True
-        except Exception:
-            logger.exception("Reaction error")
-
-    # Guarantee the user always gets *something* back: if the model chose
-    # a sticker/reaction-only reaction but that failed (empty library, API
-    # error), fall back to a short text reply instead of leaving the chat
-    # silent.
-    if not reply_text and not sticker_sent and not reaction_sent:
-        await update.message.reply_text("🙂")
+    await ai_core.deliver_ai_reply(
+        context.bot,
+        chat_id,
+        chat_id,
+        reply_text,
+        reply_to_message_id=update.message.message_id,
+    )
 
 
 def _start_webapp_server():
