@@ -71,7 +71,14 @@ def verify_admin(init_data: str) -> dict | None:
 
 @app.route("/")
 def index():
-    return render_template("index.html", bot_name=ai_core.BOT_NAME, author=ai_core.AUTHOR_HANDLE)
+    return render_template(
+        "index.html",
+        bot_name=ai_core.BOT_NAME,
+        author=ai_core.AUTHOR_HANDLE,
+        channel=ai_core.CHANNEL_HANDLE,
+        model_tiers_json=json.dumps(list(ai_core.MODEL_TIERS.values())),
+        default_model=ai_core.DEFAULT_MODEL,
+    )
 
 
 @app.route("/admin")
@@ -85,6 +92,7 @@ def api_chat():
     init_data = body.get("initData", "")
     message = (body.get("message") or "").strip()
     image_data_url = body.get("image")  # optional: "data:image/jpeg;base64,...."
+    requested_model = body.get("model")  # "flash" | "pro" | "max"
 
     data = verify_init_data(init_data)
     if not data:
@@ -99,6 +107,10 @@ def api_chat():
 
     if admin_store.is_blocked(user_id):
         return jsonify({"error": "Blocked"}), 403
+
+    # Resolve the model tier server-side so a free user can't just send
+    # {"model": "max"} to bypass premium gating.
+    effective_model = ai_core.resolve_model(str(user_id), requested_model)
 
     if admin_store.is_maintenance() and str(user_id) != ADMIN_ID:
         return jsonify(
@@ -128,6 +140,7 @@ def api_chat():
         return jsonify({
             "reply": "",
             "generated_image": f"data:{gen_mime};base64,{gen_b64}",
+            "model": effective_model,
         })
 
     try:
@@ -138,11 +151,28 @@ def api_chat():
             image_mime,
             name=user.get("first_name"),
             source="miniapp",
+            model=effective_model,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    return jsonify({"reply": reply})
+    return jsonify({"reply": reply, "model": effective_model})
+
+
+@app.route("/api/me", methods=["POST"])
+def api_me():
+    """Tells the Mini App whether the current user has premium, so it can
+    show/hide the lock icon on the Pro/Max model options without the
+    client having to guess or trust its own local state.
+    """
+    body = request.get_json(silent=True) or {}
+    data = verify_init_data(body.get("initData", ""))
+    if not data:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = data.get("user", {})
+    user_id = user.get("id")
+    premium = admin_store.is_premium(user_id) if user_id else False
+    return jsonify({"premium": bool(premium), "models": list(ai_core.MODEL_TIERS.values())})
 
 
 @app.route("/api/reset", methods=["POST"])
