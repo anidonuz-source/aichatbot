@@ -93,6 +93,10 @@ def api_chat():
     message = (body.get("message") or "").strip()
     image_data_url = body.get("image")  # optional: "data:image/jpeg;base64,...."
     requested_model = body.get("model")  # "flash" | "pro" | "max"
+    # Set by the Mini App's regenerate/edit message actions: the client
+    # re-sends the last user message (unchanged for regenerate, edited for
+    # edit) and we drop the stale turn from history before running it again.
+    regenerate = bool(body.get("regenerate"))
 
     data = verify_init_data(init_data)
     if not data:
@@ -116,6 +120,9 @@ def api_chat():
         return jsonify(
             {"reply": f"🛠 {ai_core.BOT_NAME} hozir texnik ishlar tufayli vaqtincha ishlamayapti."}
         )
+
+    if regenerate:
+        ai_core.pop_last_exchange(user_id)
 
     image_bytes = None
     image_mime = None
