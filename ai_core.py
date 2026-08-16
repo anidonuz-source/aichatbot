@@ -5,16 +5,20 @@ Used by both:
   - bot.py     (Telegram chat handlers)
   - webapp.py  (Telegram Mini App / web chat interface)
 
-Provider chain for plain text messages:
-  1. Cerebras  (primary  — fast, strong open-weight models, generous free tier)
-  2. Gemini    (fallback — also handles image input, since Cerebras/Groq here
-                are text-only)
-  3. Groq      (final fallback)
+Provider chain for plain text messages (differs per model tier — see
+PROVIDER_CHAINS below), drawing from 5 providers:
+  1. Cerebras    — fast, free open-weight models
+  2. Gemini      — also handles image input (vision)
+  3. Groq        — fast open-weight models, separate free quota
+  4. Mistral     — La Plateforme free tier
+  5. OpenRouter  — aggregator/auto-router, used as a final safety net since
+                   its "openrouter/free" mode always finds a live free model
+                   even as individual free model IDs rotate out elsewhere
 
 If the user attaches an image, Gemini is used directly (only provider here
 that accepts vision input); if that fails, no fallback exists for images.
 
-Long-term memory works the same way across all three providers: instead of
+Long-term memory works the same way across all providers: instead of
 provider-specific function/tool calling, the system prompt asks the model
 to append an invisible tag like ⟦MEMORY:category:key:value⟧ at the end of
 its reply when it learns something worth remembering. We strip those tags
@@ -87,9 +91,14 @@ def resolve_model(user_id: str, requested: str | None) -> str:
 
 # ---------------------------------------------------------------------------
 # Provider 1 (primary): Cerebras — https://cloud.cerebras.ai
+#
+# NOTE (2026-08-16): Cerebras retired llama-4-scout — its public catalog now
+# only serves gpt-oss-120b (production), plus preview-only gemma-4-31b and
+# zai-glm-4.7 (the latter itself scheduled for shutdown on 2026-08-17, so it
+# is deliberately NOT used here). gpt-oss-120b is the only stable option.
 # ---------------------------------------------------------------------------
 CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
-CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama-4-scout")
+CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b")
 CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 
 # ---------------------------------------------------------------------------
@@ -106,10 +115,30 @@ GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-imag
 
 # ---------------------------------------------------------------------------
 # Provider 3 (final fallback): Groq — https://console.groq.com
+#
+# NOTE (2026-08-16): Groq deprecated llama-3.3-70b-versatile (announced
+# 2026-06-17). GROQ_MODEL is now the general-purpose replacement
+# (openai/gpt-oss-120b); GROQ_MODEL_FAST is a smaller/quicker model used for
+# the Flash tier, and GROQ_MODEL_STRONG is a larger long-context model used
+# as the Max tier's Groq step.
 # ---------------------------------------------------------------------------
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+# ---------------------------------------------------------------------------
+# Provider 4: Mistral — https://console.mistral.ai (La Plateforme free tier)
+# ---------------------------------------------------------------------------
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
+MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
+
+# ---------------------------------------------------------------------------
+# Provider 5: OpenRouter — https://openrouter.ai (aggregates many providers
+# behind one key). Model default is "openrouter/free" — OpenRouter's own
+# auto-router that always picks from whichever free models are currently
+# live, rather than a hardcoded model ID that can silently rotate out (the
+# exact failure mode that broke Cerebras/Groq above).
+# ---------------------------------------------------------------------------
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Curated subset of Telegram's allowed message-reaction emoji (the API
 # only accepts a fixed set — this list is deliberately small and mapped
@@ -488,7 +517,9 @@ def _extract_reaction_tag(text: str) -> tuple[str, str | None]:
     return clean, emoji
 
 
-def _call_cerebras(system_instruction: str, history: list, user_text: str) -> str:
+def _call_cerebras(
+    system_instruction: str, history: list, user_text: str, model: str | None = None
+) -> str:
     if not CEREBRAS_API_KEY:
         raise RuntimeError("CEREBRAS_API_KEY not set")
     messages = [{"role": "system", "content": system_instruction}]
@@ -500,7 +531,7 @@ def _call_cerebras(system_instruction: str, history: list, user_text: str) -> st
             "Authorization": f"Bearer {CEREBRAS_API_KEY}",
             "Content-Type": "application/json",
         },
-        json={"model": CEREBRAS_MODEL, "messages": messages, "temperature": 0.8},
+        json={"model": model or CEREBRAS_MODEL, "messages": messages, "temperature": 0.8},
         timeout=30,
     )
     resp.raise_for_status()
@@ -508,7 +539,9 @@ def _call_cerebras(system_instruction: str, history: list, user_text: str) -> st
     return data["choices"][0]["message"]["content"].strip()
 
 
-def _call_groq(system_instruction: str, history: list, user_text: str) -> str:
+def _call_groq(
+    system_instruction: str, history: list, user_text: str, model: str | None = None
+) -> str:
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY not set")
     messages = [{"role": "system", "content": system_instruction}]
@@ -520,7 +553,54 @@ def _call_groq(system_instruction: str, history: list, user_text: str) -> str:
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json",
         },
-        json={"model": GROQ_MODEL, "messages": messages, "temperature": 0.8},
+        json={"model": model or GROQ_MODEL, "messages": messages, "temperature": 0.8},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def _call_mistral(
+    system_instruction: str, history: list, user_text: str, model: str | None = None
+) -> str:
+    if not MISTRAL_API_KEY:
+        raise RuntimeError("MISTRAL_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    messages += [{"role": t["role"], "content": t["content"]} for t in history]
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        MISTRAL_URL,
+        headers={
+            "Authorization": f"Bearer {MISTRAL_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={"model": model or MISTRAL_MODEL, "messages": messages, "temperature": 0.8},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def _call_openrouter(
+    system_instruction: str, history: list, user_text: str, model: str | None = None
+) -> str:
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    messages += [{"role": t["role"], "content": t["content"]} for t in history]
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        OPENROUTER_URL,
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            # Optional but recommended by OpenRouter for attribution/analytics.
+            "HTTP-Referer": "https://t.me/MisumiAi",
+            "X-Title": BOT_NAME,
+        },
+        json={"model": model or OPENROUTER_MODEL, "messages": messages, "temperature": 0.8},
         timeout=30,
     )
     resp.raise_for_status()
@@ -554,13 +634,42 @@ def _call_gemini(
     return (response.text or "").strip()
 
 
-# Provider order per model tier. Flash favors speed (Cerebras first); Pro
-# and Max favor answer quality (Gemini first) since they're meant to feel
-# noticeably stronger than Flash.
+# Provider + model chain per tier — each tier now runs genuinely different
+# underlying models across 5 providers, not just a reordering of the same
+# three:
+#   Flash: speed-first, small/free models (Cerebras gpt-oss-120b -> Groq
+#          gpt-oss-20b -> Mistral Small -> Gemini -> OpenRouter as final
+#          safety net).
+#   Pro:   quality-first (Gemini 3.6 Flash -> Cerebras gpt-oss-120b ->
+#          Mistral Small -> Groq gpt-oss-120b -> OpenRouter).
+#   Max:   Gemini 3.6 Flash first, then OpenRouter's auto-router (picks
+#          from whatever strong free model — often DeepSeek R1-class
+#          reasoning — is live that day) as a second opinion, then Groq's
+#          larger long-context model, Cerebras, Mistral last.
+# Each entry is (call_fn, model_name_or_None). model=None means "use that
+# provider's global default".
 PROVIDER_CHAINS = {
-    "flash": (_call_cerebras, _call_gemini, _call_groq),
-    "pro": (_call_gemini, _call_cerebras, _call_groq),
-    "max": (_call_gemini, _call_cerebras, _call_groq),
+    "flash": (
+        (_call_cerebras, CEREBRAS_MODEL),
+        (_call_groq, GROQ_MODEL_FAST),
+        (_call_mistral, MISTRAL_MODEL),
+        (_call_gemini, None),
+        (_call_openrouter, OPENROUTER_MODEL),
+    ),
+    "pro": (
+        (_call_gemini, None),
+        (_call_cerebras, CEREBRAS_MODEL),
+        (_call_mistral, MISTRAL_MODEL),
+        (_call_groq, GROQ_MODEL),
+        (_call_openrouter, OPENROUTER_MODEL),
+    ),
+    "max": (
+        (_call_gemini, None),
+        (_call_openrouter, OPENROUTER_MODEL),
+        (_call_groq, GROQ_MODEL_STRONG),
+        (_call_cerebras, CEREBRAS_MODEL),
+        (_call_mistral, MISTRAL_MODEL),
+    ),
 }
 
 
@@ -625,12 +734,15 @@ def get_ai_reply(
         except Exception as e:
             last_error = e
     else:
-        for call in PROVIDER_CHAINS.get(model, PROVIDER_CHAINS["flash"]):
+        for call, call_model in PROVIDER_CHAINS.get(model, PROVIDER_CHAINS["flash"]):
             try:
-                raw_reply = call(system_instruction, history, user_text)
+                if call_model is not None:
+                    raw_reply = call(system_instruction, history, user_text, call_model)
+                else:
+                    raw_reply = call(system_instruction, history, user_text)
                 break
             except Exception as e:
-                print(f"[{call.__name__}] failed: {e}")
+                print(f"[{call.__name__}:{call_model}] failed: {e}")
                 last_error = e
                 continue
 
