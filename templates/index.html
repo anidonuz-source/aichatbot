@@ -96,6 +96,7 @@
   /* ---------- Header ---------- */
   header{
     flex:0 0 auto;
+    position:relative;
     padding:calc(18px + var(--safe-top)) 20px 16px;
     display:flex;
     align-items:center;
@@ -124,6 +125,76 @@
     color:var(--brass-soft);
     margin-top:2px;
   }
+  /* ---------- Model picker ---------- */
+  .model-picker{
+    display:flex; align-items:center; gap:5px;
+    border:none; background:transparent; cursor:pointer;
+    padding:2px 0; margin-top:2px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px; letter-spacing:0.06em;
+    color:var(--brass-soft);
+  }
+  .model-picker:active{opacity:0.7;}
+  .model-picker svg{width:9px;height:9px; flex:0 0 auto; transition:transform .18s ease;}
+  .model-picker.open svg{transform:rotate(180deg);}
+  .model-menu{
+    position:absolute;
+    top:calc(100% + 8px); left:20px;
+    width:min(280px, calc(100vw - 40px));
+    background:var(--panel-2);
+    border:1px solid var(--hairline-strong);
+    border-radius:14px;
+    padding:6px;
+    box-shadow:0 12px 30px rgba(0,0,0,0.35);
+    z-index:22;
+    opacity:0; pointer-events:none; transform:translateY(-6px);
+    transition:opacity .18s ease, transform .18s ease;
+  }
+  .model-menu.open{opacity:1; pointer-events:auto; transform:translateY(0);}
+  .model-option{
+    display:flex; align-items:flex-start; gap:10px;
+    padding:10px 10px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .model-option:hover{background:rgba(255,255,255,0.04);}
+  .model-option.active{background:var(--brass-dim);}
+  .model-option.locked{cursor:pointer;}
+  .model-option .model-dot{
+    width:8px;height:8px;border-radius:50%;flex:0 0 auto;margin-top:5px;
+    background:var(--paper-dim);
+  }
+  .model-option.active .model-dot{background:var(--brass);}
+  .model-option .model-text{flex:1 1 auto; min-width:0;}
+  .model-option .model-label{
+    display:flex; align-items:center; gap:6px;
+    font-family:'Manrope',sans-serif; font-size:13.5px; font-weight:700;
+    color:var(--paper);
+  }
+  .model-option .model-tag{
+    font-size:11.5px; color:var(--paper-dim); margin-top:2px; line-height:1.35;
+  }
+  .model-option .lock-badge{
+    display:flex; align-items:center; gap:3px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px; letter-spacing:0.05em; text-transform:uppercase;
+    color:var(--brass);
+    background:var(--brass-dim);
+    border:1px solid var(--hairline-strong);
+    border-radius:20px;
+    padding:2px 7px;
+    flex:0 0 auto;
+  }
+  .lock-badge svg{width:8px;height:8px;}
+  .model-menu-foot{
+    padding:9px 10px 4px;
+    font-size:10.5px; color:var(--paper-dim); line-height:1.5;
+    border-top:1px solid var(--hairline);
+    margin-top:4px;
+  }
+  .model-menu-foot a{color:var(--brass-soft); text-decoration:none;}
+
   .header-actions{margin-left:auto;display:flex;gap:8px;}
   .icon-btn{
     width:34px;height:34px;border-radius:50%;
@@ -325,10 +396,11 @@
     padding:1px 5px;
   }
   .bubble .md pre{
+    position:relative;
     background:var(--ink);
     border:1px solid var(--hairline);
     border-radius:10px;
-    padding:11px 12px;
+    padding:30px 12px 11px;
     overflow-x:auto;
     margin:0 0 8px;
   }
@@ -337,6 +409,22 @@
     font-size:12px; line-height:1.5;
     color:var(--paper);
   }
+  .code-copy-btn{
+    position:absolute; top:6px; right:6px;
+    display:flex; align-items:center; gap:4px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9.5px; letter-spacing:0.05em; text-transform:uppercase;
+    color:var(--paper-dim);
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--hairline);
+    border-radius:7px;
+    padding:4px 7px;
+    cursor:pointer;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .code-copy-btn:hover{color:var(--brass); border-color:var(--brass);}
+  .code-copy-btn.copied{color:var(--brass); border-color:var(--hairline-strong); background:var(--brass-dim);}
+  .code-copy-btn svg{width:10px;height:10px;}
   .bubble .md blockquote{
     margin:0 0 8px;
     padding:2px 0 2px 11px;
@@ -483,7 +571,7 @@
     </button>
   </div>
   <div class="session-list" id="sessionList"></div>
-  <div class="drawer-foot">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">@QahramonovK</a></div>
+  <div class="drawer-foot">MISUMI AI · rasmiy kanal <a href="https://t.me/{{ channel[1:] }}" target="_blank">{{ channel }}</a></div>
 </aside>
 
 <div class="chat-shell">
@@ -500,7 +588,11 @@
   </div>
   <div class="titles">
     <div class="name" id="sessionTitle">Misumi AI</div>
-    <div class="sub">Shaxsiy AI hamrohingiz</div>
+    <button class="model-picker" id="modelBtn" type="button">
+      <span id="modelLabel">Misumi AI Flash</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+    <div class="model-menu" id="modelMenu"></div>
   </div>
   <div class="header-actions">
     <div class="icon-btn" id="resetBtn" title="Suhbatni o'chirish">
@@ -548,7 +640,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
     </button>
   </div>
-  <div class="credit">MISUMI AI · created by <a href="https://t.me/QahramonovK" target="_blank">@QahramonovK</a></div>
+  <div class="credit">MISUMI AI · created by <a href="https://t.me/{{ author[1:] }}" target="_blank">{{ author }}</a> · kanal <a href="https://t.me/{{ channel[1:] }}" target="_blank">{{ channel }}</a></div>
 </footer>
 </div>
 </div>
@@ -580,8 +672,121 @@
   const newChatBtn = document.getElementById('newChatBtn');
   const sessionListEl = document.getElementById('sessionList');
   const sessionTitleEl = document.getElementById('sessionTitle');
+  const modelBtn = document.getElementById('modelBtn');
+  const modelLabel = document.getElementById('modelLabel');
+  const modelMenu = document.getElementById('modelMenu');
 
   let pendingImage = null; // data URL string
+
+  // ---------- Model picker (Flash / Pro / Max) ----------
+  const MODEL_TIERS = {{ model_tiers_json | safe }};
+  const DEFAULT_MODEL = {{ default_model | tojson }};
+  const CHANNEL_HANDLE = {{ channel | tojson }};
+  const AUTHOR_HANDLE = {{ author | tojson }};
+  const MODEL_KEY = 'misumi_model_v1';
+
+  let selectedModel = localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
+  if (!MODEL_TIERS.find(m => m.id === selectedModel)) selectedModel = DEFAULT_MODEL;
+  let isPremium = false;
+
+  function tierById(id){ return MODEL_TIERS.find(m => m.id === id) || MODEL_TIERS[0]; }
+
+  function setSelectedModel(id, { silent } = {}){
+    selectedModel = id;
+    localStorage.setItem(MODEL_KEY, id);
+    modelLabel.textContent = tierById(id).label;
+    renderModelMenu();
+  }
+
+  function renderModelMenu(){
+    modelMenu.innerHTML = '';
+    for (const tier of MODEL_TIERS) {
+      const locked = tier.premium && !isPremium;
+      const opt = document.createElement('div');
+      opt.className = 'model-option' + (tier.id === selectedModel ? ' active' : '') + (locked ? ' locked' : '');
+      opt.innerHTML = `
+        <div class="model-dot"></div>
+        <div class="model-text">
+          <div class="model-label">${tier.label}</div>
+          <div class="model-tag"></div>
+        </div>
+        ${locked ? `<div class="lock-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>PRO</div>` : ''}
+      `;
+      opt.querySelector('.model-tag').textContent = tier.tagline;
+      opt.addEventListener('click', () => {
+        if (locked) {
+          tg?.HapticFeedback?.notificationOccurred('warning');
+          addRow('ai', `🔒 ${tier.label} — faqat Pro foydalanuvchilar uchun. Ochish uchun ${AUTHOR_HANDLE} ga yozing yoki rasmiy kanalni kuzatib boring: ${CHANNEL_HANDLE}.`);
+          closeModelMenu();
+          return;
+        }
+        tg?.HapticFeedback?.impactOccurred('light');
+        setSelectedModel(tier.id);
+        closeModelMenu();
+      });
+      modelMenu.appendChild(opt);
+    }
+  }
+
+  function openModelMenu(){ modelMenu.classList.add('open'); modelBtn.classList.add('open'); }
+  function closeModelMenu(){ modelMenu.classList.remove('open'); modelBtn.classList.remove('open'); }
+  modelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    modelMenu.classList.contains('open') ? closeModelMenu() : openModelMenu();
+  });
+  document.addEventListener('click', (e) => {
+    if (!modelMenu.contains(e.target) && e.target !== modelBtn) closeModelMenu();
+  });
+
+  setSelectedModel(selectedModel);
+
+  async function loadPremiumStatus(){
+    try {
+      const res = await fetch('/api/me', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ initData: tg?.initData || '' })
+      });
+      const data = await res.json();
+      isPremium = !!data.premium;
+    } catch (e) { isPremium = false; }
+    if (!isPremium && tierById(selectedModel).premium) setSelectedModel(DEFAULT_MODEL);
+    renderModelMenu();
+  }
+  loadPremiumStatus();
+
+  // ---------- Copy-to-clipboard for AI code blocks ----------
+  function addCodeCopyButtons(container){
+    container.querySelectorAll('pre').forEach(pre => {
+      if (pre.querySelector('.code-copy-btn')) return;
+      const btn = document.createElement('button');
+      btn.className = 'code-copy-btn';
+      btn.type = 'button';
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span>Copy</span>`;
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const code = pre.querySelector('code')?.textContent ?? pre.textContent;
+        try {
+          await navigator.clipboard.writeText(code);
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = code;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        tg?.HapticFeedback?.notificationOccurred('success');
+        btn.classList.add('copied');
+        btn.querySelector('span').textContent = 'Copied';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.querySelector('span').textContent = 'Copy';
+        }, 1600);
+      });
+      pre.appendChild(btn);
+    });
+  }
 
   const firstName = tg?.initDataUnsafe?.user?.first_name;
   if (firstName) welcomeName.textContent = `Xush kelibsiz, ${firstName}.`;
@@ -723,6 +928,7 @@
         mdWrap.className = 'md';
         mdWrap.innerHTML = DOMPurify.sanitize(marked.parse(text));
         bubble.appendChild(mdWrap);
+        addCodeCopyButtons(mdWrap);
       } else {
         const textNode = document.createElement('div');
         textNode.textContent = text;
@@ -824,7 +1030,7 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ initData: tg?.initData || '', message: text, image: image || undefined })
+        body: JSON.stringify({ initData: tg?.initData || '', message: text, image: image || undefined, model: selectedModel })
       });
       const data = await res.json();
       removeTyping();
@@ -835,6 +1041,9 @@
       } else {
         addRow('ai', data.reply);
       }
+      // Server enforces premium gating — if it ran a different tier than
+      // requested (e.g. Pro/Max without premium), keep the picker in sync.
+      if (data.model && data.model !== selectedModel) setSelectedModel(data.model);
     } catch (err) {
       removeTyping();
       addRow('ai', 'Ulanishda xatolik. Internetni tekshirib, qayta urinib ko\'ring.');
