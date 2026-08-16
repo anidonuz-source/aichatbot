@@ -564,6 +564,24 @@ PROVIDER_CHAINS = {
 }
 
 
+def _looks_like_rate_limit(err: Exception) -> bool:
+    """Best-effort detection of "provider is out of quota / rate-limited"
+    errors across Cerebras/Groq (requests.HTTPError with .response) and
+    Gemini (google-genai raises its own error types). Used to give the
+    user a calmer, on-brand message instead of a raw error when every
+    provider is temporarily out of capacity — usually because the daily
+    free-tier token budget (e.g. Cerebras's 1M tokens/day) ran out.
+    """
+    status = getattr(getattr(err, "response", None), "status_code", None)
+    if status in (429, 503):
+        return True
+    text = str(err).lower()
+    return any(
+        kw in text
+        for kw in ("429", "rate limit", "resource_exhausted", "quota", "too many requests")
+    )
+
+
 def get_ai_reply(
     user_id: str,
     user_text: str,
@@ -617,6 +635,12 @@ def get_ai_reply(
                 continue
 
     if raw_reply is None:
+        if last_error and _looks_like_rate_limit(last_error):
+            print(f"[get_ai_reply] all providers rate-limited/out of quota: {last_error}")
+            return (
+                "Hozircha foydalanuvchilar juda ko'p va AI xizmatlari band bo'lib turibdi 🙏 "
+                "Bir necha daqiqadan so'ng qayta urinib ko'ring — odatda tezda tiklanadi."
+            )
         raise last_error or RuntimeError("All AI providers failed")
 
     clean_text, tags = _extract_memory_tags(raw_reply)
