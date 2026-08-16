@@ -393,6 +393,118 @@
   }
   .drawer-foot a{color:var(--brass-soft); text-decoration:none;}
 
+  /* ---------- Upgrade sheet (Pro / Max) ---------- */
+  .upgrade-scrim{
+    position:fixed; inset:0;
+    background:var(--overlay);
+    backdrop-filter:blur(3px);
+    opacity:0; pointer-events:none;
+    transition:opacity .25s ease;
+    z-index:30;
+  }
+  .upgrade-scrim.open{opacity:1; pointer-events:auto;}
+  .upgrade-sheet{
+    position:fixed; left:0; right:0; bottom:0;
+    max-height:88vh;
+    background:var(--panel);
+    border-top:1px solid var(--hairline-strong);
+    border-radius:22px 22px 0 0;
+    box-shadow:0 -24px 60px rgba(0,0,0,0.5);
+    transform:translateY(102%);
+    transition:transform .32s cubic-bezier(.32,.72,0,1);
+    z-index:31;
+    display:flex; flex-direction:column;
+  }
+  .upgrade-sheet.open{transform:translateY(0);}
+  .upgrade-sheet-head{
+    position:relative; flex:0 0 auto;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+    padding:20px 16px 12px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .upgrade-sheet-head .grabber{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    width:36px; height:4px; border-radius:3px;
+    background:var(--hairline-strong);
+  }
+  .upgrade-sheet-head h2{
+    margin:0; font-family:'Cormorant Garamond',serif; font-weight:600;
+    font-size:21px; color:var(--paper); letter-spacing:0.01em;
+  }
+  .upgrade-sheet-head p{
+    margin:4px 0 0; font-size:12px; color:var(--paper-dim); line-height:1.4;
+  }
+  .upgrade-close{
+    width:30px;height:30px;border-radius:50%; flex:0 0 auto;
+    border:1px solid var(--hairline);
+    background:rgba(255,255,255,0.03);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--paper-dim); cursor:pointer;
+  }
+  .upgrade-close svg{width:13px;height:13px;}
+  .upgrade-close:active{transform:scale(0.92);}
+  .plan-list{
+    flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:14px 16px calc(10px + var(--safe-bottom));
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .plan-card{
+    position:relative;
+    border:1px solid var(--hairline);
+    border-radius:16px;
+    padding:16px 16px 14px;
+    background:var(--panel-2);
+  }
+  .plan-card.current{opacity:0.55;}
+  .plan-card.featured{
+    border-color:var(--hairline-strong);
+    background:linear-gradient(165deg, var(--brass-dim), var(--panel-2) 60%);
+    box-shadow:0 0 0 1px var(--hairline-strong), 0 12px 28px rgba(0,0,0,0.35);
+  }
+  .plan-badge{
+    position:absolute; top:-9px; right:14px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--ink); background:var(--brass);
+    padding:3px 9px; border-radius:20px;
+  }
+  .plan-top{display:flex; align-items:center; gap:10px;}
+  .plan-top .tier-icon{
+    width:32px;height:32px;border-radius:9px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,0.05); border:1px solid var(--hairline);
+    color:var(--brass);
+  }
+  .plan-top .tier-icon svg{width:16px;height:16px;}
+  .plan-name{font-family:'Manrope',sans-serif; font-size:15px; font-weight:700; color:var(--paper);}
+  .plan-tag{font-size:11.5px; color:var(--paper-dim); margin-top:1px; line-height:1.4;}
+  .plan-price{
+    display:flex; align-items:baseline; gap:5px;
+    margin:14px 0 10px;
+  }
+  .plan-price .amount{font-family:'Cormorant Garamond',serif; font-size:25px; font-weight:600; color:var(--paper);}
+  .plan-price .period{font-family:'Manrope',sans-serif; font-size:11.5px; color:var(--paper-dim);}
+  .plan-intro{font-size:11px; color:var(--brass-soft); font-weight:600; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.03em;}
+  .plan-features{list-style:none; margin:0 0 14px; padding:0; display:flex; flex-direction:column; gap:7px;}
+  .plan-features li{
+    display:flex; align-items:flex-start; gap:8px;
+    font-size:12.5px; color:var(--paper); line-height:1.4;
+  }
+  .plan-features li svg{width:13px;height:13px; flex:0 0 auto; margin-top:2px; color:var(--brass);}
+  .plan-cta{
+    width:100%; padding:11px; border-radius:11px; border:none;
+    font-family:'Manrope',sans-serif; font-size:13.5px; font-weight:700;
+    cursor:pointer;
+  }
+  .plan-cta.primary{background:var(--brass); color:var(--ink);}
+  .plan-cta.primary:active{transform:scale(0.98);}
+  .plan-cta.ghost{background:rgba(255,255,255,0.05); color:var(--paper-dim); border:1px solid var(--hairline); cursor:default;}
+  .upgrade-foot{
+    flex:0 0 auto; padding:2px 18px calc(16px + var(--safe-bottom));
+    font-size:10.5px; color:var(--paper-dim); text-align:center;
+  }
+  .upgrade-foot a{color:var(--brass-soft); text-decoration:none;}
+
   /* ---------- Chat area ---------- */
   main{
     flex:1 1 auto;
@@ -696,6 +808,22 @@
   <div class="drawer-foot">MISUMI AI · rasmiy kanal <a href="https://t.me/{{ channel[1:] }}" target="_blank">{{ channel }}</a></div>
 </aside>
 
+<div class="upgrade-scrim" id="upgradeScrim"></div>
+<section class="upgrade-sheet" id="upgradeSheet">
+  <div class="upgrade-sheet-head">
+    <span class="grabber"></span>
+    <div>
+      <h2>Rejani yangilang</h2>
+      <p>Kuchliroq rejimlar bilan chegarasiz ishlang</p>
+    </div>
+    <button class="upgrade-close" id="upgradeCloseBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+  </div>
+  <div class="plan-list" id="planList"></div>
+  <div class="upgrade-foot">Savollar bo'lsa <a href="https://t.me/{{ author[1:] }}" target="_blank">{{ author }}</a> ga yozing</div>
+</section>
+
 <div class="chat-shell">
 <header>
   <div class="icon-btn" id="menuBtn" title="Suhbatlar">
@@ -858,8 +986,8 @@
       opt.addEventListener('click', () => {
         if (locked) {
           tg?.HapticFeedback?.notificationOccurred('warning');
-          addRow('ai', `🔒 ${tier.label} — faqat Pro foydalanuvchilar uchun. Ochish uchun ${AUTHOR_HANDLE} ga yozing yoki rasmiy kanalni kuzatib boring: ${CHANNEL_HANDLE}.`);
           closeModelMenu();
+          openUpgradeSheet();
           return;
         }
         tg?.HapticFeedback?.impactOccurred('light');
@@ -869,6 +997,101 @@
       modelMenu.appendChild(opt);
     }
   }
+
+  // ---------- Upgrade sheet (Pro / Max plans) ----------
+  const upgradeScrim = document.getElementById('upgradeScrim');
+  const upgradeSheet = document.getElementById('upgradeSheet');
+  const upgradeCloseBtn = document.getElementById('upgradeCloseBtn');
+  const planList = document.getElementById('planList');
+
+  // Pricing/feature copy lives client-side — there's no billing tier data
+  // from the backend (premium is admin-granted, not purchased in-app), so
+  // this is presentation only. The CTA hands off to the author's Telegram.
+  const PLAN_DETAILS = {
+    flash: {
+      price: null,
+      features: [
+        "Cheksiz suhbatlar",
+        "Tezkor javoblar",
+        "Rasm yuklash va tahlil",
+        "Suhbatlar xotirasi saqlanadi",
+      ],
+    },
+    pro: {
+      price: 30000,
+      intro: "Flash'dagi hammasi, plyus:",
+      features: [
+        "To'liq, cheklovsiz kod yozish",
+        "Chuqurroq va batafsil tahlil",
+        "Murakkab masalalarni yechish",
+        "Uzunroq, batafsilroq javoblar",
+      ],
+    },
+    max: {
+      price: 70000,
+      intro: "Pro'dagi hammasi, plyus:",
+      features: [
+        "Eng kuchli AI rejimi",
+        "Murakkab loyihalar uchun optimallashtirilgan",
+        "Ustuvor va tezroq javob berish",
+        "Eng chuqur tahlil darajasi",
+      ],
+    },
+  };
+
+  function fmtSom(n){ return n.toLocaleString('ru-RU') + " so'm"; }
+
+  function renderPlanCards(){
+    planList.innerHTML = '';
+    for (const tier of MODEL_TIERS) {
+      const detail = PLAN_DETAILS[tier.id] || { features: [] };
+      const owned = !tier.premium || isPremium;
+      const card = document.createElement('div');
+      card.className = 'plan-card' + (tier.id === 'pro' ? ' featured' : '') + (owned ? ' current' : '');
+      card.innerHTML = `
+        ${tier.id === 'pro' ? '<div class="plan-badge">Tavsiya etiladi</div>' : ''}
+        <div class="plan-top">
+          <div class="tier-icon">${tierIcon(tier.id)}</div>
+          <div>
+            <div class="plan-name">${tier.label}</div>
+            <div class="plan-tag">${tier.tagline}</div>
+          </div>
+        </div>
+        <div class="plan-price">
+          ${detail.price
+            ? `<span class="amount">${fmtSom(detail.price)}</span><span class="period">/ oy</span>`
+            : `<span class="amount">Bepul</span>`}
+        </div>
+        ${detail.intro ? `<div class="plan-intro">${detail.intro}</div>` : ''}
+        <ul class="plan-features">
+          ${detail.features.map(f => `<li>${CHECK_ICON}<span>${f}</span></li>`).join('')}
+        </ul>
+        ${owned
+          ? `<button class="plan-cta ghost" disabled>Joriy reja</button>`
+          : `<button class="plan-cta primary" data-tier="${tier.id}">${tier.label.replace('Misumi AI ', '')} olish</button>`}
+      `;
+      planList.appendChild(card);
+    }
+    planList.querySelectorAll('.plan-cta.primary').forEach(btn => {
+      btn.addEventListener('click', () => {
+        tg?.HapticFeedback?.impactOccurred('medium');
+        const link = `https://t.me/${AUTHOR_HANDLE.replace('@','')}`;
+        if (tg?.openTelegramLink) tg.openTelegramLink(link); else window.open(link, '_blank');
+      });
+    });
+  }
+
+  function openUpgradeSheet(){
+    renderPlanCards();
+    upgradeScrim.classList.add('open');
+    upgradeSheet.classList.add('open');
+  }
+  function closeUpgradeSheet(){
+    upgradeScrim.classList.remove('open');
+    upgradeSheet.classList.remove('open');
+  }
+  upgradeCloseBtn.addEventListener('click', closeUpgradeSheet);
+  upgradeScrim.addEventListener('click', closeUpgradeSheet);
 
   function openModelMenu(){ modelMenu.classList.add('open'); modelBtn.classList.add('open'); }
   function closeModelMenu(){ modelMenu.classList.remove('open'); modelBtn.classList.remove('open'); }
