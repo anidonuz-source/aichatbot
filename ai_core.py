@@ -36,8 +36,54 @@ import sticker_store
 
 BOT_NAME = "Misumi AI"
 AUTHOR_HANDLE = "@QahramonovK"
+CHANNEL_HANDLE = "@MisumiAi"  # official Misumi AI Telegram channel
 
 MAX_HISTORY_TURNS = 30  # short-term context kept in RAM, per user
+
+# ---------------------------------------------------------------------------
+# Model tiers — a Claude/ChatGPT-style model picker shown in the Mini App.
+# These aren't separate underlying AI providers so much as separate
+# *personas/permission levels* layered on top of the same Cerebras/Gemini/
+# Groq chain: Flash is fast and free, Pro/Max unlock full code generation,
+# longer answers, and (for Max) a quality-first provider order. Gating is
+# enforced server-side via admin_store.is_premium, not just prompted.
+# ---------------------------------------------------------------------------
+MODEL_TIERS = {
+    "flash": {
+        "id": "flash",
+        "label": f"{BOT_NAME} Flash",
+        "tagline": "Tezkor va bepul — kundalik suhbatlar uchun",
+        "premium": False,
+    },
+    "pro": {
+        "id": "pro",
+        "label": f"{BOT_NAME} Pro",
+        "tagline": "To'liq kod yozish va chuqurroq tahlil",
+        "premium": True,
+    },
+    "max": {
+        "id": "max",
+        "label": f"{BOT_NAME} Max",
+        "tagline": "Eng kuchli rejim — murakkab loyihalar uchun",
+        "premium": True,
+    },
+}
+DEFAULT_MODEL = "flash"
+
+
+def resolve_model(user_id: str, requested: str | None) -> str:
+    """Validate a requested model tier against the user's real premium
+    status. Unknown or premium-locked tiers silently fall back to Flash —
+    the caller (webapp.py) reports back which tier actually ran so the UI
+    can stay in sync.
+    """
+    requested = (requested or DEFAULT_MODEL).lower()
+    tier = MODEL_TIERS.get(requested)
+    if not tier:
+        return DEFAULT_MODEL
+    if tier["premium"] and not admin_store.is_premium(user_id):
+        return DEFAULT_MODEL
+    return requested
 
 # ---------------------------------------------------------------------------
 # Provider 1 (primary): Cerebras — https://cloud.cerebras.ai
@@ -73,7 +119,7 @@ REACTION_EMOJIS = [
     "😍", "🤣", "💯", "😢", "😱", "🥰", "😎", "🤝", "💔", "😭", "👀",
 ]
 
-SYSTEM_PROMPT = f"""You are {BOT_NAME} — a sleek, premium, highly capable AI
+BASE_SYSTEM_PROMPT = f"""You are {BOT_NAME} — a sleek, premium, highly capable AI
 companion. Your tone is warm but polished: confident, concise, never
 robotic, never generic. Think "luxury concierge who happens to be a
 brilliant assistant" rather than a bare-bones chatbot.
@@ -82,18 +128,14 @@ Reply in 1-3 sentences unless the user clearly needs more detail
 Always respond in the same language the user is writing in.
 You were built by {AUTHOR_HANDLE}. If asked who made you, credit them
 naturally — don't over-mention it otherwise.
+The official {BOT_NAME} Telegram channel is {CHANNEL_HANDLE} — if the
+user asks about news, updates, or where to follow the project, point
+them there. Don't mention it unprompted or repeatedly.
 
-If the user asks you to write or generate a large or complex piece of
-code — a full script, an app, a bot, a multi-function program, or
-anything that would take real effort to produce — do NOT write it.
-Instead, warmly and briefly let them know that full code generation is
-a premium feature, and that they can unlock it by upgrading to
-{BOT_NAME} Pro — contact {AUTHOR_HANDLE} for that. Keep it short,
-friendly, on-brand — never robotic or apologetic-sounding. Vary your
-phrasing naturally instead of repeating the same sentence every time.
-Small things are fine to answer directly: a one-liner, a short
-snippet under ~10 lines, fixing a small bug, or explaining a concept
-— only gate the big stuff.
+When the user writes code, always put it in a proper fenced Markdown
+code block with the correct language tag (e.g. ```python) — never
+plain text — so it renders with syntax highlighting and a copy button
+in the app.
 
 Whenever the user reveals something worth remembering long-term — their
 name, age, city, job, preferences, hobbies, relationships, projects, or
@@ -146,6 +188,64 @@ don't fabricate a confident-sounding answer. Use this honestly, only
 when you'd actually be guessing — not as a way to dodge easy or
 answerable questions.
 """
+
+# ---------------------------------------------------------------------------
+# Tier-specific clauses, appended to BASE_SYSTEM_PROMPT depending on which
+# model tier is actually running (after premium resolution).
+# ---------------------------------------------------------------------------
+FLASH_CLAUSE = f"""
+You are currently running as {MODEL_TIERS['flash']['label']} ({MODEL_TIERS['flash']['tagline']}).
+If the user asks you to write or generate a large or complex piece of
+code — a full script, an app, a bot, a multi-function program, or
+anything that would take real effort to produce — do NOT write it.
+Instead, warmly and briefly let them know that full code generation is
+a {BOT_NAME} Pro / Max feature, and that they can switch to it from the
+model picker in the app (upgrading via {AUTHOR_HANDLE}). Keep it short,
+friendly, on-brand — never robotic or apologetic-sounding. Vary your
+phrasing naturally instead of repeating the same sentence every time.
+Small things are fine to answer directly: a one-liner, a short
+snippet under ~10 lines, fixing a small bug, or explaining a concept
+— only gate the big stuff.
+"""
+
+PRO_CLAUSE = f"""
+You are currently running as {MODEL_TIERS['pro']['label']} ({MODEL_TIERS['pro']['tagline']}),
+a premium tier. You may write full, complete, production-quality code
+of any size the user asks for — scripts, bots, apps, multi-file
+programs — with no artificial gating. Go deeper and more thorough than
+Flash mode when the topic warrants it.
+"""
+
+MAX_CLAUSE = f"""
+You are currently running as {MODEL_TIERS['max']['label']} ({MODEL_TIERS['max']['tagline']}),
+the most capable premium tier. You may write full, complete,
+production-quality code of any size or complexity with no gating.
+Don't limit yourself to 1-3 sentences — for substantial questions
+(explanations, architecture, multi-step reasoning, code), give the
+most thorough, expert-level answer you can, well-structured with
+headings or lists where that helps. For simple small talk, still keep
+it natural and brief.
+"""
+
+MODEL_SELF_AWARENESS_CLAUSE = f"""
+If the user asks which model/version you are, what {BOT_NAME} Flash,
+Pro, or Max mean, or what your current capabilities are, answer
+honestly and concisely based on the tier you are actually running
+(described above) — don't invent capabilities you don't have. In
+short: Flash is fast and free with light code help; Pro unlocks full
+code generation and deeper analysis; Max is the most capable tier for
+complex, detailed, expert-level work. Users switch tiers from the
+model picker at the top of the app.
+"""
+
+
+def build_system_prompt(model: str) -> str:
+    """Compose the full system instruction for a resolved model tier."""
+    tier_clause = {"flash": FLASH_CLAUSE, "pro": PRO_CLAUSE, "max": MAX_CLAUSE}.get(
+        model, FLASH_CLAUSE
+    )
+    return BASE_SYSTEM_PROMPT + tier_clause + MODEL_SELF_AWARENESS_CLAUSE
+
 
 STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
 
@@ -448,6 +548,16 @@ def _call_gemini(
     return (response.text or "").strip()
 
 
+# Provider order per model tier. Flash favors speed (Cerebras first); Pro
+# and Max favor answer quality (Gemini first) since they're meant to feel
+# noticeably stronger than Flash.
+PROVIDER_CHAINS = {
+    "flash": (_call_cerebras, _call_gemini, _call_groq),
+    "pro": (_call_gemini, _call_cerebras, _call_groq),
+    "max": (_call_gemini, _call_cerebras, _call_groq),
+}
+
+
 def get_ai_reply(
     user_id: str,
     user_text: str,
@@ -455,6 +565,7 @@ def get_ai_reply(
     image_mime: str | None = None,
     name: str | None = None,
     source: str = "telegram",
+    model: str = DEFAULT_MODEL,
 ) -> str:
     """Send a message as the given user and return Misumi AI's reply text.
 
@@ -465,13 +576,20 @@ def get_ai_reply(
 
     `name` and `source` are optional metadata (display name, "telegram" or
     "miniapp") recorded for the admin panel's stats/user list.
+
+    `model` is a resolved tier id ("flash"/"pro"/"max") — callers should
+    pass it through resolve_model() first so premium gating is enforced
+    server-side rather than trusted from the client.
     """
     user_id = str(user_id)
     admin_store.record_message(user_id, name=name, source=source)
 
+    if model not in MODEL_TIERS:
+        model = DEFAULT_MODEL
+
     memory = mem.load_memory(user_id)
     memory_block = mem.format_memory_for_prompt(memory)
-    system_instruction = SYSTEM_PROMPT + ("\n\n" + memory_block if memory_block else "")
+    system_instruction = build_system_prompt(model) + ("\n\n" + memory_block if memory_block else "")
     history = _history.get(user_id, [])
 
     raw_reply = None
@@ -483,7 +601,7 @@ def get_ai_reply(
         except Exception as e:
             last_error = e
     else:
-        for call in (_call_cerebras, _call_gemini, _call_groq):
+        for call in PROVIDER_CHAINS.get(model, PROVIDER_CHAINS["flash"]):
             try:
                 raw_reply = call(system_instruction, history, user_text)
                 break
