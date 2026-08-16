@@ -122,6 +122,12 @@ GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-imag
 # the Flash tier, and GROQ_MODEL_STRONG is a larger long-context model used
 # as the Max tier's Groq step.
 # ---------------------------------------------------------------------------
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "openai/gpt-oss-20b")
+GROQ_MODEL_STRONG = os.environ.get("GROQ_MODEL_STRONG", "qwen/qwen3.6-27b")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
 # ---------------------------------------------------------------------------
 # Provider 4: Mistral — https://console.mistral.ai (La Plateforme free tier)
 # ---------------------------------------------------------------------------
