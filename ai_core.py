@@ -894,6 +894,20 @@ def get_ai_reply(
     return reply_text
 
 
+def pop_last_exchange(user_id: str) -> None:
+    """Drops the most recent user+assistant turn from short-term history.
+
+    Used by the Mini App's regenerate/edit actions: the client re-sends the
+    (possibly edited) last user message, and without this the fresh call
+    would just pile a duplicate turn on top of the stale one still sitting
+    in `_history` from the first attempt.
+    """
+    user_id = str(user_id)
+    history = _history.get(user_id, [])
+    if len(history) >= 2 and history[-1]["role"] == "assistant" and history[-2]["role"] == "user":
+        _history[user_id] = history[:-2]
+
+
 def generate_image_reply(
     user_id: str,
     prompt: str,
