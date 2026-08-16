@@ -90,6 +90,7 @@
     .welcome{width:100%; max-width:520px;}
     footer{padding-left:32px; padding-right:32px;}
     .composer{max-width:720px; margin:0 auto;}
+    .composer-bar{max-width:720px; margin:0 auto;}
     .credit{max-width:720px; margin:0 auto;}
   }
 
@@ -125,29 +126,39 @@
     color:var(--brass-soft);
     margin-top:2px;
   }
-  /* ---------- Model picker ---------- */
-  .model-picker{
-    display:flex; align-items:center; gap:5px;
-    border:none; background:transparent; cursor:pointer;
-    padding:2px 0; margin-top:2px;
-    font-family:'JetBrains Mono',monospace;
-    font-size:10.5px; letter-spacing:0.06em;
-    color:var(--brass-soft);
+  /* ---------- Model picker (compact pill, above composer) ---------- */
+  .composer-bar{
+    display:flex; align-items:center;
+    padding:0 4px 8px;
+    position:relative;
   }
-  .model-picker:active{opacity:0.7;}
-  .model-picker svg{width:9px;height:9px; flex:0 0 auto; transition:transform .18s ease;}
-  .model-picker.open svg{transform:rotate(180deg);}
+  .model-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    border:1px solid var(--hairline);
+    background:var(--ink-2);
+    border-radius:20px;
+    padding:6px 11px 6px 13px;
+    cursor:pointer;
+    font-family:'Manrope',sans-serif;
+    font-size:12.5px; font-weight:700;
+    color:var(--paper);
+    transition:border-color .15s ease;
+  }
+  .model-pill:hover{border-color:var(--brass);}
+  .model-pill:active{transform:scale(0.97);}
+  .model-pill svg{width:9px;height:9px; flex:0 0 auto; color:var(--paper-dim); transition:transform .18s ease;}
+  .model-pill.open svg{transform:rotate(180deg);}
   .model-menu{
     position:absolute;
-    top:calc(100% + 8px); left:20px;
+    bottom:calc(100% + 8px); left:4px;
     width:min(280px, calc(100vw - 40px));
     background:var(--panel-2);
     border:1px solid var(--hairline-strong);
     border-radius:14px;
     padding:6px;
-    box-shadow:0 12px 30px rgba(0,0,0,0.35);
+    box-shadow:0 -12px 30px rgba(0,0,0,0.35);
     z-index:22;
-    opacity:0; pointer-events:none; transform:translateY(-6px);
+    opacity:0; pointer-events:none; transform:translateY(6px);
     transition:opacity .18s ease, transform .18s ease;
   }
   .model-menu.open{opacity:1; pointer-events:auto; transform:translateY(0);}
@@ -588,11 +599,7 @@
   </div>
   <div class="titles">
     <div class="name" id="sessionTitle">Misumi AI</div>
-    <button class="model-picker" id="modelBtn" type="button">
-      <span id="modelLabel">Misumi AI Flash</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-    </button>
-    <div class="model-menu" id="modelMenu"></div>
+    <div class="sub">Shaxsiy AI hamrohingiz</div>
   </div>
   <div class="header-actions">
     <div class="icon-btn" id="resetBtn" title="Suhbatni o'chirish">
@@ -629,6 +636,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
+  </div>
+  <div class="composer-bar">
+    <button class="model-pill" id="modelBtn" type="button">
+      <span id="modelLabel">Misumi AI Flash</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+    <div class="model-menu" id="modelMenu"></div>
   </div>
   <div class="composer">
     <input type="file" id="fileInput" accept="image/*" style="display:none;">
