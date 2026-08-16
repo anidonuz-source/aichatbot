@@ -6,14 +6,28 @@ Used by both:
   - webapp.py  (Telegram Mini App / web chat interface)
 
 Provider chain for plain text messages (differs per model tier — see
-PROVIDER_CHAINS below), drawing from 5 providers:
-  1. Cerebras    — fast, free open-weight models
-  2. Gemini      — also handles image input (vision)
+PROVIDER_CHAINS below), drawing from 7 providers:
+  1. Cerebras    — fast, free open-weight models, high daily token volume
+  2. Gemini      — also handles image input (vision); smartest single
+                   provider here, but the smallest free quota, so it's
+                   used earlier only on Max (fewer users) and later on
+                   Flash/Pro so high-traffic tiers don't burn it first
   3. Groq        — fast open-weight models, separate free quota
-  4. Mistral     — La Plateforme free tier
-  5. OpenRouter  — aggregator/auto-router, used as a final safety net since
-                   its "openrouter/free" mode always finds a live free model
-                   even as individual free model IDs rotate out elsewhere
+  4. Mistral     — La Plateforme free tier, highest free volume of all 7
+  5. OpenRouter  — aggregator/auto-router, its "openrouter/free" mode
+                   always finds a live free model even as individual
+                   free model IDs rotate out elsewhere
+  6. Cloudflare Workers AI — edge inference, 10k free "Neurons"/day,
+                   permanent (not a trial), used as a bonus safety net
+  7. DeepSeek    — smart reasoning model, but only a ~5M-token/30-day
+                   signup trial (not a permanent free tier) — used as the
+                   last bonus step; when the trial runs out it just
+                   raises and the chain moves on, same as NVIDIA before it
+
+High-volume tiers (Flash/Pro, used by every user) lead with Cerebras and
+Mistral since they have the largest free daily/monthly ceilings, keeping
+Gemini's small quota in reserve. Max (premium, fewer users) still leads
+with Gemini for quality since it doesn't need to conserve.
 
 If the user attaches an image, Gemini is used directly (only provider here
 that accepts vision input); if that fails, no fallback exists for images.
@@ -145,6 +159,34 @@ MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# ---------------------------------------------------------------------------
+# Provider 6 (bonus): Cloudflare Workers AI —
+# https://developers.cloudflare.com/workers-ai
+# Permanent free tier: 10,000 "Neurons" (Cloudflare's compute unit) per
+# day, no card required. Needs both an account id and an API token
+# (Workers AI edit permission) — both from the Cloudflare dashboard.
+# ---------------------------------------------------------------------------
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
+CLOUDFLARE_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast")
+CLOUDFLARE_URL_TEMPLATE = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
+
+# ---------------------------------------------------------------------------
+# Provider 7 (bonus, time-limited): DeepSeek —
+# https://platform.deepseek.com
+# NOT a permanent free tier — new API accounts get a signup credit
+# (commonly ~5M tokens, ~30 days) that DeepSeek does not officially
+# guarantee for every account. Kept as the very last fallback: if the
+# credit is exhausted or absent, the call just raises (402/401) and the
+# chain moves on to the next provider, same as NVIDIA's key before it.
+# Uses the OpenAI-compatible endpoint; deepseek-chat/deepseek-reasoner
+# aliases are deprecated as of 2026-07-24, so this uses the explicit
+# deepseek-v4-flash model id.
+# ---------------------------------------------------------------------------
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
 # Curated subset of Telegram's allowed message-reaction emoji (the API
 # only accepts a fixed set — this list is deliberately small and mapped
@@ -614,6 +656,52 @@ def _call_openrouter(
     return data["choices"][0]["message"]["content"].strip()
 
 
+def _call_cloudflare(
+    system_instruction: str, history: list, user_text: str, model: str | None = None
+) -> str:
+    if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+        raise RuntimeError("CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    messages += [{"role": t["role"], "content": t["content"]} for t in history]
+    messages.append({"role": "user", "content": user_text})
+    url = CLOUDFLARE_URL_TEMPLATE.format(
+        account_id=CLOUDFLARE_ACCOUNT_ID, model=model or CLOUDFLARE_MODEL
+    )
+    resp = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"},
+        json={"messages": messages, "temperature": 0.8},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("success", True):
+        raise RuntimeError(f"Cloudflare error: {data.get('errors')}")
+    return (data["result"]["response"] or "").strip()
+
+
+def _call_deepseek(
+    system_instruction: str, history: list, user_text: str, model: str | None = None
+) -> str:
+    if not DEEPSEEK_API_KEY:
+        raise RuntimeError("DEEPSEEK_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    messages += [{"role": t["role"], "content": t["content"]} for t in history]
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        DEEPSEEK_URL,
+        headers={
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={"model": model or DEEPSEEK_MODEL, "messages": messages, "temperature": 0.8},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+
 def _call_gemini(
     system_instruction: str,
     history: list,
@@ -640,34 +728,44 @@ def _call_gemini(
     return (response.text or "").strip()
 
 
-# Provider + model chain per tier — each tier now runs genuinely different
-# underlying models across 5 providers, not just a reordering of the same
-# three:
-#   Flash: speed-first, small/free models (Cerebras gpt-oss-120b -> Groq
-#          gpt-oss-20b -> Mistral Small -> Gemini -> OpenRouter as final
-#          safety net).
-#   Pro:   quality-first (Gemini 3.6 Flash -> Cerebras gpt-oss-120b ->
-#          Mistral Small -> Groq gpt-oss-120b -> OpenRouter).
-#   Max:   Gemini 3.6 Flash first, then OpenRouter's auto-router (picks
-#          from whatever strong free model — often DeepSeek R1-class
-#          reasoning — is live that day) as a second opinion, then Groq's
-#          larger long-context model, Cerebras, Mistral last.
+# Provider + model chain per tier — now 7 providers deep. Flash and Pro
+# (the tiers every user, including free ones, hits constantly) lead with
+# Cerebras and Mistral because those two have by far the largest free
+# daily/monthly ceilings (Cerebras ~1M tokens/day, Mistral ~1B tokens/
+# month) — that's what actually keeps a high-traffic bot alive. Gemini is
+# the smartest single provider but has the smallest quota (~1500 req/day
+# shared across ALL tiers), so on Flash/Pro it's pushed later to conserve
+# it, and only Max (premium, far fewer users) still leads with it for
+# quality. Cloudflare and DeepSeek are bonus tail steps on every tier —
+# Cloudflare because it's a genuine permanent free tier (just smaller),
+# DeepSeek because it's a strong reasoning model but only for as long as
+# its signup trial credit lasts (see its NOTE above).
+#   Flash: Cerebras -> Mistral -> Groq (fast) -> Gemini -> OpenRouter ->
+#          Cloudflare -> DeepSeek
+#   Pro:   Mistral -> Cerebras -> Gemini -> Groq -> OpenRouter ->
+#          Cloudflare -> DeepSeek
+#   Max:   Gemini -> OpenRouter -> Groq (strong) -> Cerebras -> Mistral ->
+#          Cloudflare -> DeepSeek
 # Each entry is (call_fn, model_name_or_None). model=None means "use that
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
         (_call_cerebras, CEREBRAS_MODEL),
-        (_call_groq, GROQ_MODEL_FAST),
         (_call_mistral, MISTRAL_MODEL),
+        (_call_groq, GROQ_MODEL_FAST),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
+        (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "pro": (
-        (_call_gemini, None),
-        (_call_cerebras, CEREBRAS_MODEL),
         (_call_mistral, MISTRAL_MODEL),
+        (_call_cerebras, CEREBRAS_MODEL),
+        (_call_gemini, None),
         (_call_groq, GROQ_MODEL),
         (_call_openrouter, OPENROUTER_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
+        (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "max": (
         (_call_gemini, None),
@@ -675,6 +773,8 @@ PROVIDER_CHAINS = {
         (_call_groq, GROQ_MODEL_STRONG),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_mistral, MISTRAL_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
+        (_call_deepseek, DEEPSEEK_MODEL),
     ),
 }
 
