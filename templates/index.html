@@ -584,8 +584,11 @@
   }
   .row-avatar svg{width:11px;height:11px;}
   .row-avatar .dot{fill:var(--brass);}
+  .msg-col{display:flex; flex-direction:column; max-width:76%;}
+  .row.user .msg-col{align-items:flex-end;}
+  .row.ai .msg-col{align-items:flex-start;}
   .bubble{
-    max-width:76%;
+    max-width:100%;
     padding:11px 15px;
     font-size:14.5px;
     line-height:1.5;
@@ -652,6 +655,47 @@
   .code-copy-btn:hover{color:var(--brass); border-color:var(--brass);}
   .code-copy-btn.copied{color:var(--brass); border-color:var(--hairline-strong); background:var(--brass-dim);}
   .code-copy-btn svg{width:10px;height:10px;}
+  /* ---------- Message actions (copy / regenerate / edit) ---------- */
+  .msg-actions{
+    display:flex; gap:2px;
+    margin-top:4px; padding:0 3px;
+  }
+  .msg-action{
+    display:flex; align-items:center; justify-content:center;
+    width:23px; height:23px; border-radius:7px;
+    border:1px solid transparent;
+    background:transparent;
+    color:var(--paper-dim);
+    cursor:pointer;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .msg-action:hover{color:var(--brass); border-color:var(--hairline); background:rgba(255,255,255,0.04);}
+  .msg-action.copied{color:var(--brass);}
+  .msg-action svg{width:12px;height:12px;}
+  .msg-action[hidden]{display:none;}
+
+  .edit-box{width:100%;}
+  .edit-box textarea{
+    width:100%; resize:none;
+    background:rgba(0,0,0,0.25);
+    border:1px solid var(--hairline-strong);
+    border-radius:14px 14px 4px 14px;
+    padding:10px 14px;
+    font-family:'Manrope',sans-serif; font-size:14.5px; line-height:1.5;
+    color:#f4eef2;
+    min-height:44px;
+  }
+  .edit-box textarea:focus-visible{outline:none; border-color:var(--brass);}
+  .edit-actions{display:flex; gap:6px; margin-top:6px; justify-content:flex-end;}
+  .edit-btn{
+    padding:6px 13px; border-radius:9px; border:1px solid var(--hairline);
+    background:rgba(255,255,255,0.04); color:var(--paper-dim);
+    font-family:'Manrope',sans-serif; font-size:12px; font-weight:600;
+    cursor:pointer;
+  }
+  .edit-btn.primary{background:var(--brass); color:var(--ink); border-color:var(--brass);}
+  .edit-btn:active{transform:scale(0.96);}
+
   .bubble .md blockquote{
     margin:0 0 8px;
     padding:2px 0 2px 11px;
@@ -1268,6 +1312,7 @@
     for (const m of s.messages) {
       renderRow(m.role, m.text, m.image);
     }
+    updateMessageActions();
     scrollToBottom();
   }
 
@@ -1276,6 +1321,9 @@
   }
 
   const AVATAR_SVG = `<svg viewBox="0 0 30 30" fill="none"><circle class="dot" cx="15" cy="6" r="2.6"/><circle class="dot" cx="6" cy="22" r="2.6" opacity="0.7"/><circle class="dot" cx="24" cy="22" r="2.6" opacity="0.7"/></svg>`;
+  const COPY_MSG_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+  const REGEN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`;
+  const EDIT_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>`;
 
   function renderRow(role, text, imageUrl){
     if (welcomeEl.parentNode) welcomeEl.remove();
@@ -1287,6 +1335,9 @@
       avatar.innerHTML = AVATAR_SVG;
       row.appendChild(avatar);
     }
+    const col = document.createElement('div');
+    col.className = 'msg-col';
+
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     if (imageUrl) {
@@ -1308,10 +1359,36 @@
         bubble.appendChild(textNode);
       }
     }
-    row.appendChild(bubble);
+    col.appendChild(bubble);
+
+    // Copy is available on any text bubble. Regenerate/edit only ever
+    // apply to the single most recent turn — toggled by
+    // updateMessageActions() after every render, not decided here.
+    if (text) {
+      const actions = document.createElement('div');
+      actions.className = 'msg-actions';
+      actions.innerHTML = `
+        <button class="msg-action copy" type="button" title="Nusxalash">${COPY_MSG_ICON}</button>
+        ${role === 'ai' ? `<button class="msg-action regen" type="button" title="Qayta yaratish" hidden>${REGEN_ICON}</button>` : ''}
+        ${role === 'user' ? `<button class="msg-action edit" type="button" title="Tahrirlash" hidden>${EDIT_ICON}</button>` : ''}
+      `;
+      col.appendChild(actions);
+    }
+
+    row.appendChild(col);
     chatEl.appendChild(row);
     scrollToBottom();
     return bubble;
+  }
+
+  // Only the last AI reply can be regenerated and only the last user
+  // message can be edited — earlier turns are already part of the
+  // server-side context and rewriting them mid-history isn't supported.
+  function updateMessageActions(){
+    const regenBtns = chatEl.querySelectorAll('.row.ai .msg-action.regen');
+    regenBtns.forEach((btn, i) => { btn.hidden = i !== regenBtns.length - 1; });
+    const editBtns = chatEl.querySelectorAll('.row.user .msg-action.edit');
+    editBtns.forEach((btn, i) => { btn.hidden = i !== editBtns.length - 1; });
   }
 
   function addRow(role, text, imageUrl){
@@ -1324,8 +1401,120 @@
       sessionTitleEl.textContent = s.title;
     }
     saveSessions(sessions);
+    updateMessageActions();
     return bubble;
   }
+
+  async function handleCopyMessage(btn){
+    const bubble = btn.closest('.msg-col').querySelector('.bubble');
+    const md = bubble.querySelector('.md');
+    let text;
+    if (md) {
+      const clone = md.cloneNode(true);
+      clone.querySelectorAll('.code-copy-btn').forEach(el => el.remove());
+      text = clone.innerText;
+    } else {
+      text = bubble.textContent;
+    }
+    text = text.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    tg?.HapticFeedback?.notificationOccurred('success');
+    btn.classList.add('copied');
+    setTimeout(() => btn.classList.remove('copied'), 1400);
+  }
+
+  async function handleRegenerate(){
+    const s = currentSession();
+    if (!s || s.messages.length < 2) return;
+    const last = s.messages[s.messages.length - 1];
+    const prev = s.messages[s.messages.length - 2];
+    if (last.role !== 'ai' || prev.role !== 'user') return;
+    tg?.HapticFeedback?.impactOccurred('light');
+
+    const aiRows = chatEl.querySelectorAll('.row.ai');
+    aiRows[aiRows.length - 1]?.remove();
+    s.messages.pop();
+    saveSessions(sessions);
+
+    await requestReply({ message: prev.text, regenerate: true });
+  }
+
+  function handleEditStart(btn){
+    const col = btn.closest('.msg-col');
+    const bubble = col.querySelector('.bubble');
+    const actionsRow = col.querySelector('.msg-actions');
+    const originalText = bubble.textContent;
+
+    const box = document.createElement('div');
+    box.className = 'edit-box';
+    box.innerHTML = `
+      <textarea rows="1"></textarea>
+      <div class="edit-actions">
+        <button class="edit-btn cancel" type="button">Bekor qilish</button>
+        <button class="edit-btn primary send" type="button">Yuborish</button>
+      </div>
+    `;
+    bubble.style.display = 'none';
+    if (actionsRow) actionsRow.style.display = 'none';
+    col.insertBefore(box, bubble);
+
+    const ta = box.querySelector('textarea');
+    ta.value = originalText;
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; };
+    grow();
+    ta.addEventListener('input', grow);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    box.querySelector('.cancel').addEventListener('click', () => {
+      box.remove();
+      bubble.style.display = '';
+      if (actionsRow) actionsRow.style.display = '';
+    });
+    box.querySelector('.send').addEventListener('click', () => handleEditSubmit(col, ta.value.trim()));
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditSubmit(col, ta.value.trim()); }
+    });
+  }
+
+  async function handleEditSubmit(col, newText){
+    if (!newText) return;
+    const s = currentSession();
+    if (!s || s.messages.length === 0) return;
+
+    const hasTrailingAi = s.messages[s.messages.length - 1].role === 'ai';
+    if (hasTrailingAi) s.messages.pop();
+    s.messages.pop(); // the user turn being edited
+    saveSessions(sessions);
+
+    if (hasTrailingAi) {
+      const aiRows = chatEl.querySelectorAll('.row.ai');
+      aiRows[aiRows.length - 1]?.remove();
+    }
+    col.closest('.row').remove();
+
+    tg?.HapticFeedback?.impactOccurred('light');
+    addRow('user', newText);
+    await requestReply({ message: newText, regenerate: true });
+  }
+
+  chatEl.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.msg-action.copy');
+    if (copyBtn) { handleCopyMessage(copyBtn); return; }
+    const regenBtn = e.target.closest('.msg-action.regen');
+    if (regenBtn && !regenBtn.hidden) { handleRegenerate(); return; }
+    const editBtn = e.target.closest('.msg-action.edit');
+    if (editBtn && !editBtn.hidden) { handleEditStart(editBtn); return; }
+  });
 
   const thinkingBar = document.getElementById('thinkingBar');
 
@@ -1389,25 +1578,16 @@
 
   sendBtn.addEventListener('click', send);
 
-  async function send(){
-    const text = inputEl.value.trim();
-    const image = pendingImage;
-    if (!text && !image) return;
-    tg?.HapticFeedback?.impactOccurred('light');
-    inputEl.value = '';
-    inputEl.style.height = 'auto';
-    pendingImage = null;
-    previewRow.style.display = 'none';
-    attachBtn.classList.remove('has-image');
-    sendBtn.disabled = true;
-    addRow('user', text, image);
+  // Shared by send(), handleRegenerate() and handleEditSubmit() — every
+  // path that needs a fresh AI reply funnels through here so the typing
+  // indicator, error copy, and premium-gating sync only live in one place.
+  async function requestReply(payload){
     addTyping();
-
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ initData: tg?.initData || '', message: text, image: image || undefined, model: selectedModel })
+        body: JSON.stringify({ initData: tg?.initData || '', model: selectedModel, ...payload })
       });
       const data = await res.json();
       removeTyping();
@@ -1425,6 +1605,21 @@
       removeTyping();
       addRow('ai', 'Ulanishda xatolik. Internetni tekshirib, qayta urinib ko\'ring.');
     }
+  }
+
+  async function send(){
+    const text = inputEl.value.trim();
+    const image = pendingImage;
+    if (!text && !image) return;
+    tg?.HapticFeedback?.impactOccurred('light');
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    pendingImage = null;
+    previewRow.style.display = 'none';
+    attachBtn.classList.remove('has-image');
+    sendBtn.disabled = true;
+    addRow('user', text, image);
+    await requestReply({ message: text, image: image || undefined });
   }
 
   resetBtn.addEventListener('click', async () => {
