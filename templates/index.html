@@ -15,19 +15,22 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#0b0b0d;
+    --ink:#0a0a0d;
     --ink-2:#141417;
     --panel:#1b1b1f;
     --panel-2:#202024;
     --hairline:rgba(201,162,39,0.16);
-    --hairline-strong:rgba(201,162,39,0.3);
+    --hairline-strong:rgba(201,162,39,0.32);
     --brass:#c9a227;
+    --brass-bright:#e5c04a;
     --brass-soft:#8a7228;
     --brass-dim:rgba(201,162,39,0.1);
     --plum:#3b2f4a;
+    --plum-bright:#5a4372;
     --paper:#f2efe9;
     --paper-dim:#a9a6a0;
     --danger:#c9524a;
+    --success:#5fb98a;
     --overlay:rgba(6,6,7,0.6);
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -105,11 +108,43 @@
     border-bottom:1px solid var(--hairline);
     background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
   }
-  .mark{
-    width:30px;height:30px;flex:0 0 auto;position:relative;
+  .thinking-bar{
+    position:absolute; left:0; right:0; bottom:-1px;
+    height:2px;
+    background:linear-gradient(90deg, transparent, var(--brass-bright), var(--brass), transparent);
+    background-size:200% 100%;
+    opacity:0;
+    transition:opacity .2s ease;
   }
-  .mark svg{width:100%;height:100%;display:block;}
-  .mark .dot{fill:var(--brass);}
+  .thinking-bar.active{opacity:1; animation: sweep 1.3s ease-in-out infinite;}
+  @keyframes sweep{
+    0%{background-position:200% 0;}
+    100%{background-position:-200% 0;}
+  }
+  .mark{
+    width:32px;height:32px;flex:0 0 auto;position:relative;
+  }
+  .mark::before{
+    content:'';
+    position:absolute; inset:-7px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(201,162,39,0.35), transparent 70%);
+    opacity:0;
+    animation: markGlow 3.6s ease-in-out infinite;
+  }
+  .mark svg{width:100%;height:100%;display:block; position:relative;}
+  .mark .dot{fill:var(--brass); transform-origin:15px 15px;}
+  .mark .dot:nth-child(1){animation: orbitPulse 3.6s ease-in-out infinite;}
+  .mark .dot:nth-child(2){animation: orbitPulse 3.6s ease-in-out infinite .4s;}
+  .mark .dot:nth-child(3){animation: orbitPulse 3.6s ease-in-out infinite .8s;}
+  @keyframes markGlow{
+    0%,100%{opacity:0;}
+    50%{opacity:1;}
+  }
+  @keyframes orbitPulse{
+    0%,100%{opacity:0.55; r:2.4;}
+    50%{opacity:1; r:2.9;}
+  }
   .titles{display:flex;flex-direction:column;line-height:1.15;}
   .titles .name{
     font-family:'Cormorant Garamond',serif;
@@ -119,12 +154,25 @@
     color:var(--paper);
   }
   .titles .sub{
+    display:flex; align-items:center; gap:5px;
     font-family:'JetBrains Mono',monospace;
     font-size:10.5px;
     letter-spacing:0.09em;
     text-transform:uppercase;
     color:var(--brass-soft);
     margin-top:2px;
+  }
+  .titles .sub .status-dot{
+    width:5px;height:5px;border-radius:50%;
+    background:var(--success);
+    box-shadow:0 0 0 0 rgba(95,185,138,0.5);
+    animation: statusPing 2.4s ease-out infinite;
+    flex:0 0 auto;
+  }
+  @keyframes statusPing{
+    0%{box-shadow:0 0 0 0 rgba(95,185,138,0.45);}
+    70%{box-shadow:0 0 0 5px rgba(95,185,138,0);}
+    100%{box-shadow:0 0 0 0 rgba(95,185,138,0);}
   }
   /* ---------- Model picker (compact pill, above composer) ---------- */
   .composer-bar{
@@ -133,51 +181,74 @@
     position:relative;
   }
   .model-pill{
-    display:inline-flex; align-items:center; gap:6px;
+    display:inline-flex; align-items:center; gap:7px;
     border:1px solid var(--hairline);
     background:var(--ink-2);
     border-radius:20px;
-    padding:6px 11px 6px 13px;
+    padding:6px 12px 6px 8px;
     cursor:pointer;
     font-family:'Manrope',sans-serif;
     font-size:12.5px; font-weight:700;
     color:var(--paper);
-    transition:border-color .15s ease;
+    transition:border-color .18s ease, background .18s ease, box-shadow .18s ease;
   }
-  .model-pill:hover{border-color:var(--brass);}
+  .model-pill:hover{border-color:var(--brass); box-shadow:0 0 0 3px var(--brass-dim);}
   .model-pill:active{transform:scale(0.97);}
-  .model-pill svg{width:9px;height:9px; flex:0 0 auto; color:var(--paper-dim); transition:transform .18s ease;}
-  .model-pill.open svg{transform:rotate(180deg);}
+  .model-pill.open{border-color:var(--brass-soft); background:var(--panel-2);}
+  .model-pill .tier-icon{
+    width:20px;height:20px;border-radius:50%;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--brass-dim);
+    color:var(--brass);
+    transition:background .18s ease;
+  }
+  .model-pill .tier-icon svg{width:11px;height:11px;}
+  .model-pill svg.chev{width:9px;height:9px; flex:0 0 auto; color:var(--paper-dim); transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
+  .model-pill.open svg.chev{transform:rotate(180deg); color:var(--brass);}
+
   .model-menu{
     position:absolute;
-    bottom:calc(100% + 8px); left:4px;
-    width:min(280px, calc(100vw - 40px));
-    background:var(--panel-2);
+    bottom:calc(100% + 10px); left:4px;
+    width:min(300px, calc(100vw - 40px));
+    background:rgba(27,27,31,0.88);
+    backdrop-filter:blur(18px) saturate(1.4);
+    -webkit-backdrop-filter:blur(18px) saturate(1.4);
     border:1px solid var(--hairline-strong);
-    border-radius:14px;
-    padding:6px;
-    box-shadow:0 -12px 30px rgba(0,0,0,0.35);
+    border-radius:16px;
+    padding:7px;
+    box-shadow:0 -18px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.2);
     z-index:22;
-    opacity:0; pointer-events:none; transform:translateY(6px);
-    transition:opacity .18s ease, transform .18s ease;
+    opacity:0; pointer-events:none; transform:translateY(10px) scale(0.97);
+    transform-origin:bottom left;
+    transition:opacity .22s cubic-bezier(.32,.72,0,1), transform .28s cubic-bezier(.32,1.5,.4,1);
   }
-  .model-menu.open{opacity:1; pointer-events:auto; transform:translateY(0);}
+  .model-menu.open{opacity:1; pointer-events:auto; transform:translateY(0) scale(1);}
   .model-option{
-    display:flex; align-items:flex-start; gap:10px;
+    display:flex; align-items:flex-start; gap:11px;
     padding:10px 10px;
-    border-radius:10px;
+    border-radius:11px;
     cursor:pointer;
-    transition:background .15s ease;
+    position:relative;
+    opacity:0; transform:translateY(6px);
+    transition:background .15s ease, transform .32s ease, opacity .32s ease;
   }
-  .model-option:hover{background:rgba(255,255,255,0.04);}
+  .model-menu.open .model-option{opacity:1; transform:translateY(0);}
+  .model-menu.open .model-option:nth-child(1){transition-delay:.03s;}
+  .model-menu.open .model-option:nth-child(2){transition-delay:.08s;}
+  .model-menu.open .model-option:nth-child(3){transition-delay:.13s;}
+  .model-option:hover{background:rgba(255,255,255,0.045);}
   .model-option.active{background:var(--brass-dim);}
-  .model-option.locked{cursor:pointer;}
-  .model-option .model-dot{
-    width:8px;height:8px;border-radius:50%;flex:0 0 auto;margin-top:5px;
-    background:var(--paper-dim);
+  .model-option .tier-icon{
+    width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--hairline);
+    color:var(--paper-dim);
+    transition:background .2s ease, color .2s ease, border-color .2s ease;
   }
-  .model-option.active .model-dot{background:var(--brass);}
-  .model-option .model-text{flex:1 1 auto; min-width:0;}
+  .model-option .tier-icon svg{width:15px;height:15px;}
+  .model-option.active .tier-icon{background:var(--brass-dim); border-color:var(--hairline-strong); color:var(--brass);}
+  .model-option .model-text{flex:1 1 auto; min-width:0; padding-top:1px;}
   .model-option .model-label{
     display:flex; align-items:center; gap:6px;
     font-family:'Manrope',sans-serif; font-size:13.5px; font-weight:700;
@@ -186,6 +257,14 @@
   .model-option .model-tag{
     font-size:11.5px; color:var(--paper-dim); margin-top:2px; line-height:1.35;
   }
+  .model-option .check{
+    flex:0 0 auto; width:16px;height:16px; margin-top:7px;
+    color:var(--brass);
+    opacity:0; transform:scale(0.5);
+    transition:opacity .2s cubic-bezier(.34,1.56,.64,1), transform .2s cubic-bezier(.34,1.56,.64,1);
+  }
+  .model-option.active .check{opacity:1; transform:scale(1);}
+  .model-option .check svg{width:100%;height:100%;}
   .model-option .lock-badge{
     display:flex; align-items:center; gap:3px;
     font-family:'JetBrains Mono',monospace;
@@ -196,6 +275,7 @@
     border-radius:20px;
     padding:2px 7px;
     flex:0 0 auto;
+    margin-top:6px;
   }
   .lock-badge svg{width:8px;height:8px;}
   .model-menu-foot{
@@ -332,12 +412,28 @@
   }
   .welcome .glyph{
     width:46px;height:46px;margin:0 auto 18px;
+    position:relative;
   }
+  .welcome .glyph::before{
+    content:'';
+    position:absolute; inset:-16px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(201,162,39,0.22), transparent 70%);
+    animation: markGlow 3.6s ease-in-out infinite;
+  }
+  .welcome .glyph svg{position:relative;}
+  .welcome .glyph .dot{animation: orbitPulse 3.6s ease-in-out infinite;}
+  .welcome .glyph .dot:nth-child(2){animation-delay:.4s;}
+  .welcome .glyph .dot:nth-child(3){animation-delay:.8s;}
   .welcome h1{
     font-family:'Cormorant Garamond',serif;
     font-weight:600;
-    font-size:28px;
+    font-size:29px;
     margin:0 0 8px;
+    background:linear-gradient(135deg, var(--paper) 40%, var(--brass-bright));
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color:transparent;
     color:var(--paper);
   }
   .welcome p{
@@ -365,11 +461,19 @@
   .chip:hover{border-color:var(--brass); color:var(--brass); background:var(--brass-dim);}
   .chip:active{transform:scale(0.96);}
 
-  .row{display:flex; opacity:0; animation: rise .45s ease forwards;}
+  .row{display:flex; align-items:flex-end; gap:8px; opacity:0; animation: rise .45s cubic-bezier(.25,.8,.35,1) forwards;}
   .row.user{justify-content:flex-end;}
   .row.ai{justify-content:flex-start;}
+  .row-avatar{
+    width:22px;height:22px;border-radius:50%;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--panel);
+    border:1px solid var(--hairline-strong);
+  }
+  .row-avatar svg{width:11px;height:11px;}
+  .row-avatar .dot{fill:var(--brass);}
   .bubble{
-    max-width:78%;
+    max-width:76%;
     padding:11px 15px;
     font-size:14.5px;
     line-height:1.5;
@@ -484,6 +588,11 @@
     border:1px solid var(--hairline);
     border-radius:22px;
     padding:6px 6px 6px 16px;
+    transition:border-color .2s ease, box-shadow .2s ease;
+  }
+  .composer:focus-within{
+    border-color:var(--brass-soft);
+    box-shadow:0 0 0 3px var(--brass-dim);
   }
   .composer textarea{
     flex:1;
@@ -545,15 +654,17 @@
   .send-btn{
     width:38px;height:38px;border-radius:50%;flex:0 0 auto;
     border:none;
-    background:var(--brass);
+    background:linear-gradient(155deg, var(--brass-bright), var(--brass));
     color:var(--ink);
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;
-    transition:transform .15s ease, opacity .15s ease;
+    transition:transform .18s cubic-bezier(.34,1.56,.64,1), opacity .15s ease, box-shadow .18s ease;
   }
-  .send-btn:active{transform:scale(0.9);}
-  .send-btn:disabled{opacity:0.35; pointer-events:none;}
-  .send-btn svg{width:16px;height:16px;}
+  .send-btn:not(:disabled):hover{box-shadow:0 0 0 4px var(--brass-dim); transform:scale(1.04);}
+  .send-btn:active{transform:scale(0.88);}
+  .send-btn:disabled{opacity:0.32; pointer-events:none;}
+  .send-btn svg{width:16px;height:16px; transition:transform .18s ease;}
+  .send-btn:not(:disabled):hover svg{transform:translate(1px,-1px);}
 
   .credit{
     text-align:center;
@@ -599,13 +710,14 @@
   </div>
   <div class="titles">
     <div class="name" id="sessionTitle">Misumi AI</div>
-    <div class="sub">Shaxsiy AI hamrohingiz</div>
+    <div class="sub"><span class="status-dot"></span>Shaxsiy AI hamrohingiz</div>
   </div>
   <div class="header-actions">
     <div class="icon-btn" id="resetBtn" title="Suhbatni o'chirish">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
     </div>
   </div>
+  <div class="thinking-bar" id="thinkingBar"></div>
 </header>
 
 <main id="chat">
@@ -639,8 +751,9 @@
   </div>
   <div class="composer-bar">
     <button class="model-pill" id="modelBtn" type="button">
+      <span class="tier-icon" id="modelPillIcon"></span>
       <span id="modelLabel">Misumi AI Flash</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
     </button>
     <div class="model-menu" id="modelMenu"></div>
   </div>
@@ -689,6 +802,18 @@
   const modelBtn = document.getElementById('modelBtn');
   const modelLabel = document.getElementById('modelLabel');
   const modelMenu = document.getElementById('modelMenu');
+  const modelPillIcon = document.getElementById('modelPillIcon');
+
+  // Small glyph per tier — bolt (fast), gem (deeper reasoning), star (top tier).
+  // Purely decorative/identifying, mapped by tier id since the backend
+  // only sends label/tagline/premium.
+  const TIER_ICONS = {
+    flash: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
+    pro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l3 5-9 13L3 8l3-5z"/><path d="M3 8h18M9 3l3 5-3 13M15 3l-3 5 3 13"/></svg>',
+    max: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.8l2.8 6.6 7.1.6-5.4 4.7 1.7 6.9L12 16.9l-6.2 3.7 1.7-6.9-5.4-4.7 7.1-.6L12 1.8z"/></svg>',
+  };
+  const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+  function tierIcon(id){ return TIER_ICONS[id] || TIER_ICONS.flash; }
 
   let pendingImage = null; // data URL string
 
@@ -709,6 +834,7 @@
     selectedModel = id;
     localStorage.setItem(MODEL_KEY, id);
     modelLabel.textContent = tierById(id).label;
+    modelPillIcon.innerHTML = tierIcon(id);
     renderModelMenu();
   }
 
@@ -719,12 +845,14 @@
       const opt = document.createElement('div');
       opt.className = 'model-option' + (tier.id === selectedModel ? ' active' : '') + (locked ? ' locked' : '');
       opt.innerHTML = `
-        <div class="model-dot"></div>
+        <div class="tier-icon">${tierIcon(tier.id)}</div>
         <div class="model-text">
           <div class="model-label">${tier.label}</div>
           <div class="model-tag"></div>
         </div>
-        ${locked ? `<div class="lock-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>PRO</div>` : ''}
+        ${locked
+          ? `<div class="lock-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>PRO</div>`
+          : `<div class="check">${CHECK_ICON}</div>`}
       `;
       opt.querySelector('.model-tag').textContent = tier.tagline;
       opt.addEventListener('click', () => {
@@ -924,10 +1052,18 @@
     chatEl.scrollTop = chatEl.scrollHeight;
   }
 
+  const AVATAR_SVG = `<svg viewBox="0 0 30 30" fill="none"><circle class="dot" cx="15" cy="6" r="2.6"/><circle class="dot" cx="6" cy="22" r="2.6" opacity="0.7"/><circle class="dot" cx="24" cy="22" r="2.6" opacity="0.7"/></svg>`;
+
   function renderRow(role, text, imageUrl){
     if (welcomeEl.parentNode) welcomeEl.remove();
     const row = document.createElement('div');
     row.className = `row ${role}`;
+    if (role === 'ai') {
+      const avatar = document.createElement('div');
+      avatar.className = 'row-avatar';
+      avatar.innerHTML = AVATAR_SVG;
+      row.appendChild(avatar);
+    }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     if (imageUrl) {
@@ -968,17 +1104,21 @@
     return bubble;
   }
 
+  const thinkingBar = document.getElementById('thinkingBar');
+
   function addTyping(){
+    thinkingBar.classList.add('active');
     if (welcomeEl.parentNode) welcomeEl.remove();
     const row = document.createElement('div');
     row.className = 'row ai';
     row.id = 'typingRow';
-    row.innerHTML = `<div class="bubble typing"><span></span><span></span><span></span></div>`;
+    row.innerHTML = `<div class="row-avatar">${AVATAR_SVG}</div><div class="bubble typing"><span></span><span></span><span></span></div>`;
     chatEl.appendChild(row);
     scrollToBottom();
   }
 
   function removeTyping(){
+    thinkingBar.classList.remove('active');
     document.getElementById('typingRow')?.remove();
   }
 
