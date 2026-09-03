@@ -18,6 +18,7 @@ Qoidalar:
 
 import random
 import time
+import requests
 from collections import defaultdict
 from datetime import datetime
 
@@ -40,17 +41,40 @@ _couple_leaderboard: dict[int, dict[tuple, dict]] = defaultdict(dict)
 
 # ── rasmlar ───────────────────────────────────────────────────────────────────
 COUPLE_IMAGES = [
-    "https://i.imgur.com/Q1mIuge.jpeg",
-    "https://i.imgur.com/7oXFgT0.jpeg",
-    "https://i.imgur.com/tVozFaT.jpeg",
-    "https://i.imgur.com/nX4DJLH.jpeg",
-    "https://i.imgur.com/pYvFqsk.jpeg",
-    "https://i.imgur.com/KlBmJ3a.jpeg",
-    "https://i.imgur.com/oQZJsBr.jpeg",
-    "https://i.imgur.com/2VnZiGX.jpeg",
-    "https://i.imgur.com/uOXEJqO.jpeg",
-    "https://i.imgur.com/mHr7KG2.jpeg",
+    # Anime sevgi juft rasmlari — Nekos.best (ishonchli, doim ishlaydi)
+    "https://nekos.best/api/v2/kiss/0001.png",
+    "https://nekos.best/api/v2/kiss/0002.png",
+    "https://nekos.best/api/v2/kiss/0003.png",
+    "https://nekos.best/api/v2/kiss/0004.png",
+    "https://nekos.best/api/v2/kiss/0005.png",
+    "https://nekos.best/api/v2/hug/0001.png",
+    "https://nekos.best/api/v2/hug/0002.png",
+    "https://nekos.best/api/v2/hug/0003.png",
+    "https://nekos.best/api/v2/hug/0004.png",
+    "https://nekos.best/api/v2/hug/0005.png",
+    "https://nekos.best/api/v2/cuddle/0001.png",
+    "https://nekos.best/api/v2/cuddle/0002.png",
+    "https://nekos.best/api/v2/cuddle/0003.png",
+    "https://nekos.best/api/v2/cuddle/0004.png",
+    "https://nekos.best/api/v2/cuddle/0005.png",
 ]
+
+# ── rasm olish ────────────────────────────────────────────────────────────────
+
+def _get_couple_image() -> str:
+    """nekos.best API dan tasodifiy sevgi rasmi URL oladi. Xato bo'lsa — zaxira."""
+    categories = ["kiss", "hug", "cuddle"]
+    cat = random.choice(categories)
+    try:
+        resp = requests.get(f"https://nekos.best/api/v2/{cat}", timeout=5)
+        if resp.ok:
+            data = resp.json()
+            return data["results"][0]["url"]
+    except Exception:
+        pass
+    # Zaxira: statik rasmlar
+    return random.choice(COUPLE_IMAGES)
+
 
 # ── yulduz burjlari ────────────────────────────────────────────────────────────
 ZODIAC_SIGNS = [
@@ -342,7 +366,7 @@ async def ship_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     used = len(_user_ship_times[(chat_id, user_id)])
     text = _build_message(tag1, tag2, name1, name2, love_rate, caption, zodiac1, zodiac2, used)
 
-    image_url = random.choice(COUPLE_IMAGES)
+    image_url = _get_couple_image()
     try:
         await loading_msg.delete()
         await context.bot.send_photo(
