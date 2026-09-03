@@ -37,6 +37,7 @@ from telethon.errors import SessionPasswordNeededError
 import admin_store
 import ai_core
 import game
+import ship
 import sticker_store
 import userbot_manager
 import userbot_store
@@ -90,6 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"tarixni saqlash va yanada boy tajriba shu yerda.\n\n"
         f"/reset — xotirani tozalash\n"
         f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
+        f"/ship — guruhdan tasodifiy juftlik tanlash 💘\n"
         f"/reyting — o'yin reytingi\n"
         f"/stiker — stikerga reply qilib, uni aniq turkumga qo'shish "
         f"(qolganini o'zim guruhda ko'rganimcha yig'ib olaman)\n\n"
@@ -578,6 +580,7 @@ def main():
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     game.register(app)
+    ship.register(app)
 
     ub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(ub_connect_entry, pattern="^ub:connect$")],
