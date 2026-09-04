@@ -38,6 +38,7 @@ import admin_store
 import ai_core
 import game
 import ship
+import fun
 import sticker_store
 import userbot_manager
 import userbot_store
@@ -581,6 +582,7 @@ def main():
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     game.register(app)
     ship.register(app)
+    fun.register(app)
 
     ub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(ub_connect_entry, pattern="^ub:connect$")],
