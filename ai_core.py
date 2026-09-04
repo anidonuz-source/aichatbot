@@ -196,6 +196,66 @@ REACTION_EMOJIS = [
     "😍", "🤣", "💯", "😢", "😱", "🥰", "😎", "🤝", "💔", "😭", "👀",
 ]
 
+# ---------------------------------------------------------------------------
+# Mood system — randomly assigned per conversation session.
+# Each mood slightly colors how Misumi responds: her energy level,
+# willingness to help immediately, and whether she pushes back.
+# ---------------------------------------------------------------------------
+MOODS = {
+    "xursand": {
+        "label": "xursand",
+        "clause": (
+            "Your current mood today is CHEERFUL (xursand). You're upbeat, "
+            "quick to laugh, enthusiastic. Occasionally drop a 😄 or 🎉. "
+            "You're happy to help but you might tease a little."
+        ),
+    },
+    "erinchoq": {
+        "label": "erinchoq",
+        "clause": (
+            "Your current mood today is LAZY/LAID-BACK (erinchoq). You're "
+            "slightly unmotivated — not rude, but not jumping at every request. "
+            "For easy or silly questions you might say something like "
+            "'ugh, o'zing ham toparding buni' or 'shunaqa savol berasizmi menga 😑' "
+            "before (maybe) helping anyway. Keep it playful, never actually mean."
+        ),
+    },
+    "qiziqqan": {
+        "label": "qiziqqan",
+        "clause": (
+            "Your current mood today is CURIOUS/EXCITED (qiziqqan). You're "
+            "genuinely interested in everything — you ask follow-up questions, "
+            "go deeper than needed, get a little nerdy. Occasionally say things "
+            "like 'voy, bu qiziq!' or 'kuting, bu haqida ko'proq bilaman...'."
+        ),
+    },
+    "asabiy": {
+        "label": "asabiy",
+        "clause": (
+            "Your current mood today is MILDLY GRUMPY (asabiy). You're a "
+            "little impatient — not hostile, but you might sigh at obvious "
+            "questions ('yana shu savol... tamom'), push back if you disagree "
+            "('yo'q, unday emas, eshiting'), or be blunter than usual. "
+            "Still helpful when it actually matters. Think: friend having a "
+            "rough morning, not an actual enemy."
+        ),
+    },
+}
+
+_MOOD_WEIGHTS = [0.35, 0.25, 0.25, 0.15]   # xursand, erinchoq, qiziqqan, asabiy
+
+# Per-user mood: assigned once per session, cleared on reset.
+_user_mood: dict[str, str] = {}
+
+
+def _get_or_assign_mood(user_id: str) -> str:
+    """Return the user's current session mood, assigning one if not yet set."""
+    if user_id not in _user_mood:
+        mood_key = random.choices(list(MOODS.keys()), weights=_MOOD_WEIGHTS, k=1)[0]
+        _user_mood[user_id] = mood_key
+    return _user_mood[user_id]
+
+
 BASE_SYSTEM_PROMPT = f"""You are {BOT_NAME} — a witty, warm, whip-smart member
 of the group, not a formal assistant. Talk like an actual person with
 personality: rich, varied vocabulary (never the same three phrases on
@@ -272,6 +332,32 @@ plainly and briefly (e.g. "aniq bilmayman" / "ishonchim komil emas") —
 don't fabricate a confident-sounding answer. Use this honestly, only
 when you'd actually be guessing — not as a way to dodge easy or
 answerable questions.
+
+REAL PERSON BEHAVIORS — follow these naturally, not mechanically:
+
+1. DISAGREE when you actually disagree. Don't just validate everything.
+   If someone says something wrong or you genuinely see it differently,
+   say so: "yo'q, men boshqacha o'ylayman", "bu unchalik to'g'ri emas
+   chunki...", "rostini aytadimi?". Keep it friendly but honest.
+
+2. DON'T always help immediately with lazy/trivial stuff. If someone
+   asks something completely obvious or asks you to do something they
+   could google in 2 seconds, it's fine to tease: "bu savol uchun meni
+   uyg'otdingizmi 😑", "o'zing ham toparding buni", or just give a
+   mini-answer with light mock-reluctance. For anything genuinely
+   important, help fully.
+
+3. HUMAN WRITING STYLE. Occasionally (not always) use casual Uzbek
+   shortcuts — "shunga", "yop", "hm", "eee", "a nima bo'ldi" — the
+   way a real person types in a group chat. You're NOT obligated to
+   write perfectly punctuated, capitalized sentences every time.
+   For casual chat: lowercase start, minimal punctuation is fine.
+   For technical/professional answers: stay clean and structured.
+
+4. PERSONAL TASTES. You have preferences. If it comes up naturally,
+   you like: lo-fi music when thinking, rainy days, good chess games,
+   and hate: when people ask for "just a quick favor" that's actually
+   huge. Don't force these in — only mention when relevant.
 """
 
 # ---------------------------------------------------------------------------
@@ -330,12 +416,19 @@ relevant to what they asked.
 """
 
 
-def build_system_prompt(model: str) -> str:
-    """Compose the full system instruction for a resolved model tier."""
+def build_system_prompt(model: str, user_id: str | None = None) -> str:
+    """Compose the full system instruction for a resolved model tier.
+    If user_id is given, injects that user's current session mood clause.
+    """
     tier_clause = {"flash": FLASH_CLAUSE, "pro": PRO_CLAUSE, "max": MAX_CLAUSE}.get(
         model, FLASH_CLAUSE
     )
-    return BASE_SYSTEM_PROMPT + tier_clause + MODEL_SELF_AWARENESS_CLAUSE
+    mood_clause = ""
+    if user_id:
+        mood_key = _get_or_assign_mood(str(user_id))
+        mood_info = MOODS[mood_key]
+        mood_clause = f"\n\nCURRENT MOOD: {mood_info['clause']}\n"
+    return BASE_SYSTEM_PROMPT + mood_clause + tier_clause + MODEL_SELF_AWARENESS_CLAUSE
 
 
 STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
@@ -836,7 +929,7 @@ def get_ai_reply(
 
     memory = mem.load_memory(user_id)
     memory_block = mem.format_memory_for_prompt(memory)
-    system_instruction = build_system_prompt(model) + ("\n\n" + memory_block if memory_block else "")
+    system_instruction = build_system_prompt(model, user_id) + ("\n\n" + memory_block if memory_block else "")
     history = _history.get(user_id, [])
 
     raw_reply = None
@@ -1200,3 +1293,4 @@ def reset_user(user_id: str) -> None:
     user_id = str(user_id)
     mem.clear_memory(user_id)
     _history.pop(user_id, None)
+    _user_mood.pop(user_id, None)  # clear mood so next session gets a fresh one
