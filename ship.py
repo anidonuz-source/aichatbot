@@ -34,8 +34,12 @@ from pathlib import Path
 from threading import Lock
 
 import requests
-from telegram import Update, InputMediaPhoto
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram.error import BadRequest
+from telegram.ext import (
+    Application, CallbackQueryHandler, CommandHandler, ContextTypes,
+    MessageHandler, filters,
+)
 
 import ai_core
 
@@ -565,6 +569,9 @@ async def ship_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     love_rate = random.randint(1, 99)
     caption = _generate_ship_caption(name1, name2, love_rate, facts1 or None, facts2 or None)
 
+    record_personal_ship(chat_id, p1_id, p2_id, name2, "ship")
+    record_personal_ship(chat_id, p2_id, p1_id, name1, "ship")
+
     _user_ship_times[(chat_id, user_id)].append(now)
     _last_ship_group[chat_id] = now
     _update_leaderboard(chat_id, p1_id, p2_id, name1, name2)
@@ -755,6 +762,175 @@ async def _track_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # ── ro'yxatdan o'tkazish ──────────────────────────────────────────────────────
 
+# ── /members — kim jinsini belgilagan, kim yo'q (admin uchun) ────────────────
+
+async def members_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    message = update.message
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Bu komanda faqat guruhlarda ishlaydi! 👥")
+        return
+
+    try:
+        admins = await context.bot.get_chat_administrators(chat.id)
+        is_admin = any(a.user.id == update.effective_user.id for a in admins)
+        if not is_admin:
+            await message.reply_text("❌ Bu komanda faqat adminlar uchun!")
+            return
+    except Exception:
+        pass
+
+    members = dict(_seen_members.get(chat.id, {}))
+    if not members:
+        await message.reply_text("😅 Hali hech kim bot tomonidan ko'rilmagan.")
+        return
+
+    with_gender, without_gender = [], []
+    for uid, data in members.items():
+        g = get_gender(chat.id, uid)
+        label = f"{'👨' if g == 'erkak' else '👩'} {data['name']}"
+        (with_gender if g else without_gender).append(label if g else f"❓ {data['name']}")
+
+    lines = [f"👥 <b>GURUH A'ZOLARI</b>  (bot ko'rgan: {len(members)})\n"]
+    lines.append(f"✅ Jinsi belgilangan ({len(with_gender)}):")
+    lines.extend(f"  {x}" for x in with_gender) if with_gender else lines.append("  —")
+    lines.append(f"\n❓ Jinsi belgilanmagan ({len(without_gender)}):")
+    lines.extend(f"  {x}" for x in without_gender) if without_gender else lines.append("  —")
+    lines.append("\n💡 Belgilash uchun: <code>/jins erkak</code> yoki <code>/jins ayol</code>")
+
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n… (ro'yxat qisqartirildi)"
+    await message.reply_text(text, parse_mode="HTML")
+
+
+# ── /mywife, /myhusband — o'zining oxirgi ship natijasi ─────────────────────
+# {chat_id: {user_id: {"partner_id": int, "partner_name": str, "kind": str, "when": float}}}
+_last_personal_ship: dict[int, dict[int, dict]] = defaultdict(dict)
+
+
+def record_personal_ship(chat_id: int, uid: int, partner_id: int, partner_name: str, kind: str) -> None:
+    _last_personal_ship[chat_id][uid] = {
+        "partner_id": partner_id, "partner_name": partner_name,
+        "kind": kind, "when": time.time(),
+    }
+
+
+async def mywife_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _my_partner_cmd(update, context, "ayol", "XOTINGIZ")
+
+
+async def myhusband_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _my_partner_cmd(update, context, "erkak", "ERINGIZ")
+
+
+async def _my_partner_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                          want_gender: str, title: str) -> None:
+    chat = update.effective_chat
+    message = update.message
+    user = update.effective_user
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Bu komanda faqat guruhlarda ishlaydi! 👥")
+        return
+
+    entry = _last_personal_ship.get(chat.id, {}).get(user.id)
+    if entry and get_gender(chat.id, entry["partner_id"]) in (want_gender, None):
+        tag = _mention(entry["partner_id"], entry["partner_name"], None)
+        ago = _fmt_time(time.time() - entry["when"])
+        await message.reply_text(
+            f"💍 Sizning oxirgi <b>{title.lower()}</b>ingiz: {tag}\n"
+            f"🕐 {ago} oldin ({entry['kind']} orqali) aniqlangan.",
+            parse_mode="HTML"
+        )
+        return
+
+    await message.reply_text(
+        f"❓ Sizda hali {title.lower()} aniqlanmagan. "
+        f"/erxotin, /dating yoki /ship ishlatib ko'ring!"
+    )
+
+
+# ── Yangi a'zoga avtomatik jins so'rash ──────────────────────────────────────
+
+def _welcome_gender_keyboard(uid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("👨 Erkak", callback_data=f"jins:erkak:{uid}"),
+        InlineKeyboardButton("👩 Ayol", callback_data=f"jins:ayol:{uid}"),
+    ]])
+
+
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.message
+    if not msg or not msg.new_chat_members:
+        return
+    chat = update.effective_chat
+    for member in msg.new_chat_members:
+        if member.is_bot:
+            continue
+        record_member(chat.id, member.id, member.first_name or "", member.username)
+        name = member.first_name or str(member.id)
+        try:
+            await msg.reply_text(
+                f"👋 Xush kelibsiz, <b>{name}</b>!\n\n"
+                f"🎭 /ship, /erxotin kabi o'yinlar to'g'ri ishlashi uchun "
+                f"jinsingizni belgilab qo'ying:",
+                parse_mode="HTML",
+                reply_markup=_welcome_gender_keyboard(member.id)
+            )
+        except Exception as e:
+            print(f"[ship:welcome] {e}")
+
+
+async def jins_button_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = query.from_user
+    chat_id = query.message.chat_id
+    _, gender, target_uid_s = query.data.split(":")
+    target_uid = int(target_uid_s)
+    if user.id != target_uid:
+        await query.answer("Bu tugma sizga tegishli emas! 😅", show_alert=True)
+        return
+    record_member(chat_id, user.id, user.first_name or "", user.username)
+    set_gender(chat_id, user.id, gender)
+    label = "👨 Erkak" if gender == "erkak" else "👩 Ayol"
+    await query.answer(f"Saqlandi: {label}")
+    try:
+        await query.edit_message_text(f"✅ {user.first_name} jinsini belgiladi: <b>{label}</b>", parse_mode="HTML")
+    except BadRequest as e:
+        if "not modified" not in str(e).lower():
+            raise
+
+
+async def setup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/setup — guruhda hali jinsini belgilamagan barchaga tugmali so'rov yuboradi."""
+    chat = update.effective_chat
+    message = update.message
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Bu komanda faqat guruhlarda ishlaydi! 👥")
+        return
+
+    members = dict(_seen_members.get(chat.id, {}))
+    unset = [(uid, data) for uid, data in members.items() if not get_gender(chat.id, uid)]
+
+    if not unset:
+        await message.reply_text("✅ Guruhdagi barcha ma'lum a'zolar jinsini belgilagan!")
+        return
+
+    await message.reply_text(
+        f"🎭 <b>JINS SOZLASH</b>\n\n"
+        f"{len(unset)} ta a'zo hali jinsini belgilamagan. Har kim o'zi uchun tugma bossin 👇",
+        parse_mode="HTML"
+    )
+    for uid, data in unset[:15]:  # bitta xabarda cheklov — flood bo'lmasin
+        try:
+            await message.reply_text(
+                f"👤 {data['name']}, jinsingizni tanlang:",
+                reply_markup=_welcome_gender_keyboard(uid)
+            )
+        except Exception as e:
+            print(f"[ship:setup] {e}")
+
+
 def _register_v1_unused(app: Application) -> None:  # eski, ishlatilmaydi — v2 pastda
     app.add_handler(CommandHandler("ship", ship_cmd))
     app.add_handler(CommandHandler("shipleader", shipleader_cmd))
@@ -919,6 +1095,9 @@ async def erxotin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     bar = _couple_bar(harmony, "💑", "🖤")
     ship_nm = _ship_name(name1, name2)
 
+    record_personal_ship(chat_id, id1, id2, name2, "erxotin")
+    record_personal_ship(chat_id, id2, id1, name1, "erxotin")
+
     _last_ship_group[chat_id] = now
 
     text = (
@@ -1002,6 +1181,9 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     caption = _gen_couple_caption(name1, name2, "dating", facts1 or None, facts2 or None)
     bar = _couple_bar(chemistry, "❤️", "🖤")
     ship_nm = _ship_name(name1, name2)
+
+    record_personal_ship(chat_id, id1, id2, name2, "dating")
+    record_personal_ship(chat_id, id2, id1, name1, "dating")
 
     # Sana tavsiya
     date_ideas = [
@@ -1321,6 +1503,12 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("marriedlist",  marriedlist_cmd))
     app.add_handler(CommandHandler("bestfriend",   bestfriend_cmd))
     app.add_handler(CommandHandler("jins",         jins_cmd))
+    app.add_handler(CommandHandler("members",      members_cmd))
+    app.add_handler(CommandHandler("mywife",       mywife_cmd))
+    app.add_handler(CommandHandler("myhusband",    myhusband_cmd))
+    app.add_handler(CommandHandler("setup",        setup_cmd))
+    app.add_handler(CallbackQueryHandler(jins_button_cb, pattern=r"^jins:"))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, _track_member),
         group=2,
