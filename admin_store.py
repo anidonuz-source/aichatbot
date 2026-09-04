@@ -149,6 +149,28 @@ def get_users(limit: int = 300) -> list[dict]:
     return result[:limit]
 
 
+def get_group_last_seen() -> dict[str, str]:
+    """{chat_id: last_seen} for every GROUP chat Misumi has talked in.
+
+    handle_message() in bot.py calls get_ai_reply(chat_id, ...) for
+    group messages, which in turn calls record_message(chat_id, ...) —
+    so group chats end up tracked in the same 'users' store as regular
+    users. Telegram group/supergroup ids are always negative, while
+    user ids are always positive, so that's used here to filter out
+    private chats without needing a separate store. Used by the idle
+    conversation-starter job to find groups that have gone quiet.
+    """
+    data = _load()
+    out = {}
+    for uid, info in data.get("users", {}).items():
+        try:
+            if int(uid) < 0 and info.get("last_seen"):
+                out[uid] = info["last_seen"]
+        except ValueError:
+            continue
+    return out
+
+
 def get_all_chat_ids() -> list[str]:
     """Every chat/user id Misumi has ever exchanged a message with
     (private chats and groups alike, since record_message is called
