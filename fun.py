@@ -52,6 +52,7 @@ from datetime import datetime, timedelta
 
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 import ai_core
@@ -326,12 +327,34 @@ async def eightball_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ── /rps — Tosh-qaychi-qog'oz (Ko'p kishilik) ────────────────────────────────
+# ── /rps — Tosh-qaychi-qog'oz (Ko'p kishilik + botga qarshi) ─────────────────
 RPS_EMOJI = {"tosh": "🪨", "qaychi": "✂️", "qogoz": "📄"}
 RPS_BEATS = {"tosh": "qaychi", "qaychi": "qogoz", "qogoz": "tosh"}
+RPS_LOBBY_TTL = 300  # 5 daqiqa — javobsiz lobbi shu vaqtdan keyin o'chiriladi
 
-# {chat_id: {game_id: {"players": {user_id: choice|None}, "names": {user_id: name}, "max": int, "msg_id": int}}}
+# {chat_id: {game_id: {"players": {uid: choice|None}, "names": {uid: name},
+#                       "max": int, "starter": int, "created": float}}}
 _rps_lobby: dict[int, dict[str, dict]] = defaultdict(dict)
+
+
+def _rps_purge_stale(chat_id: int) -> None:
+    """RPS_LOBBY_TTL dan eski, hech qachon to'lmagan lobbilarni tozalaydi."""
+    now = time.time()
+    stale = [
+        gid for gid, g in _rps_lobby.get(chat_id, {}).items()
+        if now - g["created"] > RPS_LOBBY_TTL
+    ]
+    for gid in stale:
+        del _rps_lobby[chat_id][gid]
+
+
+async def _rps_safe_edit(query, text: str, reply_markup=None) -> None:
+    """edit_message_text — Telegram 'message is not modified' xatosini yutadi."""
+    try:
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=reply_markup)
+    except BadRequest as e:
+        if "not modified" not in str(e).lower():
+            raise
 
 
 def _rps_status_text(game: dict) -> str:
@@ -347,14 +370,17 @@ def _rps_status_text(game: dict) -> str:
     return "\n".join(lines)
 
 
-def _rps_keyboard(game_id: str) -> InlineKeyboardMarkup:
+def _rps_keyboard(game_id: str, starter_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🪨 Tosh",   callback_data=f"rps:pick:tosh:{game_id}"),
             InlineKeyboardButton("✂️ Qaychi", callback_data=f"rps:pick:qaychi:{game_id}"),
             InlineKeyboardButton("📄 Qog'oz", callback_data=f"rps:pick:qogoz:{game_id}"),
         ],
-        [InlineKeyboardButton("➕ O'yinga qo'shilish", callback_data=f"rps:join:{game_id}")]
+        [
+            InlineKeyboardButton("➕ Qo'shilish", callback_data=f"rps:join:{game_id}"),
+            InlineKeyboardButton("❌ Bekor qilish", callback_data=f"rps:cancel:{game_id}:{starter_id}"),
+        ]
     ])
 
 
@@ -408,11 +434,15 @@ async def rps_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if await _group_only(msg): return
 
-    # Nechta kishilik tanlash
+    _rps_purge_stale(msg.chat_id)
+
+    # Nechta kishilik tanlash (botga qarshi yakka o'yin ham bor)
     await msg.reply_text(
         "🪨✂️📄 <b>TOSH-QAYCHI-QO'G'OZ</b>\n\nNechta kishilik o'yin?",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🤖 Botga qarshi", callback_data=f"rps:bot:{msg.from_user.id}"),
+        ],[
             InlineKeyboardButton("👤👤 2 kishilik", callback_data=f"rps:new:2:{msg.from_user.id}"),
             InlineKeyboardButton("👤👤👤 3 kishilik", callback_data=f"rps:new:3:{msg.from_user.id}"),
         ],[
@@ -427,34 +457,87 @@ async def rps_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = query.from_user
     chat_id = query.message.chat_id
     parts = query.data.split(":")
+    action = parts[1]
 
-    # ── Yangi o'yin yaratish ──────────────────────────────────────────────────
-    if parts[1] == "new":
+    # ── Botga qarshi yakka o'yin ─────────────────────────────────────────────
+    if action == "bot":
+        starter_id = int(parts[2])
+        if user.id != starter_id:
+            await query.answer("Bu sizning o'yiningiz emas! 😅", show_alert=True)
+            return
+        await query.answer()
+        await query.edit_message_text(
+            "🤖 <b>BOTGA QARSHI</b>\n\nTanlovingizni qiling 👇",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🪨 Tosh",   callback_data=f"rps:vsbot:tosh:{starter_id}"),
+                InlineKeyboardButton("✂️ Qaychi", callback_data=f"rps:vsbot:qaychi:{starter_id}"),
+                InlineKeyboardButton("📄 Qog'oz", callback_data=f"rps:vsbot:qogoz:{starter_id}"),
+            ]])
+        )
+        return
+
+    if action == "vsbot":
+        choice = parts[2]
+        starter_id = int(parts[3])
+        if user.id != starter_id:
+            await query.answer("Bu sizning o'yiningiz emas! 😅", show_alert=True)
+            return
+        bot_choice = random.choice(list(RPS_EMOJI))
+        if choice == bot_choice:
+            verdict = "🤝 <b>DURRANG!</b>"
+        elif RPS_BEATS[choice] == bot_choice:
+            verdict = "🏆 <b>SIZ YUTDINGIZ!</b>"
+        else:
+            verdict = "💀 <b>BOT YUTDI!</b>"
+        await query.answer(f"{RPS_EMOJI[choice]} vs {RPS_EMOJI[bot_choice]}")
+        await query.edit_message_text(
+            f"🤖 <b>BOTGA QARSHI — NATIJA</b>\n\n"
+            f"Siz: {RPS_EMOJI[choice]} {choice}\n"
+            f"Bot: {RPS_EMOJI[bot_choice]} {bot_choice}\n\n{verdict}",
+            parse_mode="HTML"
+        )
+        return
+
+    # ── Yangi ko'p kishilik o'yin yaratish ───────────────────────────────────
+    if action == "new":
         max_p = int(parts[2])
         starter_id = int(parts[3])
         if user.id != starter_id:
             await query.answer("Faqat boshlagan kishi tanlaydi! 😅", show_alert=True)
             return
 
+        _rps_purge_stale(chat_id)
         import uuid as _uuid
         game_id = _uuid.uuid4().hex[:8]
         game = {
             "players": {user.id: None},
             "names": {user.id: user.first_name or str(user.id)},
             "max": max_p,
-            "chat_id": chat_id,
+            "starter": user.id,
+            "created": time.time(),
         }
         _rps_lobby[chat_id][game_id] = game
 
-        await query.edit_message_text(
-            _rps_status_text(game),
-            parse_mode="HTML",
-            reply_markup=_rps_keyboard(game_id)
-        )
+        await _rps_safe_edit(query, _rps_status_text(game), _rps_keyboard(game_id, user.id))
         await query.answer("O'yin yaratildi! Do'stlarni kutmoqda...")
 
+    # ── O'yinni bekor qilish ─────────────────────────────────────────────────
+    elif action == "cancel":
+        game_id, starter_id = parts[2], int(parts[3])
+        game = _rps_lobby.get(chat_id, {}).get(game_id)
+        if not game:
+            await query.answer("O'yin allaqachon tugagan!", show_alert=True)
+            return
+        if user.id != game["starter"]:
+            await query.answer("Faqat o'yin boshlovchisi bekor qila oladi! 😅", show_alert=True)
+            return
+        del _rps_lobby[chat_id][game_id]
+        await _rps_safe_edit(query, "❌ <b>O'yin bekor qilindi.</b>")
+        await query.answer("Bekor qilindi.")
+
     # ── O'yinga qo'shilish ────────────────────────────────────────────────────
-    elif parts[1] == "join":
+    elif action == "join":
         game_id = parts[2]
         game = _rps_lobby.get(chat_id, {}).get(game_id)
         if not game:
@@ -469,15 +552,11 @@ async def rps_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         game["players"][user.id] = None
         game["names"][user.id] = user.first_name or str(user.id)
-        await query.edit_message_text(
-            _rps_status_text(game),
-            parse_mode="HTML",
-            reply_markup=_rps_keyboard(game_id)
-        )
+        await _rps_safe_edit(query, _rps_status_text(game), _rps_keyboard(game_id, game["starter"]))
         await query.answer("Qo'shildingiz! Endi tanlang 👆")
 
     # ── Tanlov qilish ─────────────────────────────────────────────────────────
-    elif parts[1] == "pick":
+    elif action == "pick":
         choice = parts[2]
         game_id = parts[3]
         game = _rps_lobby.get(chat_id, {}).get(game_id)
@@ -494,29 +573,17 @@ async def rps_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Hamma tanlovi qilganmi?
         if all(game["players"].values()) and len(game["players"]) == game["max"]:
             result = _rps_resolve(game)
-            # Natija xabarini ko'rsatish
             details = "\n\n📋 <b>Barcha tanlovlar:</b>\n"
             for uid, ch in game["players"].items():
                 details += f"  {game['names'][uid]}: {RPS_EMOJI[ch]} {ch}\n"
-            await query.edit_message_text(
-                f"🪨✂️📄 <b>O'YIN TUGADI!</b>\n\n{result}{details}",
-                parse_mode="HTML"
-            )
+            await _rps_safe_edit(query, f"🪨✂️📄 <b>O'YIN TUGADI!</b>\n\n{result}{details}")
             del _rps_lobby[chat_id][game_id]
         else:
-            await query.edit_message_text(
-                _rps_status_text(game),
-                parse_mode="HTML",
-                reply_markup=_rps_keyboard(game_id)
-            )
+            await _rps_safe_edit(query, _rps_status_text(game), _rps_keyboard(game_id, game["starter"]))
 
-    # ── Eski bot-vs-user format (fallback) ────────────────────────────────────
+    # ── Eski / noma'lum format (fallback) ────────────────────────────────────
     else:
         await query.answer("Eski format, /rps qaytadan bosing!", show_alert=True)
-
-
-# PLACEHOLDER
-_RPS_END = True
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
