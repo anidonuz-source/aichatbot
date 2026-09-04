@@ -192,7 +192,61 @@ def record_member(chat_id: int, user_id: int, first_name: str, username: str | N
         "username": username,
         "last": time.time(),
         "zodiac": _seen_members[chat_id].get(user_id, {}).get("zodiac", random.randint(0, 11)),
+        "gender": _seen_members[chat_id].get(user_id, {}).get("gender"),
     }
+
+
+def set_gender(chat_id: int, user_id: int, gender: str) -> None:
+    """gender: 'erkak' | 'ayol'. Xotirada va diskda saqlanadi."""
+    if user_id in _seen_members.get(chat_id, {}):
+        _seen_members[chat_id][user_id]["gender"] = gender
+    facts = load_member_facts(chat_id, user_id)
+    facts["jins"] = gender
+    save_member_facts(chat_id, user_id, facts)
+
+
+def get_gender(chat_id: int, user_id: int) -> str | None:
+    cached = _seen_members.get(chat_id, {}).get(user_id, {}).get("gender")
+    if cached:
+        return cached
+    facts = load_member_facts(chat_id, user_id)
+    g = facts.get("jins")
+    if g in ("erkak", "ayol") and user_id in _seen_members.get(chat_id, {}):
+        _seen_members[chat_id][user_id]["gender"] = g
+    return g if g in ("erkak", "ayol") else None
+
+
+def _members_by_gender(chat_id: int, gender: str, exclude: set | None = None) -> dict:
+    exclude = exclude or set()
+    out = {}
+    for uid, data in _seen_members.get(chat_id, {}).items():
+        if uid in exclude:
+            continue
+        if get_gender(chat_id, uid) == gender:
+            out[uid] = data
+    return out
+
+
+async def jins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/jins erkak yoki /jins ayol — o'z jinsingizni belgilaysiz (er-xotin/wife-husband
+    to'g'ri ishlashi uchun kerak)."""
+    msg = update.message
+    chat = update.effective_chat
+    user = update.effective_user
+    args = context.args
+    if not args or args[0].lower() not in ("erkak", "ayol"):
+        await msg.reply_text(
+            "❓ Foydalanish: <code>/jins erkak</code> yoki <code>/jins ayol</code>\n\n"
+            "Bu ma'lumot /erxotin, /dating, /husband, /wife kabi komandalar "
+            "to'g'ri juftlik tanlashi uchun kerak.",
+            parse_mode="HTML"
+        )
+        return
+    gender = args[0].lower()
+    record_member(chat.id, user.id, user.first_name, user.username)
+    set_gender(chat.id, user.id, gender)
+    label = "👨 Erkak" if gender == "erkak" else "👩 Ayol"
+    await msg.reply_text(f"✅ Jinsingiz saqlandi: <b>{label}</b>", parse_mode="HTML")
 
 
 def _mention(user_id: int, name: str, username: str | None) -> str:
@@ -685,7 +739,7 @@ async def _track_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # ── ro'yxatdan o'tkazish ──────────────────────────────────────────────────────
 
-def register(app: Application) -> None:
+def _register_v1_unused(app: Application) -> None:  # eski, ishlatilmaydi — v2 pastda
     app.add_handler(CommandHandler("ship", ship_cmd))
     app.add_handler(CommandHandler("shipleader", shipleader_cmd))
     app.add_handler(CommandHandler("shipfact", shipfact_cmd))
@@ -776,6 +830,21 @@ def _pick_two(chat_id: int, context_bot=None) -> tuple | None:
     return id1, id2, members[id1], members[id2]
 
 
+def _pick_gendered_pair(chat_id: int) -> tuple | None:
+    """Iloji bo'lsa 1 ta erkak + 1 ta ayol tanlaydi (jinsi belgilangan a'zolardan).
+    Yetarli gender ma'lumoti bo'lmasa None qaytaradi — chaqiruvchi _pick_two ga
+    o'tishi kerak."""
+    males = _members_by_gender(chat_id, "erkak")
+    females = _members_by_gender(chat_id, "ayol")
+    if not males or not females:
+        return None
+    m_id = random.choice(list(males.keys()))
+    f_id = random.choice(list(females.keys()))
+    if m_id == f_id:  # bir xil odam ikkala ro'yxatda bo'lishi mumkin emas, lekin ehtiyot chorasi
+        return None
+    return m_id, f_id, males[m_id], females[f_id]
+
+
 def _couple_bar(rate: int, char_on: str = "💗", char_off: str = "🖤") -> str:
     filled = round(rate / 10)
     return char_on * filled + char_off * (10 - filled)
@@ -807,12 +876,21 @@ async def erxotin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     loading = await message.reply_text("👫 Er-xotin tanlanmoqda...")
 
-    picked = _pick_two(chat_id)
-    if not picked:
-        await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
-        return
-
-    id1, id2, m1, m2 = picked
+    picked = _pick_gendered_pair(chat_id)
+    gender_note = ""
+    if picked:
+        id1, id2, m1, m2 = picked  # id1=erkak, id2=ayol — kafolatlangan
+    else:
+        picked = _pick_two(chat_id)
+        if not picked:
+            await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
+            return
+        id1, id2, m1, m2 = picked
+        gender_note = (
+            "\n\n⚠️ <i>Jins ma'lumoti yetarli emas — tasodifiy tanlandi. "
+            "To'g'ri natija uchun har kim <code>/jins erkak</code> yoki "
+            "<code>/jins ayol</code> yozsin.</i>"
+        )
     name1, name2 = m1["name"], m2["name"]
     tag1 = _mention(id1, name1, m1.get("username"))
     tag2 = _mention(id2, name2, m2.get("username"))
@@ -839,7 +917,7 @@ async def erxotin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"{bar}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💬 <i>{caption}</i>\n\n"
-        f"🏠 Baxtli oilaviy hayot tilaymiz!"
+        f"🏠 Baxtli oilaviy hayot tilaymiz!{gender_note}"
     )
 
     image_url = _get_couple_image()
@@ -882,12 +960,21 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     ]
     loading = await message.reply_text(random.choice(loading_texts))
 
-    picked = _pick_two(chat_id)
-    if not picked:
-        await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
-        return
-
-    id1, id2, m1, m2 = picked
+    picked = _pick_gendered_pair(chat_id)
+    gender_note = ""
+    if picked:
+        id1, id2, m1, m2 = picked  # id1=yigit, id2=qiz — kafolatlangan
+    else:
+        picked = _pick_two(chat_id)
+        if not picked:
+            await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
+            return
+        id1, id2, m1, m2 = picked
+        gender_note = (
+            "\n\n⚠️ <i>Jins ma'lumoti yetarli emas — tasodifiy tanlandi. "
+            "To'g'ri natija uchun har kim <code>/jins erkak</code> yoki "
+            "<code>/jins ayol</code> yozsin.</i>"
+        )
     name1, name2 = m1["name"], m2["name"]
     tag1 = _mention(id1, name1, m1.get("username"))
     tag2 = _mention(id2, name2, m2.get("username"))
@@ -931,7 +1018,7 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💡 Sana g'oyasi: {date_idea}\n\n"
         f"💬 <i>{caption}</i>\n\n"
-        f"🌹 Omad! Bu guruh shohidi bo'ldi!"
+        f"🌹 Omad! Bu guruh shohidi bo'ldi!{gender_note}"
     )
 
     image_url = _get_couple_image()
@@ -1072,6 +1159,106 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ── /marriedlist — nikoh bo'lganlar ro'yxati ─────────────────────────────────
 
+_BESTFRIEND_COOLDOWN = 60
+_last_bestfriend_group: dict[int, float] = {}
+
+BESTFRIEND_FALLBACKS = [
+    "Bu ikkovi bir-birining sirini hech kimga aytmaydi! 🤫",
+    "Til topishgan juft — biri gapirmasa ham, biri tushunadi! 🧠",
+    "Do'stlik shu — birga kulish, birga qiyinchilikni yengish! 💪",
+    "Hayotdagi eng zo'r ittifoq shu ikkovida! 🔥",
+]
+
+
+def _generate_bestfriend_caption(name1: str, name2: str,
+                                  facts1: dict | None = None, facts2: dict | None = None) -> str:
+    instruction = (
+        f"Sen Misumi AI — Telegram guruhidagi hazilkash botsan. "
+        f"Ikki kishini eng yaqin do'st (romantik EMAS, sof do'stlik) deb e'lon qiluvchi "
+        f"BITTA qisqa gap yoz (1-2 jumla, o'zbek tili, norasmiy, iliq va hazil aralash). "
+        f"Agar ular haqida ma'lumot berilsa — aqlli ishlatgin. "
+        f"Ularning ismini takrorlama. FAQAT izoh matnini yoz."
+    )
+    ctx = [f"Do'stlar: {name1} + {name2}."]
+    if facts1:
+        ctx.append(format_member_facts(facts1, name1))
+    if facts2:
+        ctx.append(format_member_facts(facts2, name2))
+
+    try:
+        for call in (ai_core._call_cerebras, ai_core._call_gemini, ai_core._call_groq):
+            try:
+                text = call(
+                    ai_core.GENERAL_CHAT_PERSONA + "\n\n" + instruction,
+                    [], "\n".join(ctx)
+                ).strip().strip('"').strip("'")
+                if text and len(text) > 5:
+                    return text
+            except Exception as e:
+                print(f"[ship:bestfriend_caption:{call.__name__}] {e}")
+    except Exception:
+        pass
+    return random.choice(BESTFRIEND_FALLBACKS)
+
+
+# ── /bestfriend — tasodifiy eng yaqin do'st (romantik emas) ─────────────────
+
+async def bestfriend_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Guruhdan tasodifiy 2 a'zoni 'eng yaqin do'st' qilib e'lon qiladi."""
+    chat = update.effective_chat
+    message = update.message
+
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Bu komanda faqat guruhlarda ishlaydi! 👥")
+        return
+
+    chat_id = chat.id
+    now = time.time()
+
+    last = _last_bestfriend_group.get(chat_id, 0)
+    remaining = _BESTFRIEND_COOLDOWN - (now - last)
+    if remaining > 0:
+        await message.reply_text(
+            f"⏳ Keyingi <b>/bestfriend</b> uchun <b>{_fmt_time(remaining)}</b> kuting.",
+            parse_mode="HTML"
+        )
+        return
+
+    pair = _pick_two(chat_id, context.bot)
+    if pair is None:
+        await message.reply_text(
+            "😅 Guruhda yetarli a'zo yo'q! Avval odamlar yozishsin, keyin urinib ko'ring."
+        )
+        return
+
+    id1, id2, m1, m2 = pair
+    _last_bestfriend_group[chat_id] = now
+
+    loading = await message.reply_text("🧠 Eng yaqin do'st qidirilmoqda...")
+
+    name1, name2 = m1["name"], m2["name"]
+    facts1 = load_member_facts(chat_id, id1)
+    facts2 = load_member_facts(chat_id, id2)
+    caption = _generate_bestfriend_caption(name1, name2, facts1, facts2)
+
+    match_rate = random.randint(60, 99)
+    bar = _couple_bar(match_rate, char_on="🤝", char_off="⬜")
+    mention1 = _mention(id1, name1, m1.get("username"))
+    mention2 = _mention(id2, name2, m2.get("username"))
+
+    text = (
+        f"🧠 <b>ENG YAQIN DO'STLAR</b>\n\n"
+        f"{mention1}  🤝  {mention2}\n\n"
+        f"Do'stlik darajasi: <b>{match_rate}%</b>\n{bar}\n\n"
+        f"💬 {caption}"
+    )
+    try:
+        await loading.delete()
+    except Exception:
+        pass
+    await message.reply_text(text, parse_mode="HTML")
+
+
 async def marriedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Guruhda /marry bilan nikohlanganlar ro'yxati."""
     chat = update.effective_chat
@@ -1107,7 +1294,7 @@ async def marriedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ── register yangilanishi ─────────────────────────────────────────────────────
 # (eski register() ni o'chirib, yangi to'liq versiyasi bilan almashtiramiz)
 
-def register(app: Application) -> None:  # noqa: F811 — qayta yozilmoqda
+def register(app: Application) -> None:
     app.add_handler(CommandHandler("ship",         ship_cmd))
     app.add_handler(CommandHandler("shipleader",   shipleader_cmd))
     app.add_handler(CommandHandler("shipfact",     shipfact_cmd))
@@ -1116,6 +1303,8 @@ def register(app: Application) -> None:  # noqa: F811 — qayta yozilmoqda
     app.add_handler(CommandHandler("dating",       dating_cmd))
     app.add_handler(CommandHandler("marry",        marry_cmd))
     app.add_handler(CommandHandler("marriedlist",  marriedlist_cmd))
+    app.add_handler(CommandHandler("bestfriend",   bestfriend_cmd))
+    app.add_handler(CommandHandler("jins",         jins_cmd))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, _track_member),
         group=2,
