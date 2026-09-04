@@ -326,47 +326,197 @@ async def eightball_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ── /rps — Tosh-qaychi-qog'oz ────────────────────────────────────────────────
+# ── /rps — Tosh-qaychi-qog'oz (Ko'p kishilik) ────────────────────────────────
 RPS_EMOJI = {"tosh": "🪨", "qaychi": "✂️", "qogoz": "📄"}
 RPS_BEATS = {"tosh": "qaychi", "qaychi": "qogoz", "qogoz": "tosh"}
+
+# {chat_id: {game_id: {"players": {user_id: choice|None}, "names": {user_id: name}, "max": int, "msg_id": int}}}
+_rps_lobby: dict[int, dict[str, dict]] = defaultdict(dict)
+
+
+def _rps_status_text(game: dict) -> str:
+    joined = len(game["players"])
+    max_p = game["max"]
+    lines = [f"🪨✂️📄 <b>TOSH-QAYCHI-QO'G'OZ</b>  ({joined}/{max_p} o'yinchi)\n"]
+    for uid, choice in game["players"].items():
+        name = game["names"][uid]
+        status = "✅ Tanladi" if choice else "⏳ Kutmoqda..."
+        lines.append(f"• {name} — {status}")
+    ready = "▶️ Hamma tayyor!" if joined == max_p and all(game["players"].values()) else "👇 Qo'shiling va tanlang!"
+    lines.append(f"\n{ready}")
+    return "\n".join(lines)
+
+
+def _rps_keyboard(game_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🪨 Tosh",   callback_data=f"rps:pick:tosh:{game_id}"),
+            InlineKeyboardButton("✂️ Qaychi", callback_data=f"rps:pick:qaychi:{game_id}"),
+            InlineKeyboardButton("📄 Qog'oz", callback_data=f"rps:pick:qogoz:{game_id}"),
+        ],
+        [InlineKeyboardButton("➕ O'yinga qo'shilish", callback_data=f"rps:join:{game_id}")]
+    ])
+
+
+def _rps_resolve(game: dict) -> str:
+    """O'yin natijasini hisoblaydi."""
+    players = game["players"]  # {uid: choice}
+    names = game["names"]
+    choices = list(players.values())
+    uids = list(players.keys())
+
+    # Hammaning tanlovi bir xil → durrang
+    if len(set(choices)) == 1:
+        return "🤝 <b>DURRANG!</b> Hamma bir xil tanladi!"
+
+    # G'oliblarni topish
+    winners = []
+    losers = []
+    for uid, choice in players.items():
+        beats_someone = any(
+            RPS_BEATS[choice] == other_choice
+            for other_uid, other_choice in players.items()
+            if other_uid != uid
+        )
+        beaten_by_someone = any(
+            RPS_BEATS[other_choice] == choice
+            for other_uid, other_choice in players.items()
+            if other_uid != uid
+        )
+        if beats_someone and not beaten_by_someone:
+            winners.append(uid)
+        elif beaten_by_someone and not beats_someone:
+            losers.append(uid)
+
+    if not winners:
+        return "🤝 <b>DURRANG!</b> Hech kim yutmadi!"
+
+    lines = ["🏆 <b>NATIJALAR:</b>\n"]
+    for uid, choice in players.items():
+        em = RPS_EMOJI[choice]
+        name = names[uid]
+        if uid in winners:
+            lines.append(f"🥇 {name}: {em} {choice} — <b>YUTDI!</b>")
+        elif uid in losers:
+            lines.append(f"💀 {name}: {em} {choice} — yutqazdi")
+        else:
+            lines.append(f"🤝 {name}: {em} {choice} — durrang")
+    return "\n".join(lines)
+
 
 async def rps_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if await _group_only(msg): return
-    sent = await msg.reply_text(
-        "🪨✂️📄 <b>TOSH-QAYCHI-QO'G'OZ</b>\n\nTanlang!",
+
+    # Nechta kishilik tanlash
+    await msg.reply_text(
+        "🪨✂️📄 <b>TOSH-QAYCHI-QO'G'OZ</b>\n\nNechta kishilik o'yin?",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🪨 Tosh", callback_data=f"rps:tosh:{msg.from_user.id}"),
-            InlineKeyboardButton("✂️ Qaychi", callback_data=f"rps:qaychi:{msg.from_user.id}"),
-            InlineKeyboardButton("📄 Qog'oz", callback_data=f"rps:qogoz:{msg.from_user.id}"),
+            InlineKeyboardButton("👤👤 2 kishilik", callback_data=f"rps:new:2:{msg.from_user.id}"),
+            InlineKeyboardButton("👤👤👤 3 kishilik", callback_data=f"rps:new:3:{msg.from_user.id}"),
+        ],[
+            InlineKeyboardButton("4 kishilik", callback_data=f"rps:new:4:{msg.from_user.id}"),
+            InlineKeyboardButton("5 kishilik", callback_data=f"rps:new:5:{msg.from_user.id}"),
         ]])
     )
 
 
 async def rps_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    _, choice, starter_id_str = query.data.split(":")
-    if str(query.from_user.id) != starter_id_str:
-        await query.answer("Bu sizning o'yiningiz emas! 😅", show_alert=True)
-        return
-    bot_choice = random.choice(list(RPS_BEATS.keys()))
-    user_em = RPS_EMOJI[choice]
-    bot_em = RPS_EMOJI[bot_choice]
-    if RPS_BEATS[choice] == bot_choice:
-        result = "🏆 Siz yutdingiz!"
-    elif RPS_BEATS[bot_choice] == choice:
-        result = "🤖 Bot yutdi!"
+    user = query.from_user
+    chat_id = query.message.chat_id
+    parts = query.data.split(":")
+
+    # ── Yangi o'yin yaratish ──────────────────────────────────────────────────
+    if parts[1] == "new":
+        max_p = int(parts[2])
+        starter_id = int(parts[3])
+        if user.id != starter_id:
+            await query.answer("Faqat boshlagan kishi tanlaydi! 😅", show_alert=True)
+            return
+
+        import uuid as _uuid
+        game_id = _uuid.uuid4().hex[:8]
+        game = {
+            "players": {user.id: None},
+            "names": {user.id: user.first_name or str(user.id)},
+            "max": max_p,
+            "chat_id": chat_id,
+        }
+        _rps_lobby[chat_id][game_id] = game
+
+        await query.edit_message_text(
+            _rps_status_text(game),
+            parse_mode="HTML",
+            reply_markup=_rps_keyboard(game_id)
+        )
+        await query.answer("O'yin yaratildi! Do'stlarni kutmoqda...")
+
+    # ── O'yinga qo'shilish ────────────────────────────────────────────────────
+    elif parts[1] == "join":
+        game_id = parts[2]
+        game = _rps_lobby.get(chat_id, {}).get(game_id)
+        if not game:
+            await query.answer("Bu o'yin topilmadi yoki tugagan! 😅", show_alert=True)
+            return
+        if user.id in game["players"]:
+            await query.answer("Siz allaqachon o'yindasiz! Tanlovingizni qiling 👇", show_alert=True)
+            return
+        if len(game["players"]) >= game["max"]:
+            await query.answer("O'yin to'ldi! Keyingi safar 😅", show_alert=True)
+            return
+
+        game["players"][user.id] = None
+        game["names"][user.id] = user.first_name or str(user.id)
+        await query.edit_message_text(
+            _rps_status_text(game),
+            parse_mode="HTML",
+            reply_markup=_rps_keyboard(game_id)
+        )
+        await query.answer("Qo'shildingiz! Endi tanlang 👆")
+
+    # ── Tanlov qilish ─────────────────────────────────────────────────────────
+    elif parts[1] == "pick":
+        choice = parts[2]
+        game_id = parts[3]
+        game = _rps_lobby.get(chat_id, {}).get(game_id)
+        if not game:
+            await query.answer("O'yin topilmadi! 😅", show_alert=True)
+            return
+        if user.id not in game["players"]:
+            await query.answer("Siz bu o'yinda emassiz! ➕ bosing.", show_alert=True)
+            return
+
+        game["players"][user.id] = choice
+        await query.answer(f"{RPS_EMOJI[choice]} Tanladingiz! Boshqalarni kutmoqda...")
+
+        # Hamma tanlovi qilganmi?
+        if all(game["players"].values()) and len(game["players"]) == game["max"]:
+            result = _rps_resolve(game)
+            # Natija xabarini ko'rsatish
+            details = "\n\n📋 <b>Barcha tanlovlar:</b>\n"
+            for uid, ch in game["players"].items():
+                details += f"  {game['names'][uid]}: {RPS_EMOJI[ch]} {ch}\n"
+            await query.edit_message_text(
+                f"🪨✂️📄 <b>O'YIN TUGADI!</b>\n\n{result}{details}",
+                parse_mode="HTML"
+            )
+            del _rps_lobby[chat_id][game_id]
+        else:
+            await query.edit_message_text(
+                _rps_status_text(game),
+                parse_mode="HTML",
+                reply_markup=_rps_keyboard(game_id)
+            )
+
+    # ── Eski bot-vs-user format (fallback) ────────────────────────────────────
     else:
-        result = "🤝 Durrang!"
-    await query.answer()
-    await query.edit_message_text(
-        f"🪨✂️📄 <b>NATIJA</b>\n\n"
-        f"Siz: {user_em} {choice.capitalize()}\n"
-        f"Bot: {bot_em} {bot_choice.capitalize()}\n\n"
-        f"<b>{result}</b>",
-        parse_mode="HTML"
-    )
+        await query.answer("Eski format, /rps qaytadan bosing!", show_alert=True)
+
+
+# PLACEHOLDER
+_RPS_END = True
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
