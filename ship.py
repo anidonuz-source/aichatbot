@@ -694,3 +694,429 @@ def register(app: Application) -> None:
         MessageHandler(filters.TEXT & ~filters.COMMAND, _track_member),
         group=2,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# YANGI KOMANDALAR: /couple, /dating, /marry
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Yodlangan juftliklar (marry bo'lganlar) ───────────────────────────────────
+_married_couples: dict[int, list[dict]] = defaultdict(list)   # {chat_id: [{id1,id2,name1,name2,date}]}
+_dating_couples:  dict[int, list[dict]] = defaultdict(list)   # {chat_id: [{id1,id2,...}]}
+
+
+# ── AI caption generatorlar ───────────────────────────────────────────────────
+
+def _gen_couple_caption(name1: str, name2: str, kind: str,
+                        facts1: dict | None = None, facts2: dict | None = None) -> str:
+    """
+    kind: 'married' | 'dating' | 'erxotin'
+    """
+    tone_map = {
+        "married":  "romantik va issiq, nikohni muboraklab",
+        "dating":   "yengil hazil, qiziqarli, ko'ngilxush",
+        "erxotin":  "kulgili va mehribon, oilaviy hayotni tasvirlagan",
+    }
+    tone = tone_map.get(kind, "romantik")
+    instruction = (
+        f"Sen Misumi AI — Telegram guruhidagi hazilkash botsan. "
+        f"Ikki kishini {kind} qilib e'lon qiluvchi BITTA qisqa gap yoz "
+        f"(1-2 jumla, o'zbek tili, norasmiy, {tone}). "
+        f"Agar ular haqida ma'lumot berilsa — aqlli ishlatgin. "
+        f"Ularning ismini takrorlama. FAQAT izoh matnini yoz."
+    )
+    ctx = [f"Juft: {name1} + {name2}."]
+    if facts1:
+        ctx.append(format_member_facts(facts1, name1))
+    if facts2:
+        ctx.append(format_member_facts(facts2, name2))
+
+    fallbacks_map = {
+        "married": [
+            "Bugun eng baxtli kun — ikkovi birga! 💍",
+            "Nikoh muborak, yangi oila! 🎊",
+            "Yulduzlar bu juftni allaqachon tanlagan edi! ✨",
+        ],
+        "dating": [
+            "Yangi sevgi boshlanmoqda! 🌹",
+            "Bugun birinchi sana, ertaga — kim biladi! 😏",
+            "Bu guruhda yangi juft paydo bo'ldi! 💘",
+        ],
+        "erxotin": [
+            "Bugun bu guruhda yangi oila tuzildi! 🏠",
+            "Er-xotin bo'lishdi — endi bahslashish boshlandi! 😄",
+            "Oila qurish oson, oilani saqlash — mana bu ish! 💪",
+        ],
+    }
+    fallbacks = fallbacks_map.get(kind, ["Baxt tilaymiz! 💕"])
+
+    try:
+        for call in (ai_core._call_cerebras, ai_core._call_gemini, ai_core._call_groq):
+            try:
+                text = call(
+                    ai_core.GENERAL_CHAT_PERSONA + "\n\n" + instruction,
+                    [], "\n".join(ctx)
+                ).strip().strip('"').strip("'")
+                if text and len(text) > 5:
+                    return text
+            except Exception as e:
+                print(f"[ship:couple_caption:{call.__name__}] {e}")
+    except Exception:
+        pass
+    return random.choice(fallbacks)
+
+
+def _pick_two(chat_id: int, context_bot=None) -> tuple | None:
+    """Guruhdan 2 ta tasodifiy a'zo tanlaydi. None qaytarsa — a'zo yetarli emas."""
+    members = dict(_seen_members.get(chat_id, {}))
+    if len(members) < 2:
+        return None
+    ids = list(members.keys())
+    id1, id2 = random.sample(ids, 2)
+    return id1, id2, members[id1], members[id2]
+
+
+def _couple_bar(rate: int, char_on: str = "💗", char_off: str = "🖤") -> str:
+    filled = round(rate / 10)
+    return char_on * filled + char_off * (10 - filled)
+
+
+# ── /erxotin — tasodifiy er-xotin ────────────────────────────────────────────
+
+async def erxotin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Guruhdan tasodifiy er va xotin tanlaydi."""
+    chat = update.effective_chat
+    message = update.message
+
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Faqat guruhlarda ishlaydi! 👥")
+        return
+
+    chat_id = chat.id
+    now = time.time()
+
+    # Cooldown (ship bilan baham ko'radi)
+    last_group = _last_ship_group.get(chat_id, 0)
+    remaining = GROUP_COOLDOWN - (now - last_group)
+    if remaining > 0:
+        await message.reply_text(
+            f"⏳ <b>Guruh limiti!</b> <b>{_fmt_time(remaining)}</b> kuting.",
+            parse_mode="HTML"
+        )
+        return
+
+    loading = await message.reply_text("👫 Er-xotin tanlanmoqda...")
+
+    picked = _pick_two(chat_id)
+    if not picked:
+        await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
+        return
+
+    id1, id2, m1, m2 = picked
+    name1, name2 = m1["name"], m2["name"]
+    tag1 = _mention(id1, name1, m1.get("username"))
+    tag2 = _mention(id2, name2, m2.get("username"))
+
+    facts1 = load_member_facts(chat_id, id1)
+    facts2 = load_member_facts(chat_id, id2)
+
+    harmony = random.randint(50, 99)
+    caption = _gen_couple_caption(name1, name2, "erxotin", facts1 or None, facts2 or None)
+    bar = _couple_bar(harmony, "💑", "🖤")
+    ship_nm = _ship_name(name1, name2)
+
+    _last_ship_group[chat_id] = now
+
+    text = (
+        f"╔══════════════════════╗\n"
+        f"║  🏠  ER-XOTIN TANLOVI  🏠  ║\n"
+        f"╚══════════════════════╝\n\n"
+        f"👨 Er: {tag1}\n"
+        f"👩 Xotin: {tag2}\n\n"
+        f"🏷 Oila nomi: <b>{ship_nm} oilasi</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🤝 Uyg'unlik: <b>{harmony}%</b>\n"
+        f"{bar}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💬 <i>{caption}</i>\n\n"
+        f"🏠 Baxtli oilaviy hayot tilaymiz!"
+    )
+
+    image_url = _get_couple_image()
+    try:
+        await loading.delete()
+        await context.bot.send_photo(chat_id=chat_id, photo=image_url,
+                                     caption=text, parse_mode="HTML")
+    except Exception as e:
+        print(f"[erxotin:photo] {e}")
+        await loading.edit_text(text, parse_mode="HTML")
+
+
+# ── /dating — tasodifiy yigit-qiz juft ───────────────────────────────────────
+
+async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Guruhdan tasodifiy yigit + qiz juft tanlaydi (sana uchun)."""
+    chat = update.effective_chat
+    message = update.message
+
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Faqat guruhlarda ishlaydi! 👥")
+        return
+
+    chat_id = chat.id
+    now = time.time()
+
+    last_group = _last_ship_group.get(chat_id, 0)
+    remaining = GROUP_COOLDOWN - (now - last_group)
+    if remaining > 0:
+        await message.reply_text(
+            f"⏳ <b>Guruh limiti!</b> <b>{_fmt_time(remaining)}</b> kuting.",
+            parse_mode="HTML"
+        )
+        return
+
+    loading_texts = [
+        "💏 Sana uchun juft qidirilmoqda...",
+        "🌹 Sevgi qidirmoqda...",
+        "💌 Qismat hal qilmoqda...",
+    ]
+    loading = await message.reply_text(random.choice(loading_texts))
+
+    picked = _pick_two(chat_id)
+    if not picked:
+        await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
+        return
+
+    id1, id2, m1, m2 = picked
+    name1, name2 = m1["name"], m2["name"]
+    tag1 = _mention(id1, name1, m1.get("username"))
+    tag2 = _mention(id2, name2, m2.get("username"))
+
+    facts1 = load_member_facts(chat_id, id1)
+    facts2 = load_member_facts(chat_id, id2)
+
+    chemistry = random.randint(40, 99)
+    caption = _gen_couple_caption(name1, name2, "dating", facts1 or None, facts2 or None)
+    bar = _couple_bar(chemistry, "❤️", "🖤")
+    ship_nm = _ship_name(name1, name2)
+
+    # Sana tavsiya
+    date_ideas = [
+        "☕ Qahvaxona — sodda va chiroyli boshlanish",
+        "🎬 Kino — gaplashmasdan ham bo'ladi 😄",
+        "🌳 Park — eng arzon va eng romantik!",
+        "🍕 Pizza kechqurun — noto'g'ri bo'lmaydi hech qachon",
+        "🎡 Attraksion — baham ko'rilgan qo'rquv — yangi boshliq 😏",
+        "🌅 Quyosh botishi tomosha — so'z kerak emas",
+    ]
+    date_idea = random.choice(date_ideas)
+
+    _last_ship_group[chat_id] = now
+    _dating_couples[chat_id].append({
+        "id1": id1, "id2": id2,
+        "name1": name1, "name2": name2,
+        "date": datetime.now().strftime("%Y-%m-%d")
+    })
+
+    text = (
+        f"╔══════════════════════╗\n"
+        f"║  💏  SANA TANLOVI  💏  ║\n"
+        f"╚══════════════════════╝\n\n"
+        f"💙 Yigit: {tag1}\n"
+        f"💗 Qiz: {tag2}\n\n"
+        f"🏷 Juft ismi: <b>{ship_nm}</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚡ Kimyo: <b>{chemistry}%</b>\n"
+        f"{bar}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💡 Sana g'oyasi: {date_idea}\n\n"
+        f"💬 <i>{caption}</i>\n\n"
+        f"🌹 Omad! Bu guruh shohidi bo'ldi!"
+    )
+
+    image_url = _get_couple_image()
+    try:
+        await loading.delete()
+        await context.bot.send_photo(chat_id=chat_id, photo=image_url,
+                                     caption=text, parse_mode="HTML")
+    except Exception as e:
+        print(f"[dating:photo] {e}")
+        await loading.edit_text(text, parse_mode="HTML")
+
+
+# ── /marry — nikoh marosimi ───────────────────────────────────────────────────
+
+async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /marry — tasodifiy nikoh
+    /marry @user1 @user2 — o'zingiz tanlagan juft
+    """
+    chat = update.effective_chat
+    message = update.message
+
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Faqat guruhlarda ishlaydi! 👥")
+        return
+
+    chat_id = chat.id
+    now = time.time()
+
+    last_group = _last_ship_group.get(chat_id, 0)
+    remaining = GROUP_COOLDOWN - (now - last_group)
+    if remaining > 0:
+        await message.reply_text(
+            f"⏳ <b>Guruh limiti!</b> <b>{_fmt_time(remaining)}</b> kuting.",
+            parse_mode="HTML"
+        )
+        return
+
+    # Loading — nikoh marosimi uslubida
+    loading = await message.reply_text("💍 Nikoh marosimi tayyorlanmoqda...")
+    await loading.edit_text("💍 Nikoh marosimi tayyorlanmoqda... 🕊️")
+
+    # Mention orqali /marry @u1 @u2
+    id1 = id2 = None
+    m1 = m2 = None
+
+    if message.entities and context.args:
+        mentioned = [e for e in message.entities
+                     if e.type in ("mention", "text_mention")]
+        if len(mentioned) >= 2:
+            e1, e2 = mentioned[0], mentioned[1]
+            if e1.type == "text_mention" and e2.type == "text_mention":
+                id1, id2 = e1.user.id, e2.user.id
+                m1 = {"name": e1.user.first_name or str(id1), "username": e1.user.username,
+                      "zodiac": _seen_members[chat_id].get(id1, {}).get("zodiac", random.randint(0, 11))}
+                m2 = {"name": e2.user.first_name or str(id2), "username": e2.user.username,
+                      "zodiac": _seen_members[chat_id].get(id2, {}).get("zodiac", random.randint(0, 11))}
+
+    if id1 is None:
+        picked = _pick_two(chat_id)
+        if not picked:
+            await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
+            return
+        id1, id2, m1, m2 = picked
+
+    name1, name2 = m1["name"], m2["name"]
+    tag1 = _mention(id1, name1, m1.get("username"))
+    tag2 = _mention(id2, name2, m2.get("username"))
+
+    facts1 = load_member_facts(chat_id, id1)
+    facts2 = load_member_facts(chat_id, id2)
+
+    # Nikoh ko'rsatkichlari
+    happiness  = random.randint(70, 99)
+    loyalty    = random.randint(65, 99)
+    future_kids = random.randint(0, 4)
+    ring_emoji = random.choice(["💍", "💎", "✨💍✨"])
+
+    caption = _gen_couple_caption(name1, name2, "married", facts1 or None, facts2 or None)
+    bar = _couple_bar(happiness, "💍", "🖤")
+    ship_nm = _ship_name(name1, name2)
+
+    # Qo'shiq (tasodifiy nikoh qo'shiqlari)
+    songs = [
+        "🎵 «Can't Help Falling in Love» — Elvis",
+        "🎵 «Perfect» — Ed Sheeran",
+        "🎵 «A Thousand Years» — Christina Perri",
+        "🎵 «All of Me» — John Legend",
+        "🎵 «Unchained Melody» — Righteous Brothers",
+        "🎵 «Thinking Out Loud» — Ed Sheeran",
+    ]
+    wedding_song = random.choice(songs)
+
+    _last_ship_group[chat_id] = now
+
+    # Nikohni yodlab qo'yish
+    _married_couples[chat_id].append({
+        "id1": id1, "id2": id2,
+        "name1": name1, "name2": name2,
+        "date": datetime.now().strftime("%Y-%m-%d")
+    })
+
+    # Bolalar
+    kids_line = (
+        f"👶 Kelajakda: <b>{future_kids} ta farzand</b> ko'rinadi!"
+        if future_kids > 0
+        else "👶 Hozircha farzandsiz — lekin hali vaqt bor!"
+    )
+
+    text = (
+        f"╔══════════════════════╗\n"
+        f"║  {ring_emoji}  NIKOH MAROSIMI  {ring_emoji}  ║\n"
+        f"╚══════════════════════╝\n\n"
+        f"🤵 Kuyov: {tag1}\n"
+        f"👰 Kelin: {tag2}\n\n"
+        f"🏷 Oila nomi: <b>{ship_nm} oilasi</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"😊 Baxt darajasi: <b>{happiness}%</b>\n"
+        f"{bar}\n"
+        f"🤝 Sadoqat: <b>{loyalty}%</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{kids_line}\n\n"
+        f"🎵 To'y qo'shig'i: {wedding_song}\n\n"
+        f"💬 <i>{caption}</i>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎊 Guruh a'zolari, tabriklar! Nikoh muborak! 🎊"
+    )
+
+    image_url = _get_couple_image()
+    try:
+        await loading.delete()
+        await context.bot.send_photo(chat_id=chat_id, photo=image_url,
+                                     caption=text, parse_mode="HTML")
+    except Exception as e:
+        print(f"[marry:photo] {e}")
+        await loading.edit_text(text, parse_mode="HTML")
+
+
+# ── /marriedlist — nikoh bo'lganlar ro'yxati ─────────────────────────────────
+
+async def marriedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Guruhda /marry bilan nikohlanganlar ro'yxati."""
+    chat = update.effective_chat
+    message = update.message
+
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Faqat guruhlarda ishlaydi!")
+        return
+
+    couples = _married_couples.get(chat.id, [])
+    if not couples:
+        await message.reply_text(
+            "💍 Hali hech kim nikohlanmagan!\n/marry bilan boshlang 😄",
+            parse_mode="HTML"
+        )
+        return
+
+    lines = ["💍 <b>GURUH NIKOH RO'YXATI</b> 💍\n━━━━━━━━━━━━━━━━━━━━━━━\n"]
+    medals = ["🥇", "🥈", "🥉"] + ["💍"] * 20
+    for i, c in enumerate(couples[-10:][::-1]):   # oxirgi 10 ta, yangilar birinchi
+        ship_nm = _ship_name(c["name1"], c["name2"])
+        lines.append(
+            f"{medals[i]} <b>{c['name1']}</b> + <b>{c['name2']}</b>"
+            f"  →  {ship_nm} oilasi\n"
+            f"   📅 {c['date']}"
+        )
+    lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("💡 /marry bilan yangi nikoh!")
+
+    await message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+# ── register yangilanishi ─────────────────────────────────────────────────────
+# (eski register() ni o'chirib, yangi to'liq versiyasi bilan almashtiramiz)
+
+def register(app: Application) -> None:  # noqa: F811 — qayta yozilmoqda
+    app.add_handler(CommandHandler("ship",         ship_cmd))
+    app.add_handler(CommandHandler("shipleader",   shipleader_cmd))
+    app.add_handler(CommandHandler("shipfact",     shipfact_cmd))
+    app.add_handler(CommandHandler("shipmemory",   shipmemory_cmd))
+    app.add_handler(CommandHandler("erxotin",      erxotin_cmd))
+    app.add_handler(CommandHandler("dating",       dating_cmd))
+    app.add_handler(CommandHandler("marry",        marry_cmd))
+    app.add_handler(CommandHandler("marriedlist",  marriedlist_cmd))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, _track_member),
+        group=2,
+    )
