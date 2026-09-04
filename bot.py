@@ -19,7 +19,9 @@ Env vars required (see .env.example):
 import asyncio
 import logging
 import os
+import random
 import threading
+from datetime import datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatAction
@@ -560,6 +562,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ── O'zi gap boshlaydi ─────────────────────────────────────────────────
+# Guruh biroz jim tursa, Misumi vaqti-vaqti bilan o'zi tabiiy bir xabar
+# ("odamdek") yozib, suhbatni qo'zg'atadi — bot buyruq kutib turmaydi.
+IDLE_CHECK_INTERVAL = 30 * 60       # har 30 daqiqada tekshiradi
+IDLE_QUIET_THRESHOLD = timedelta(hours=3)   # kamida shuncha vaqt jim bo'lsa
+IDLE_TRIGGER_CHANCE = 0.35          # shart bajarilganda ham har doim emas,
+                                     # balki tasodifan yozadi — mexanik
+                                     # bo'lib qolmasligi uchun
+
+
+async def idle_starter_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    now = datetime.now()
+    for chat_id, last_seen in admin_store.get_group_last_seen().items():
+        if not _authorized(chat_id) or admin_store.is_blocked(chat_id) or admin_store.is_maintenance():
+            continue
+        try:
+            last_dt = datetime.strptime(last_seen, "%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            continue
+        if now - last_dt < IDLE_QUIET_THRESHOLD:
+            continue
+        if random.random() > IDLE_TRIGGER_CHANCE:
+            continue
+        try:
+            text = ai_core.generate_idle_starter()
+            await context.bot.send_message(chat_id=int(chat_id), text=text)
+            admin_store.record_message(chat_id, source="idle")
+        except Exception:
+            logger.exception(f"Idle starter failed for chat {chat_id}")
+
+
 def _start_webapp_server():
     port = int(os.environ.get("PORT", "10000"))
     logger.info(f"Misumi AI web server listening on port {port}")
@@ -604,6 +637,10 @@ def main():
         await userbot_manager.resume_all()
 
     app.post_init = _post_init
+
+    app.job_queue.run_repeating(
+        idle_starter_job, interval=IDLE_CHECK_INTERVAL, first=IDLE_CHECK_INTERVAL
+    )
 
     logger.info(f"{ai_core.BOT_NAME} Telegram bot starting (polling)...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
