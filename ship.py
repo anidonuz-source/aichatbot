@@ -233,12 +233,18 @@ async def jins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.message
     chat = update.effective_chat
     user = update.effective_user
+
+    if chat.type not in ("group", "supergroup"):
+        await msg.reply_text("❌ Bu komanda faqat guruhlarda ishlaydi! 👥")
+        return
+
     args = context.args
     if not args or args[0].lower() not in ("erkak", "ayol"):
         await msg.reply_text(
             "❓ Foydalanish: <code>/jins erkak</code> yoki <code>/jins ayol</code>\n\n"
-            "Bu ma'lumot /erxotin, /dating, /husband, /wife kabi komandalar "
-            "to'g'ri juftlik tanlashi uchun kerak.",
+            "Bu ma'lumot /ship, /erxotin, /dating, /husband, /wife kabi komandalar "
+            "to'g'ri juftlik tanlashi uchun kerak. Guruhda hali yozmagan bo'lsangiz ham "
+            "shu komandani bir marta bossangiz, bot sizni ko'ra boshlaydi.",
             parse_mode="HTML"
         )
         return
