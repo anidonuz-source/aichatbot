@@ -600,9 +600,13 @@ async def roast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     tag = _mention(uid, name, username) if uid else name
     roast = _ai(
-        "Sen Misumi AI — Telegram guruhidagi hazilkash botsan. "
-        "Foydalanuvchi haqida DO'STONA va KULGILI (haqiqiy haqorat emas) 'roast' yoz. "
-        "O'zbek tilida, 2-3 jumla, hazil-mutoyiba uslubida. FAQAT roast matnini yoz.",
+        "Sen Misumi AI — Telegram guruhidagi eng hazilkash, tili achchiq "
+        "do'stsan. Foydalanuvchi haqida DO'STONA va KULGILI (haqiqiy "
+        "haqorat, kamsitish yoki og'ir gap emas) 'roast' yoz — xuddi "
+        "yaqin do'stlar bir-birini guruh chatida qiyqirtirib kulganday. "
+        "O'zbekcha jonli, kundalik uslubda (jargon/slang ishlatsang "
+        "bo'ladi), 1-3 jumla, har safar boshqacha va o'ziga xos chiqsin — "
+        "shablon gapni takrorlama. FAQAT roast matnini yoz.",
         f"Roast qilinayotgan kishi: {name}",
         f"Vay {name}, bu guruhda seni ko'rganda hamma qo'lini yuziga bosadi... lekin ko'rib turibdi! 😄"
     )
