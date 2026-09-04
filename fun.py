@@ -63,7 +63,7 @@ try:
         _seen_members, _mention, _get_couple_image, _pick_two,
         _couple_bar, _ship_name, _gen_couple_caption,
         load_member_facts, _last_ship_group, GROUP_COOLDOWN, _fmt_time,
-        ZODIAC_SIGNS, _married_couples
+        ZODIAC_SIGNS, _married_couples, _members_by_gender, get_gender
     )
     _ship_available = True
 except Exception as e:
@@ -1227,19 +1227,28 @@ async def husband_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not name:
         await msg.reply_text("❓ /husband @foydalanuvchi yoki reply qiling!")
         return
-    members = dict(_seen_members.get(msg.chat_id, {}))
-    others = {k: v for k, v in members.items() if k != uid}
-    if not others:
-        await msg.reply_text("❌ Kamida 2 ta a'zo kerak!")
-        return
-    hid, hdata = random.choice(list(others.items()))
+    males = _members_by_gender(msg.chat_id, "erkak", exclude={uid})
+    gender_note = ""
+    if males:
+        hid, hdata = random.choice(list(males.items()))
+    else:
+        members = dict(_seen_members.get(msg.chat_id, {}))
+        others = {k: v for k, v in members.items() if k != uid}
+        if not others:
+            await msg.reply_text("❌ Kamida 2 ta a'zo kerak!")
+            return
+        hid, hdata = random.choice(list(others.items()))
+        gender_note = (
+            "\n\n⚠️ <i>Erkak deb belgilangan a'zo topilmadi — tasodifiy tanlandi. "
+            "<code>/jins erkak</code> yozib jinsingizni belgilang.</i>"
+        )
     h_tag = _mention(hid, hdata["name"], hdata.get("username"))
     target_tag = _mention(uid, name, username) if uid else name
     await msg.reply_text(
         f"💍 <b>{name} ning ERI</b>\n\n"
         f"👰 {target_tag}\n"
         f"👨 {h_tag}\n\n"
-        f"<i>Guruh guvoh bo'ldi! 🎊</i>",
+        f"<i>Guruh guvoh bo'ldi! 🎊</i>{gender_note}",
         parse_mode="HTML"
     )
 
@@ -1251,19 +1260,28 @@ async def wife_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not name:
         await msg.reply_text("❓ /wife @foydalanuvchi yoki reply qiling!")
         return
-    members = dict(_seen_members.get(msg.chat_id, {}))
-    others = {k: v for k, v in members.items() if k != uid}
-    if not others:
-        await msg.reply_text("❌ Kamida 2 ta a'zo kerak!")
-        return
-    wid, wdata = random.choice(list(others.items()))
+    females = _members_by_gender(msg.chat_id, "ayol", exclude={uid})
+    gender_note = ""
+    if females:
+        wid, wdata = random.choice(list(females.items()))
+    else:
+        members = dict(_seen_members.get(msg.chat_id, {}))
+        others = {k: v for k, v in members.items() if k != uid}
+        if not others:
+            await msg.reply_text("❌ Kamida 2 ta a'zo kerak!")
+            return
+        wid, wdata = random.choice(list(others.items()))
+        gender_note = (
+            "\n\n⚠️ <i>Ayol deb belgilangan a'zo topilmadi — tasodifiy tanlandi. "
+            "<code>/jins ayol</code> yozib jinsingizni belgilang.</i>"
+        )
     w_tag = _mention(wid, wdata["name"], wdata.get("username"))
     target_tag = _mention(uid, name, username) if uid else name
     await msg.reply_text(
         f"💍 <b>{name} ning XOTINI</b>\n\n"
         f"👨 {target_tag}\n"
         f"👰 {w_tag}\n\n"
-        f"<i>Guruh guvoh bo'ldi! 🎊</i>",
+        f"<i>Guruh guvoh bo'ldi! 🎊</i>{gender_note}",
         parse_mode="HTML"
     )
 
