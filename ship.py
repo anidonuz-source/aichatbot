@@ -504,7 +504,8 @@ async def ship_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     "zodiac": _seen_members[chat_id].get(p2_id, {}).get("zodiac", random.randint(0, 11))
                 }
 
-    # 5. Agar mention yo'q — tasodifiy tanlash
+    # 5. Agar mention yo'q — tasodifiy tanlash (iloji bo'lsa jinsga mos)
+    gender_note = ""
     if p1_id is None:
         members = dict(_seen_members.get(chat_id, {}))
         if len(members) < 2:
@@ -529,10 +530,19 @@ async def ship_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             return
 
-        ids = list(members.keys())
-        p1_id, p2_id = random.sample(ids, 2)
-        m1 = members[p1_id]
-        m2 = members[p2_id]
+        gendered = _pick_gendered_pair(chat_id)
+        if gendered:
+            p1_id, p2_id, m1, m2 = gendered
+        else:
+            ids = list(members.keys())
+            p1_id, p2_id = random.sample(ids, 2)
+            m1 = members[p1_id]
+            m2 = members[p2_id]
+            gender_note = (
+                "\n\n⚠️ <i>Jins ma'lumoti yetarli emas — tasodifiy tanlandi. "
+                "To'g'ri natija uchun har kim <code>/jins erkak</code> yoki "
+                "<code>/jins ayol</code> yozsin.</i>"
+            )
 
     name1 = m1["name"]
     name2 = m2["name"]
@@ -558,7 +568,7 @@ async def ship_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         tag1, tag2, name1, name2, love_rate, caption,
         zodiac1, zodiac2, used,
         facts1 or None, facts2 or None
-    )
+    ) + gender_note
 
     image_url = _get_couple_image()
     try:
