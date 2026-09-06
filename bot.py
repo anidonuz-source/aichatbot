@@ -83,13 +83,13 @@ def _webapp_keyboard(chat_id=None) -> InlineKeyboardMarkup | None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not _authorized(chat_id):
-        await update.message.reply_text("Sorry, this bot is private.")
+        await update.message.reply_text(f"bu bot hammaga emas, uka. {ai_core.AUTHOR_HANDLE} dan ruxsat ol.")
         return
     first_name = update.effective_user.first_name if update.effective_user else None
-    greeting = f"Assalomu alaykum, {first_name}." if first_name else "Assalomu alaykum."
+    greeting = f"a, {first_name} — kelibsan." if first_name else "kelibsan."
     text = (
-        f"✦ {greeting} Men {ai_core.BOT_NAME}man.\n\n"
-        f"Yoz — gaplashamiz. Savol ber, fikringni ayt. Gapingni eslab qolaman.\n\n"
+        f"{greeting} men {ai_core.BOT_NAME}man.\n\n"
+        f"gapir — javob beraman. yoki bermayman, kayfiyatga qarab.\n\n"
         f"/reset — xotirani tozalash\n"
         f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
         f"/ship — guruhdan tasodifiy juftlik tanlash 💘\n"
@@ -542,7 +542,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logger.exception("Image generation error")
             await update.message.reply_text(
-                "Kechirasiz, rasm yaratishda xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
+                "rasm chiqmadi, server bir nima qildi. keyinroq ur."
             )
             return
         await update.message.reply_photo(photo=image_bytes)
@@ -552,7 +552,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_text = ai_core.get_ai_reply(chat_id, user_text, name=display_name, source="telegram")
     except Exception:
         logger.exception("Gemini error")
-        reply_text = "Kechirasiz, xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
+        reply_text = "miya ishlamayapti hozir, keyinroq gap."
 
     await ai_core.deliver_ai_reply(
         context.bot,
