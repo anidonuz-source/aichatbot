@@ -536,6 +536,52 @@ def _call_gemini_image(prompt: str) -> tuple[bytes, str]:
 # Format: list of {"role": "user"|"assistant", "content": str}
 _history: dict[str, list] = {}
 
+# ---------------------------------------------------------------------------
+# Repeat message detection — tracks how many times a user sent the same
+# message in a row. 2x = kesatish, 3x = "...", 4x+ = ignor yoki jim.
+# ---------------------------------------------------------------------------
+_repeat_tracker: dict[str, dict] = {}
+
+_IGNORE_RESPONSES = [
+    None,
+    None,
+    "...",
+    "yozganing yozgan, javobim o'zgarmaydi",
+    "eshak ham bir marta tepadi",
+    "shu gapni yana yozasan deb o'ylamovdim",
+]
+
+_FIRST_REPEAT_RESPONSES = [
+    "buni allaqachon aytdim",
+    "bir marta yetmadimi",
+    "eshitding, javob berdim — nima bo'ldi",
+    "xotirang yaxshimi, bir marta aytuvdim",
+]
+
+
+def _check_repeat(user_id: str, user_text: str) -> str | None | bool:
+    """Return override response if user is repeating, or None for fresh message.
+    Returns False to signal complete silence (no message at all)."""
+    if not user_text:
+        return None
+
+    normalized = user_text.strip().lower()
+    tracker = _repeat_tracker.get(user_id)
+
+    if tracker and tracker["text"] == normalized:
+        tracker["count"] += 1
+        count = tracker["count"]
+        if count == 2:
+            return random.choice(_FIRST_REPEAT_RESPONSES)
+        elif count == 3:
+            return "..."
+        else:
+            return random.choice(_IGNORE_RESPONSES)  # None = total silence
+    else:
+        _repeat_tracker[user_id] = {"text": normalized, "count": 1}
+        return None
+
+
 # Sticker category picked for a user's last reply (if any), stashed here
 # since get_ai_reply's return type must stay a plain string for webapp.py.
 # bot.py calls pop_last_sticker() right after get_ai_reply() to pick it up
@@ -986,6 +1032,14 @@ def get_ai_reply(
 
     if model not in MODEL_TIERS:
         model = DEFAULT_MODEL
+
+    # Repeat detection — if user keeps sending same message, ignore or roast
+    if not image_bytes:
+        repeat_reply = _check_repeat(user_id, user_text)
+        if repeat_reply is not None:
+            # Empty string or "..." means send that, None means total silence
+            return repeat_reply if repeat_reply else "..."
+        # repeat_reply == None means fresh message, continue normally
 
     memory = mem.load_memory(user_id)
     memory_block = mem.format_memory_for_prompt(memory)
