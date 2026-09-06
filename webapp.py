@@ -249,12 +249,7 @@ def api_admin_maintenance():
 
 @app.route("/api/admin/persona", methods=["POST"])
 def api_admin_persona():
-    """GET current persona or SET a new one.
-    Body: { initData, persona? }
-    If 'persona' key is absent — returns current persona only.
-    If 'persona' key is present — sets it and returns new value.
-    Valid values: "yaxshi" | "hard"
-    """
+    """GET current persona or SET a new one."""
     body = request.get_json(silent=True) or {}
     if not verify_admin(body.get("initData", "")):
         return jsonify({"error": "Unauthorized"}), 403
@@ -262,6 +257,81 @@ def api_admin_persona():
         new_val = admin_store.set_persona(str(body["persona"]))
         return jsonify({"persona": new_val})
     return jsonify({"persona": admin_store.get_persona()})
+
+
+@app.route("/api/admin/groups", methods=["POST"])
+def api_admin_groups():
+    """Return all groups the bot has ever talked in, with metadata."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify({"groups": admin_store.get_groups()})
+
+
+@app.route("/api/admin/broadcast-groups", methods=["POST"])
+def api_admin_broadcast_groups():
+    """Send a broadcast message to selected groups (or all groups).
+    Body: { initData, message, group_ids?: [str, ...] }
+    If group_ids is omitted or empty — broadcasts to ALL currently-member groups.
+    Non-member groups are always skipped (bot can't send there anyway).
+    Returns { sent, failed, skipped, total }.
+    """
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    message = (body.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "message required"}), 400
+
+    # Build member-only lookup from store
+    all_groups = admin_store.get_groups()
+    member_ids = {g["id"] for g in all_groups if g.get("is_member") is True}
+    # Groups with is_member=None (unknown) are still attempted — bot may still be in them
+    unknown_ids = {g["id"] for g in all_groups if g.get("is_member") is None}
+    sendable_ids = member_ids | unknown_ids
+
+    requested_ids = body.get("group_ids")
+    if requested_ids and isinstance(requested_ids, list):
+        targets = [str(gid) for gid in requested_ids if str(gid).strip()]
+    else:
+        targets = [g["id"] for g in all_groups]
+
+    # Filter: never try to send to groups we know the bot was removed from
+    skipped = [t for t in targets if t not in sendable_ids]
+    targets = [t for t in targets if t in sendable_ids]
+
+    if not targets:
+        return jsonify({"error": "No sendable groups found (bot removed from all selected groups)"}), 404
+
+    import requests as req_lib
+    import time
+
+    bot_token = TELEGRAM_BOT_TOKEN
+    send_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+
+    sent, failed = 0, 0
+    for chat_id in targets:
+        try:
+            resp = req_lib.post(send_url, json={
+                "chat_id": int(chat_id),
+                "text": message,
+                "parse_mode": "HTML",
+            }, timeout=10)
+            if resp.ok and resp.json().get("ok"):
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+        time.sleep(0.05)  # Telegram rate limit: stay under 30 msg/sec
+
+    admin_store.record_broadcast(
+        summary=f"Groups broadcast: {message[:80]}",
+        sent=sent,
+        failed=failed,
+    )
+    return jsonify({"sent": sent, "failed": failed, "skipped": len(skipped), "total": len(targets) + len(skipped)})
 
 
 @app.route("/health")
@@ -273,3 +343,134 @@ def run(port: int):
     # threaded=True lets the health check and chat requests be handled
     # concurrently without blocking each other.
     app.run(host="0.0.0.0", port=port, threaded=True)
+
+# ── NEW: broadcast-users, broadcast-groups-v2 (with photo), group-info ──────
+
+@app.route("/api/admin/broadcast-users", methods=["POST"])
+def api_admin_broadcast_users():
+    """Broadcast text or photo to selected users.
+    Body: { initData, message?, photo?: dataURL, user_ids?: [str,...] }
+    """
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    message = (body.get("message") or "").strip()
+    photo_data_url = body.get("photo", "")
+    if not message and not photo_data_url:
+        return jsonify({"error": "message or photo required"}), 400
+
+    all_u = admin_store.get_users(limit=5000)
+    all_ids = {u["id"] for u in all_u}
+    req_ids = body.get("user_ids")
+    targets = [str(x) for x in req_ids if str(x).strip()] if (req_ids and isinstance(req_ids, list)) else [u["id"] for u in all_u]
+    skipped = [t for t in targets if t not in all_ids]
+    targets = [t for t in targets if t in all_ids]
+    if not targets:
+        return jsonify({"error": "No users found"}), 404
+
+    import requests as rq, time, base64 as b64
+    photo_bytes = None
+    if photo_data_url and photo_data_url.startswith("data:"):
+        try:
+            photo_bytes = b64.b64decode(photo_data_url.split(",", 1)[1])
+        except Exception:
+            pass
+
+    sent = failed = 0
+    for cid in targets:
+        try:
+            if photo_bytes:
+                r = rq.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+                    data={"chat_id": int(cid), "caption": message, "parse_mode": "HTML"},
+                    files={"photo": ("p.jpg", photo_bytes, "image/jpeg")}, timeout=15)
+            else:
+                r = rq.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": int(cid), "text": message, "parse_mode": "HTML"}, timeout=10)
+            if r.ok and r.json().get("ok"): sent += 1
+            else: failed += 1
+        except Exception: failed += 1
+        time.sleep(0.05)
+
+    admin_store.record_broadcast(f"Users{'📷' if photo_bytes else ''}: {message[:80]}", sent, failed)
+    return jsonify({"sent": sent, "failed": failed, "skipped": len(skipped), "total": len(targets)+len(skipped)})
+
+
+@app.route("/api/admin/broadcast-groups-v2", methods=["POST"])
+def api_admin_broadcast_groups_v2():
+    """Broadcast text or photo to selected groups.
+    Body: { initData, message?, photo?: dataURL, group_ids?: [str,...] }
+    """
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    message = (body.get("message") or "").strip()
+    photo_data_url = body.get("photo", "")
+    if not message and not photo_data_url:
+        return jsonify({"error": "message or photo required"}), 400
+
+    all_groups = admin_store.get_groups()
+    sendable = {g["id"] for g in all_groups if g.get("is_member") is not False}
+    req_ids = body.get("group_ids")
+    targets = [str(x) for x in req_ids if str(x).strip()] if (req_ids and isinstance(req_ids, list)) else [g["id"] for g in all_groups]
+    skipped = [t for t in targets if t not in sendable]
+    targets = [t for t in targets if t in sendable]
+    if not targets:
+        return jsonify({"error": "No sendable groups found"}), 404
+
+    import requests as rq, time, base64 as b64
+    photo_bytes = None
+    if photo_data_url and photo_data_url.startswith("data:"):
+        try:
+            photo_bytes = b64.b64decode(photo_data_url.split(",", 1)[1])
+        except Exception:
+            pass
+
+    sent = failed = 0
+    for cid in targets:
+        try:
+            if photo_bytes:
+                r = rq.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+                    data={"chat_id": int(cid), "caption": message, "parse_mode": "HTML"},
+                    files={"photo": ("p.jpg", photo_bytes, "image/jpeg")}, timeout=15)
+            else:
+                r = rq.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": int(cid), "text": message, "parse_mode": "HTML"}, timeout=10)
+            if r.ok and r.json().get("ok"): sent += 1
+            else: failed += 1
+        except Exception: failed += 1
+        time.sleep(0.05)
+
+    admin_store.record_broadcast(f"Groups{'📷' if photo_bytes else ''}: {message[:80]}", sent, failed)
+    return jsonify({"sent": sent, "failed": failed, "skipped": len(skipped), "total": len(targets)+len(skipped)})
+
+
+@app.route("/api/admin/group-info", methods=["POST"])
+def api_admin_group_info():
+    """Fetch live group info: title, member count, invite link."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    chat_id = body.get("chat_id")
+    if not chat_id:
+        return jsonify({"error": "chat_id required"}), 400
+    import requests as rq
+    try:
+        r = rq.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getChat",
+                   params={"chat_id": int(chat_id)}, timeout=8).json()
+        if not r.get("ok"):
+            return jsonify({"error": r.get("description", "Telegram error")}), 400
+        chat = r["result"]
+        mc = rq.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getChatMemberCount",
+                    params={"chat_id": int(chat_id)}, timeout=8).json()
+        username = chat.get("username")
+        invite_link = chat.get("invite_link") or (f"https://t.me/{username}" if username else None)
+        return jsonify({
+            "title": chat.get("title"),
+            "type": chat.get("type"),
+            "username": username,
+            "invite_link": invite_link,
+            "member_count": mc.get("result") if mc.get("ok") else None,
+            "description": chat.get("description"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
