@@ -247,6 +247,23 @@ def api_admin_maintenance():
     return jsonify({"maintenance": value})
 
 
+@app.route("/api/admin/persona", methods=["POST"])
+def api_admin_persona():
+    """GET current persona or SET a new one.
+    Body: { initData, persona? }
+    If 'persona' key is absent — returns current persona only.
+    If 'persona' key is present — sets it and returns new value.
+    Valid values: "yaxshi" | "hard"
+    """
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    if "persona" in body:
+        new_val = admin_store.set_persona(str(body["persona"]))
+        return jsonify({"persona": new_val})
+    return jsonify({"persona": admin_store.get_persona()})
+
+
 @app.route("/health")
 def health():
     return "Misumi AI is running", 200
