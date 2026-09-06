@@ -24,10 +24,11 @@ import threading
 from datetime import datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
-from telegram.constants import ChatAction
+from telegram.constants import ChatAction, ChatMemberStatus
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    ChatMemberHandler,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
@@ -532,6 +533,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     display_name = user.first_name if user else None
+    # For group/supergroup chats, record the chat title so the admin panel
+    # can show a human-readable name instead of the raw negative chat_id.
+    chat = update.effective_chat
+    if chat and chat.id < 0 and chat.title:
+        admin_store.record_message(chat_id, name=chat.title, source="telegram")
 
     if ai_core.wants_image(user_text):
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_PHOTO)
@@ -604,6 +610,34 @@ def _start_webapp_server():
     webapp.run(port)
 
 
+async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Track when the bot is added to or removed from a group/channel.
+    Updates admin_store so the Groups tab in the admin panel shows
+    a live 'Bot a'zo' / 'Chiqarilgan' status badge for every group.
+    """
+    result = update.my_chat_member
+    if result is None:
+        return
+    chat = result.chat
+    # Only track groups and supergroups (negative IDs)
+    if chat.id >= 0:
+        return
+    new_status = result.new_chat_member.status
+    is_member = new_status in (
+        ChatMemberStatus.MEMBER,
+        ChatMemberStatus.ADMINISTRATOR,
+    )
+    admin_store.record_group_membership(
+        chat_id=chat.id,
+        title=chat.title,
+        is_member=is_member,
+    )
+    logger.info(
+        f"[MyChatMember] chat={chat.id} ({chat.title!r}) "
+        f"status={new_status} is_member={is_member}"
+    )
+
+
 def main():
     # Render Web Services require a bound port to consider the service
     # healthy. This also happens to be our real Mini App server.
@@ -637,6 +671,9 @@ def main():
     app.add_handler(CallbackQueryHandler(ub_callback_router, pattern="^ub:"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Track when the bot is added/removed from groups
+    app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
 
     async def _post_init(_app):
         await userbot_manager.resume_all()
