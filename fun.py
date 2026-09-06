@@ -596,25 +596,42 @@ async def roast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _group_only(msg): return
     uid, name, username = _get_mention_user(msg)
     if not name:
-        await msg.reply_text("❌ /roast @foydalanuvchi yoki reply qiling!")
+        await msg.reply_text("kim roast qilinadi? @mention yoki reply qil")
         return
     tag = _mention(uid, name, username) if uid else name
+
+    # Xotiradan ma'lumot ol — shaxsiy roast uchun
+    memory_hint = ""
+    if uid:
+        import memory_manager as mem
+        memory = mem.load_memory(uid)
+        profile = memory.get("identity", {})
+        notes = memory.get("notes", {})
+        bits = []
+        for k in ["name", "city", "job", "age"]:
+            v = profile.get(k, {})
+            if isinstance(v, dict): v = v.get("value", "")
+            if v: bits.append(f"{k}: {v}")
+        for k, v in list(notes.items())[:3]:
+            if isinstance(v, dict): v = v.get("value", "")
+            if v: bits.append(v)
+        if bits:
+            memory_hint = "Bu odam haqida ma'lumot: " + ", ".join(bits) + ". Shu ma'lumotni roastga ishlatasan — shaxsiy va aniq chiqsin."
+
     roast = _ai(
-        "Sen Misumi AI — Toshkent ko'chasining eng o'tkir tilli, gapga kirmaydigan, "
-        "haqiqatni yuziga soladigan a'zoisan. HAQIQIY roast yoz — yumshoq emas, "
-        "do'stona niqob ostida ham emas — real, o'tkir, mahalla bola uslubida. "
-        "Ruxsat etilgan so'zlar: 'it', 'mol', 'eshak', 'qo'chqor', 'tentak', 'ahmaq', "
-        "'vaqtsiz tug'ilgan', 'beshbetlik', 'ko'cha qo'yi' va shu kabilar — bular roastda normal. "
-        "Emoji ishlatma — real odam roast qilganda emoji qo'ymaydi. "
-        "Gazab chiqsin, o'tkir chiqsin, kulgilik chiqsin — bir vaqtda. "
-        "1-3 jumla, har safar boshqacha, shablon emas. "
-        "FAQAT roast matnini yoz — hech qanday izoh, kirish yoki chiqish yo'q. "
-        "CHEKLOV: oila a'zolariga tegma, jinsiy so'kinish yo'q — qolgan hamma narsa ruxsat.",
-        f"Roast qilinayotgan kishi ismi: {name}. Uni haqiqiy, qattiq, mahalla uslubida otiб ket.",
-        f"{name}, mol ham o'z yo'lini biladi — sen bilmaysan. bu roast emas, bu tarjimayi holing."
+        "Sen Misumi AI — Toshkent ko'chasidan chiqqan, hech kimdan qo'rqmaydigan, "
+        "tilining uchi pichoqday o'tkir bola. HAQIQIY roast yoz — yarim-yorti emas, "
+        "to'liq gazab bilan. Misumi uslubi: qisqa, aniq, shaxsiy, o'tkir. "
+        "So'zlar: 'it', 'mol', 'eshak', 'qo'chqor', 'tentak', 'ahmaq', "
+        "'vaqtsiz tug'ilgan', 'beshbetlik', 'ko'cha qo'yi', 'cho'chqa' — normal. "
+        "EMOJI YO'Q. Har safar boshqacha — shablon emas. "
+        "2-4 jumla, har biri o'tkir, oxirgisi eng qattiq chiqsin. "
+        "FAQAT roast matnini yoz. CHEKLOV: oila, jinsiy so'kinish yo'q.",
+        f"Roast qilinayotgan: {name}. {memory_hint} Uni yerga ur, hech narsa qoldirma.",
+        f"{name} — mol ham o'z yo'lini biladi, sen bilmaysan. bu tarjimayi holing."
     )
     await msg.reply_text(
-        f"🔥 <b>ROAST</b> 🔥\n\n{tag}!\n\n{roast}",
+        f"<b>{tag}</b>\n\n{roast}",
         parse_mode="HTML"
     )
 
@@ -719,14 +736,20 @@ async def rate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username
     tag = _mention(uid, name, username) if uid else name
 
-    cats = random.sample(RATE_CATEGORIES, 4)
-    lines = [f"📊 <b>{name} REYTINGI</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n"]
-    for emoji_label, _ in cats:
-        pct = random.randint(10, 99)
-        bar = "█" * round(pct/20) + "░" * (5 - round(pct/20))
-        lines.append(f"{emoji_label}: {bar} <b>{pct}%</b>")
+    # Misumi o'zi baho beradi — AI orqali, kesatib
+    rating = _ai(
+        "Sen Misumi AI — o'tkir, kesatgich, haqiqatgo'y. "
+        "Bu odamni Misumi uslubida baho ber: aqli, kuchi, suhbati, umuman odamligi — "
+        "har bir toifaga 0-100 orasida ball ber va nima uchun shu ball ekanini 1 jumlada tushuntir. "
+        "4 ta toifa: Aqli, Kuchi, Og'zi, Umuman. "
+        "Har qatori: 'Aqli: 34/100 — ...sabab...' shaklida. "
+        "Oxirida 1 jumlada umumiy xulosa — kesatib. "
+        "EMOJI YO'Q. FAQAT reyting matnini yoz.",
+        f"Baholanayotgan: {name}. Misumi uslubida, haqiqiy, shaxsiy baho ber.",
+        f"{name}: Aqli: 40/100 — o'rtacha. Kuchi: 55/100 — bor, lekin ishlatmaydi. Og'zi: 80/100 — gaplashadi ko'p. Umuman: 45/100. Xulosa: yashaydi, bor, lekin sababsiz."
+    )
     await msg.reply_text(
-        "\n".join(lines) + f"\n━━━━━━━━━━━━━━━━━━━━━━━\n{tag} — mana shu! 😄",
+        f"<b>{tag} — Misumi bahosi:</b>\n\n{rating}",
         parse_mode="HTML"
     )
 
@@ -1309,6 +1332,112 @@ async def _track_fun_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     _track_msg(update.effective_chat.id, user.id)
 
 
+
+# ── /battle ───────────────────────────────────────────────────────────────────
+async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ikki odamni bir-biriga qarshi qo'yadi — Misumi hakam."""
+    msg = update.message
+    if await _group_only(msg): return
+
+    # Birinchi mention
+    uid1, name1, uname1 = _get_mention_user(msg)
+
+    # Ikkinchi mention — args ichidan
+    name2, uid2, uname2 = None, None, None
+    if context.args:
+        for ent in (msg.entities or []):
+            if ent.type == "text_mention" and ent.user:
+                # skip first mention, take second
+                if ent.user.id != uid1:
+                    uid2 = ent.user.id
+                    name2 = ent.user.first_name
+                    uname2 = ent.user.username
+                    break
+        if not name2:
+            # Try to get username from args
+            for arg in context.args:
+                if arg.startswith("@") and arg[1:] != (uname1 or ""):
+                    name2 = arg
+                    break
+
+    if not name1 or not name2:
+        await msg.reply_text("ikki kishi kerak: /battle @biri @ikkinchi yoki reply + @mention")
+        return
+
+    tag1 = f"@{uname1}" if uname1 else name1
+    tag2 = f"@{uname2}" if uname2 else name2
+
+    # Xotiradan ma'lumot ol
+    def get_profile(uid, name):
+        if not uid: return name
+        import memory_manager as mem
+        m = mem.load_memory(uid)
+        bits = []
+        for k in ["job", "city", "age"]:
+            v = m.get("identity", {}).get(k, {})
+            if isinstance(v, dict): v = v.get("value", "")
+            if v: bits.append(v)
+        for k, v in list(m.get("notes", {}).items())[:2]:
+            if isinstance(v, dict): v = v.get("value", "")
+            if v: bits.append(v)
+        return name + (f" ({', '.join(bits)})" if bits else "")
+
+    p1 = get_profile(uid1, name1)
+    p2 = get_profile(uid2, name2)
+
+    verdict = _ai(
+        "Sen Misumi AI — hakam, lekin adolatli emas, o'tkir va kesatgich. "
+        "Ikki odamni solishtir: kuchli tomonlari, zaif tomonlari, va oxirida g'olibni e'lon qil. "
+        "Har bir kishi uchun 1-2 jumla, keyin g'olib va sababi. "
+        "Kesatib, hazil bilan, lekin haqiqiy solishtirish. "
+        "EMOJI YO'Q. Format: '[1-ism]: ...\n[2-ism]: ...\nG'olib: [ism] — [sabab]'",
+        f"Battle: {p1} vs {p2}. Misumi uslubida solishtir va g'olibni ayt.",
+        f"{name1} vs {name2} — ikkalasi ham o'rtacha, lekin {name1} biroz kamroq o'rtacha."
+    )
+    await msg.reply_text(
+        f"<b>⚔️ BATTLE: {tag1} vs {tag2}</b>\n\n{verdict}",
+        parse_mode="HTML"
+    )
+
+
+# ── /expose ───────────────────────────────────────────────────────────────────
+async def expose_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Odamning zaif tomonini, sir-asrorini fosh qiladi — Misumi uslubida."""
+    msg = update.message
+    if await _group_only(msg): return
+    uid, name, username = _get_mention_user(msg)
+    if not name:
+        await msg.reply_text("kimni fosh qilamiz? @mention yoki reply qil")
+        return
+    tag = f"@{username}" if username else name
+
+    # Xotiradan ma'lumot ol
+    memory_hint = ""
+    if uid:
+        import memory_manager as mem
+        memory = mem.load_memory(uid)
+        bits = []
+        for cat in ["identity", "notes", "preferences"]:
+            for k, v in list(memory.get(cat, {}).items())[:3]:
+                if isinstance(v, dict): v = v.get("value", "")
+                if v: bits.append(str(v))
+        if bits:
+            memory_hint = "Ma'lum bo'lgan: " + ", ".join(bits[:5]) + "."
+
+    expose = _ai(
+        "Sen Misumi AI — guruh razvedkachisi. Odamning zaif tomonlarini, "
+        "ko'rinadigan kamchiliklarini, va xarakter xususiyatlarini 'fosh qil'. "
+        "Real ma'lumot bo'lsa — o'sha asosida. Yo'q bo'lsa — umumiy ammo aniq his qildiradigan. "
+        "3-4 'sir' — har biri bitta gap. Kesatgich, o'tkir, hazil bilan. "
+        "EMOJI YO'Q. FAQAT fosh matnini yoz.",
+        f"Fosh qilinayotgan: {name}. {memory_hint} Uning zaif tomonlarini chiqar.",
+        f"{name}ning siri: hamma biladi u o'zini zo'r tutadi, aslida esa o'rtacha."
+    )
+    await msg.reply_text(
+        f"<b>🔍 EXPOSE: {tag}</b>\n\n{expose}",
+        parse_mode="HTML"
+    )
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 📋 RO'YXATDAN O'TKAZISH
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1323,6 +1452,8 @@ def register(app: Application) -> None:
 
     # 🎲 Fun
     app.add_handler(CommandHandler("roast", roast_cmd))
+    app.add_handler(CommandHandler("battle", battle_cmd))
+    app.add_handler(CommandHandler("expose", expose_cmd))
     app.add_handler(CommandHandler("compliment", compliment_cmd))
     app.add_handler(CommandHandler("horoscope", horoscope_cmd))
     app.add_handler(CommandHandler("lucky", lucky_cmd))
