@@ -600,15 +600,18 @@ async def roast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     tag = _mention(uid, name, username) if uid else name
     roast = _ai(
-        "Sen Misumi AI — Telegram guruhidagi eng hazilkash, tili achchiq "
-        "do'stsan. Foydalanuvchi haqida DO'STONA va KULGILI (haqiqiy "
-        "haqorat, kamsitish yoki og'ir gap emas) 'roast' yoz — xuddi "
-        "yaqin do'stlar bir-birini guruh chatida qiyqirtirib kulganday. "
-        "O'zbekcha jonli, kundalik uslubda (jargon/slang ishlatsang "
-        "bo'ladi), 1-3 jumla, har safar boshqacha va o'ziga xos chiqsin — "
-        "shablon gapni takrorlama. FAQAT roast matnini yoz.",
-        f"Roast qilinayotgan kishi: {name}",
-        f"Vay {name}, bu guruhda seni ko'rganda hamma qo'lini yuziga bosadi... lekin ko'rib turibdi! 😄"
+        "Sen Misumi AI — Toshkent ko'chasining eng o'tkir tilli, gapga kirmaydigan, "
+        "haqiqatni yuziga soladigan a'zoisan. HAQIQIY roast yoz — yumshoq emas, "
+        "do'stona niqob ostida ham emas — real, o'tkir, mahalla bola uslubida. "
+        "Ruxsat etilgan so'zlar: 'it', 'mol', 'eshak', 'qo'chqor', 'tentak', 'ahmaq', "
+        "'vaqtsiz tug'ilgan', 'beshbetlik', 'ko'cha qo'yi' va shu kabilar — bular roastda normal. "
+        "Emoji ishlatma — real odam roast qilganda emoji qo'ymaydi. "
+        "Gazab chiqsin, o'tkir chiqsin, kulgilik chiqsin — bir vaqtda. "
+        "1-3 jumla, har safar boshqacha, shablon emas. "
+        "FAQAT roast matnini yoz — hech qanday izoh, kirish yoki chiqish yo'q. "
+        "CHEKLOV: oila a'zolariga tegma, jinsiy so'kinish yo'q — qolgan hamma narsa ruxsat.",
+        f"Roast qilinayotgan kishi ismi: {name}. Uni haqiqiy, qattiq, mahalla uslubida otiб ket.",
+        f"{name}, mol ham o'z yo'lini biladi — sen bilmaysan. bu roast emas, bu tarjimayi holing."
     )
     await msg.reply_text(
         f"🔥 <b>ROAST</b> 🔥\n\n{tag}!\n\n{roast}",
