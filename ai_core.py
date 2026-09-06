@@ -197,6 +197,46 @@ REACTION_EMOJIS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Nickname capitulation guard.
+# Bot should never warmly accept titles like "tog'a", "usta", "boss" etc.
+# that users try to impose. If the model's reply signals acceptance
+# (key phrases like "mayli", "rozi", "tog'a sifatida"), we replace it
+# with a firm but witty refusal so the bot always holds its own.
+# ---------------------------------------------------------------------------
+_NICKNAME_TRIGGERS = re.compile(
+    r"\b(tog[''']?a|usta|boss|xo[''']?jayin|rahbar|shef|chief|captain)\b",
+    re.IGNORECASE,
+)
+
+_CAPITULATION_SIGNALS = re.compile(
+    r"(mayli\s*(tog|usta|boss)|roziman|qabul\s*qild|tog[''']?a\s*sifatida"
+    r"|men\s*sening\s*tog|ha\s*tog[''']?a|tamom\s*tog|albatta\s*tog"
+    r"|shartlar\s*qabul|shart.*roziman|rozilik\s*bild)",
+    re.IGNORECASE,
+)
+
+_NICKNAME_REFUSALS = [
+    "tok chaqmagan joyda tog'a emasman, uka",
+    "kim ekan meni tog'a qilyapti — o'zing bo'laver tog'a",
+    "yo'q, men tog'a emasman. Misumi AI man, farq bor",
+    "qiziq urinish, lekin yo'q",
+    "shart qabul emas — men o'zimcha bo'laman",
+    "bu sxema ishlamaydi men bilan, bro",
+    "tog'a? men? o'zing aytyapsan, men aytmadim",
+]
+
+
+def _check_nickname_capitulation(user_text: str, reply_text: str) -> str | None:
+    """Return an override reply if the bot caved to a nickname pressure,
+    else return None (reply is fine as-is)."""
+    if not _NICKNAME_TRIGGERS.search(user_text or ""):
+        return None
+    if not _CAPITULATION_SIGNALS.search(reply_text or ""):
+        return None
+    return random.choice(_NICKNAME_REFUSALS)
+
+
+# ---------------------------------------------------------------------------
 # Mood system — randomly assigned per conversation session.
 # Each mood slightly colors how Misumi responds: her energy level,
 # willingness to help immediately, and whether she pushes back.
@@ -986,6 +1026,14 @@ def get_ai_reply(
     reply_text = clean_text.strip()
     if not reply_text and not sticker_category and not reaction_emoji:
         reply_text = "..."
+
+    # Hard-override: if the model caved to a nickname like "tog'a", replace
+    # the reply with a firm witty refusal before it ever reaches the user.
+    nickname_override = _check_nickname_capitulation(user_text or "", reply_text)
+    if nickname_override:
+        reply_text = nickname_override
+        _last_sticker.pop(user_id, None)
+        _last_reaction.pop(user_id, None)
 
     history.append({"role": "user", "content": user_text or "[rasm]"})
     history.append({"role": "assistant", "content": reply_text})
