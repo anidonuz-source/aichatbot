@@ -199,3 +199,29 @@ def record_broadcast(summary: str, sent: int, failed: int) -> None:
 def get_broadcast_history(limit: int = 10) -> list[dict]:
     data = _load()
     return list(reversed(data.get("broadcasts", [])))[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Persona — global bot character setting ("yaxshi" | "hard")
+# "yaxshi" = friendly, helpful, warm Uzbek AI
+# "hard"   = current street-style aggressive Misumi personality (default)
+# ---------------------------------------------------------------------------
+
+VALID_PERSONAS = {"yaxshi", "hard"}
+DEFAULT_PERSONA = "hard"
+
+
+def get_persona() -> str:
+    """Return the current global persona key. Defaults to 'hard'."""
+    return _load().get("persona", DEFAULT_PERSONA)
+
+
+def set_persona(persona: str) -> str:
+    """Set the global persona. Ignores unknown values, returns active persona."""
+    persona = persona.lower().strip()
+    if persona not in VALID_PERSONAS:
+        return get_persona()
+    data = _load()
+    data["persona"] = persona
+    _save(data)
+    return persona
