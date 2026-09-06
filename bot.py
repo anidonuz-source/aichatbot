@@ -88,17 +88,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = update.effective_user.first_name if update.effective_user else None
     greeting = f"Assalomu alaykum, {first_name}." if first_name else "Assalomu alaykum."
     text = (
-        f"✦ {greeting} Men {ai_core.BOT_NAME} — shaxsiy AI hamrohingiz.\n\n"
-        f"Yozing — suhbatlashamiz, savol bering, fikr almashing. Men gaplaringizni "
-        f"eslab qolaman, shuning uchun har safar bir joydan davom etaman.\n\n"
-        f"Premium interfeys uchun quyidagi tugmani bosing — rasm yuborish, "
-        f"tarixni saqlash va yanada boy tajriba shu yerda.\n\n"
+        f"✦ {greeting} Men {ai_core.BOT_NAME}man.\n\n"
+        f"Yoz — gaplashamiz. Savol ber, fikringni ayt. Gapingni eslab qolaman.\n\n"
         f"/reset — xotirani tozalash\n"
         f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
         f"/ship — guruhdan tasodifiy juftlik tanlash 💘\n"
         f"/reyting — o'yin reytingi\n"
-        f"/stiker — stikerga reply qilib, uni aniq turkumga qo'shish "
-        f"(qolganini o'zim guruhda ko'rganimcha yig'ib olaman)\n\n"
+        f"/roast @user — haqiqiy roast\n"
+        f"/stiker — stikerga reply qilib turkumga qo'shish\n\n"
         f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
     )
     await update.message.reply_text(text, reply_markup=_webapp_keyboard(chat_id))
@@ -525,7 +522,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user and not ai_core.check_rate_limit(chat_id, user.id):
         if ai_core.should_warn(chat_id, user.id):
-            await update.message.reply_text("Biroz sekinroq yozing 🙂")
+            await update.message.reply_text(random.choice([
+                "sekin bro, men robot emasman — yo'q, aslida robotman, lekin baribir sekin",
+                "shuncha tez yozib nima qilasan, kutib ol",
+                "uka, bir nafas ol",
+            ]))
         return
 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
