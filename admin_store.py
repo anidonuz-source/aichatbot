@@ -171,6 +171,73 @@ def get_group_last_seen() -> dict[str, str]:
     return out
 
 
+def record_group_membership(chat_id, title: str | None, is_member: bool) -> None:
+    """Track whether the bot is currently a member of a group.
+    Called from the my_chat_member handler in bot.py whenever the bot
+    is added to or removed/kicked from a group.
+    """
+    chat_id = str(chat_id)
+    data = _load()
+    groups = data.setdefault("group_memberships", {})
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = groups.get(chat_id) or {"first_seen": now}
+    entry["is_member"] = is_member
+    entry["updated"] = now
+    if title:
+        entry["title"] = title
+    if is_member and "joined" not in entry:
+        entry["joined"] = now
+    groups[chat_id] = entry
+    _save(data)
+
+
+def get_groups(limit: int = 200) -> list[dict]:
+    """Return a list of group chats (negative chat_ids) with metadata.
+    Used by the admin panel's Groups tab.
+    Merges message activity data with explicit membership tracking.
+    """
+    data = _load()
+    users = data.get("users", {})
+    blocked = set(data.get("blocked", []))
+    memberships = data.get("group_memberships", {})
+
+    # Start from message-activity records (negative IDs = groups)
+    result_map: dict[str, dict] = {}
+    for uid, info in users.items():
+        try:
+            if int(uid) >= 0:
+                continue
+        except ValueError:
+            continue
+        result_map[uid] = {
+            "id": uid,
+            "title": info.get("name") or f"Guruh {uid}",
+            "last_seen": info.get("last_seen"),
+            "message_count": info.get("message_count", 0),
+            "blocked": uid in blocked,
+            "is_member": None,  # unknown until bot explicitly tracks
+        }
+
+    # Overlay membership data
+    for gid, minfo in memberships.items():
+        if gid not in result_map:
+            result_map[gid] = {
+                "id": gid,
+                "title": minfo.get("title") or f"Guruh {gid}",
+                "last_seen": minfo.get("updated"),
+                "message_count": 0,
+                "blocked": gid in blocked,
+                "is_member": minfo.get("is_member"),
+            }
+        else:
+            result_map[gid]["is_member"] = minfo.get("is_member")
+            if minfo.get("title"):
+                result_map[gid]["title"] = minfo["title"]
+
+    result = sorted(result_map.values(), key=lambda g: g["last_seen"] or "", reverse=True)
+    return result[:limit]
+
+
 def get_all_chat_ids() -> list[str]:
     """Every chat/user id Misumi has ever exchanged a message with
     (private chats and groups alike, since record_message is called
