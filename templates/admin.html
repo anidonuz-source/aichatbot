@@ -313,6 +313,57 @@
   .toast .dot{width:6px;height:6px;border-radius:50%; background:var(--success); flex:0 0 auto;}
   .toast.err .dot{background:var(--danger);}
 
+  /* ── Main Tab Nav ──────────────────────────────────────────────── */
+  .main-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .main-tab {
+    flex: 1;
+    padding: 10px 8px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--subtext);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .main-tab.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .main-tab:active { transform: scale(.97); }
+
+  /* ── Group cards ────────────────────────────────────────────────── */
+  .group-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .group-avatar {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex: 0 0 auto;
+  }
+  .group-info { flex: 1; min-width: 0; }
+  .group-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .group-meta { font-size: 11px; color: var(--subtext); margin-top: 2px; }
+  .group-select {
+    width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); flex: 0 0 auto;
+  }
+
   /* ── Persona Selector ─────────────────────────────────────────── */
   .persona-btn {
     display: flex;
@@ -438,18 +489,62 @@
       </div>
       <!-- ── /Persona Selector ───────────────────────────────────────── -->
 
-      <div class="section-head">
-        <div class="section-title">Foydalanuvchilar</div>
-        <div class="section-count" id="sectionCount"></div>
+            <!-- Main Tab Nav -->
+      <div class="main-tabs">
+        <button class="main-tab active" id="tabUsers" onclick="switchMainTab('users')">&#128100; Foydalanuvchilar</button>
+        <button class="main-tab" id="tabGroups" onclick="switchMainTab('groups')">&#128101; Guruhlar</button>
       </div>
-      <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
-      <div class="filter-tabs" id="filterTabs">
-        <button class="filter-tab active" data-filter="all">Hammasi</button>
-        <button class="filter-tab" data-filter="premium">Premium</button>
-        <button class="filter-tab" data-filter="blocked">Bloklangan</button>
-        <button class="filter-tab" data-filter="miniapp">Mini App</button>
+
+      <!-- Users Tab -->
+      <div id="panelUsers">
+        <div class="section-head" style="margin-top:0">
+          <div class="section-title"></div>
+          <div class="section-count" id="sectionCount"></div>
+        </div>
+        <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
+        <div class="filter-tabs" id="filterTabs">
+          <button class="filter-tab active" data-filter="all">Hammasi</button>
+          <button class="filter-tab" data-filter="premium">Premium</button>
+          <button class="filter-tab" data-filter="blocked">Bloklangan</button>
+          <button class="filter-tab" data-filter="miniapp">Mini App</button>
+        </div>
+        <div id="usersList"></div>
       </div>
-      <div id="usersList"></div>
+
+      <!-- Groups Tab -->
+      <div id="panelGroups" style="display:none">
+        <div class="section-head" style="margin-top:0">
+          <div class="section-title"></div>
+          <div class="section-count" id="groupCount"></div>
+        </div>
+        <input class="search" id="groupSearch" placeholder="Guruh nomi yoki ID bo'yicha qidirish…" oninput="renderGroups()">
+        <div class="filter-tabs" id="groupFilterTabs" style="margin-bottom:12px">
+          <button class="filter-tab active" data-gfilter="all" onclick="setGroupFilter('all', this)">Hammasi</button>
+          <button class="filter-tab" data-gfilter="member" onclick="setGroupFilter('member', this)">✅ A'zo</button>
+          <button class="filter-tab" data-gfilter="left" onclick="setGroupFilter('left', this)">❌ Chiqarilgan</button>
+          <button class="filter-tab" data-gfilter="unknown" onclick="setGroupFilter('unknown', this)">❓ Noma'lum</button>
+        </div>
+
+        <div class="panel" style="margin-bottom:14px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+            Guruhlarga xabar yuborish
+          </div>
+          <textarea id="broadcastMsg" placeholder="Xabar matni… (HTML teglar qo'llab-quvvatlanadi)" style="width:100%;box-sizing:border-box;resize:vertical;min-height:80px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--subtext);cursor:pointer;user-select:none">
+              <input type="checkbox" id="broadcastAll" checked onchange="toggleBroadcastMode()"> Barcha guruhlarga
+            </label>
+            <span style="flex:1"></span>
+            <span id="broadcastTargetCount" style="font-size:12px;color:var(--subtext)"></span>
+            <button class="action-btn prem" id="broadcastSendBtn" onclick="sendGroupBroadcast()" style="padding:8px 18px;font-size:13px">Yuborish</button>
+          </div>
+          <div id="broadcastResult" style="margin-top:8px;font-size:12px;color:var(--subtext);display:none"></div>
+        </div>
+
+        <div id="groupsList"></div>
+      </div>
+
     </div>
   </div>
 </main>
@@ -689,6 +784,137 @@
     } catch (_) { /* non-critical, skip */ }
   }
   // ── /Persona selector ───────────────────────────────────────────────
+
+  // ── Groups tab ──────────────────────────────────────────────────────
+  let allGroups = [];
+  let selectedGroupIds = new Set();
+  let groupMemberFilter = 'all';
+
+  function setGroupFilter(filter, btn) {
+    groupMemberFilter = filter;
+    document.getElementById('groupFilterTabs').querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderGroups();
+  }
+
+  function switchMainTab(tab) {
+    const isGroups = tab === 'groups';
+    document.getElementById('tabUsers').classList.toggle('active', !isGroups);
+    document.getElementById('tabGroups').classList.toggle('active', isGroups);
+    document.getElementById('panelUsers').style.display = isGroups ? 'none' : '';
+    document.getElementById('panelGroups').style.display = isGroups ? '' : 'none';
+    if (isGroups && allGroups.length === 0) loadGroups();
+  }
+
+  async function loadGroups() {
+    try {
+      const r = await api('/api/admin/groups', {});
+      allGroups = r.groups || [];
+      selectedGroupIds = new Set(allGroups.map(g => g.id));
+      renderGroups();
+      updateBroadcastCount();
+    } catch (e) {
+      document.getElementById('groupsList').innerHTML = '<div class="empty">Guruhlar yuklanmadi.</div>';
+    }
+  }
+
+  function renderGroups() {
+    const q = (document.getElementById('groupSearch').value || '').toLowerCase();
+    const filtered = allGroups.filter(g => {
+      if (q && !g.title.toLowerCase().includes(q) && !g.id.includes(q)) return false;
+      if (groupMemberFilter === 'member') return g.is_member === true;
+      if (groupMemberFilter === 'left') return g.is_member === false;
+      if (groupMemberFilter === 'unknown') return g.is_member === null || g.is_member === undefined;
+      return true;
+    });
+    document.getElementById('groupCount').textContent = allGroups.length + ' ta guruh';
+    const el = document.getElementById('groupsList');
+    if (!filtered.length) {
+      el.innerHTML = '<div class="empty">Guruh topilmadi.</div>';
+      return;
+    }
+    el.innerHTML = filtered.map(g => {
+      const checked = selectedGroupIds.has(g.id);
+      const lastSeen = g.last_seen ? relativeTime(g.last_seen) : '—';
+      // Membership badge
+      let memberBadge = '';
+      if (g.is_member === true) {
+        memberBadge = '<span style="font-size:11px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:6px;padding:2px 7px;font-weight:600">✅ A\'zo</span>';
+      } else if (g.is_member === false) {
+        memberBadge = '<span style="font-size:11px;background:rgba(239,68,68,.12);color:var(--danger);border-radius:6px;padding:2px 7px;font-weight:600">❌ Chiqarilgan</span>';
+      } else {
+        memberBadge = '<span style="font-size:11px;background:rgba(148,163,184,.12);color:var(--subtext);border-radius:6px;padding:2px 7px">❓ Noma\'lum</span>';
+      }
+      return `<div class="group-card">
+        <input type="checkbox" class="group-select" ${checked ? 'checked' : ''}
+          onchange="toggleGroupSelect('${g.id}', this.checked)">
+        <div class="group-avatar">&#128101;</div>
+        <div class="group-info">
+          <div class="group-title">${escapeHtml(g.title)}</div>
+          <div class="group-meta">ID: ${g.id} &nbsp;·&nbsp; ${g.message_count} xabar &nbsp;·&nbsp; ${lastSeen}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          ${memberBadge}
+          ${g.blocked ? '<span style="font-size:11px;color:var(--danger);font-weight:600">Bloklangan</span>' : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function toggleGroupSelect(id, checked) {
+    if (checked) selectedGroupIds.add(id);
+    else selectedGroupIds.delete(id);
+    updateBroadcastCount();
+    // If user manually deselects any — uncheck "Barcha guruhlarga"
+    if (!checked) document.getElementById('broadcastAll').checked = false;
+  }
+
+  function toggleBroadcastMode() {
+    const all = document.getElementById('broadcastAll').checked;
+    if (all) {
+      selectedGroupIds = new Set(allGroups.map(g => g.id));
+    } else {
+      selectedGroupIds = new Set();
+    }
+    renderGroups();
+    updateBroadcastCount();
+  }
+
+  function updateBroadcastCount() {
+    const el = document.getElementById('broadcastTargetCount');
+    const n = selectedGroupIds.size;
+    el.textContent = n === allGroups.length ? 'Barcha ' + n + ' ta guruh' : n + ' ta guruh tanlangan';
+  }
+
+  async function sendGroupBroadcast() {
+    const msg = document.getElementById('broadcastMsg').value.trim();
+    if (!msg) { showToast('Xabar matni kiriting', true); return; }
+    if (!selectedGroupIds.size) { showToast('Guruh tanlanmagan', true); return; }
+
+    const btn = document.getElementById('broadcastSendBtn');
+    const resultEl = document.getElementById('broadcastResult');
+    btn.disabled = true;
+    btn.textContent = 'Yuborilyapti…';
+    resultEl.style.display = 'none';
+
+    const useAll = document.getElementById('broadcastAll').checked;
+    const body = { message: msg };
+    if (!useAll) body.group_ids = [...selectedGroupIds];
+
+    try {
+      const r = await api('/api/admin/broadcast-groups', body);
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `&#9989; Yuborildi: <b>${r.sent}</b> &nbsp;·&nbsp; &#10060; Yetmadi: <b>${r.failed}</b> &nbsp;·&nbsp; Jami: ${r.total}`;
+      showToast(`${r.sent} ta guruhga yuborildi`);
+      document.getElementById('broadcastMsg').value = '';
+    } catch (e) {
+      showToast('Yuborib bo\'lmadi', true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Yuborish';
+    }
+  }
+  // ── /Groups tab ─────────────────────────────────────────────────────
 
   async function load(isRefresh) {
     if (isRefresh) refreshBtn.classList.add('spinning');
