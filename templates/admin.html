@@ -312,6 +312,38 @@
   }
   .toast .dot{width:6px;height:6px;border-radius:50%; background:var(--success); flex:0 0 auto;}
   .toast.err .dot{background:var(--danger);}
+
+  /* ── Persona Selector ─────────────────────────────────────────── */
+  .persona-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 14px 10px;
+    border-radius: 14px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color .2s, background .2s, transform .1s;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .persona-btn:active { transform: scale(.97); }
+  .persona-btn.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .persona-label {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .persona-desc {
+    font-size: 11px;
+    color: var(--subtext);
+    text-align: center;
+    line-height: 1.3;
+  }
 </style>
 </head>
 <body>
@@ -377,6 +409,34 @@
           </label>
         </div>
       </div>
+
+      <!-- ── Persona Selector ────────────────────────────────────────── -->
+      <div class="panel" id="personaPanel">
+        <div class="panel-row" style="align-items:flex-start;gap:12px">
+          <div class="txt" style="flex:1">
+            <div class="icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            </div>
+            <div class="txt-inner">
+              <div class="t">Bot harakteri</div>
+              <div class="d">Barcha foydalanuvchilar uchun botning muloqot uslubini tanlang.</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;padding:0 4px">
+          <button id="personaYaxshi" class="persona-btn" onclick="setPersona('yaxshi')" style="flex:1">
+            <span style="font-size:20px">😊</span>
+            <span class="persona-label">Yaxshi AI</span>
+            <span class="persona-desc">Do'stona, iliq, yordam beruvchi</span>
+          </button>
+          <button id="personaHard" class="persona-btn" onclick="setPersona('hard')" style="flex:1">
+            <span style="font-size:20px">😤</span>
+            <span class="persona-label">Hard AI</span>
+            <span class="persona-desc">Ko'cha bola uslubi, kesatgich, o'tkir</span>
+          </button>
+        </div>
+      </div>
+      <!-- ── /Persona Selector ───────────────────────────────────────── -->
 
       <div class="section-head">
         <div class="section-title">Foydalanuvchilar</div>
@@ -605,6 +665,31 @@
     load(true);
   });
 
+  // ── Persona selector ────────────────────────────────────────────────
+  function renderPersona(persona) {
+    document.getElementById('personaYaxshi').classList.toggle('active', persona === 'yaxshi');
+    document.getElementById('personaHard').classList.toggle('active', persona === 'hard');
+  }
+
+  async function setPersona(value) {
+    tg?.HapticFeedback?.impactOccurred('light');
+    try {
+      const r = await api('/api/admin/persona', { persona: value });
+      renderPersona(r.persona);
+      showToast(value === 'yaxshi' ? "Yaxshi AI yoqildi 😊" : "Hard AI yoqildi 😤");
+    } catch (e) {
+      showToast("Xatolik yuz berdi", true);
+    }
+  }
+
+  async function loadPersona() {
+    try {
+      const r = await api('/api/admin/persona', {});
+      renderPersona(r.persona);
+    } catch (_) { /* non-critical, skip */ }
+  }
+  // ── /Persona selector ───────────────────────────────────────────────
+
   async function load(isRefresh) {
     if (isRefresh) refreshBtn.classList.add('spinning');
     else {
@@ -621,6 +706,7 @@
       applyFilter();
       loadingEl.style.display = 'none';
       dashEl.style.display = 'block';
+      loadPersona();
       if (isRefresh) showToast("Yangilandi");
     } catch (err) {
       loadingEl.style.display = 'none';
