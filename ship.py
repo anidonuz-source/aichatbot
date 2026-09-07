@@ -1155,7 +1155,28 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     ]
     loading = await message.reply_text(random.choice(loading_texts))
 
-    picked = _pick_gendered_pair(chat_id)
+    # /dating @user — taklif rejimi
+    dating_mentioned = [e for e in (message.entities or []) if e.type in ("mention", "text_mention")]
+    dating_proposer = message.from_user.id
+    if dating_mentioned:
+        e2 = dating_mentioned[0]
+        if e2.type == "text_mention" and e2.user and e2.user.id != dating_proposer:
+            dtid = e2.user.id
+            dtname = e2.user.first_name or str(dtid)
+            dptag = _mention(dating_proposer, message.from_user.first_name or str(dating_proposer), message.from_user.username)
+            dttag = _mention(dtid, dtname, e2.user.username)
+            _pending_proposals.setdefault(chat_id, {})[(dating_proposer, dtid)] = {"type": "dating", "ts": time.time()}
+            dkb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Ha, roziman!", callback_data=f"proposal:accept:dating:{dating_proposer}:{dtid}"),
+                InlineKeyboardButton("Yo'q", callback_data=f"proposal:decline:dating:{dating_proposer}:{dtid}"),
+            ]])
+            await loading.edit_text(
+                f"Dating taklifi: {dptag} siz bilan dating qilmoqchi, {dttag}!\n\nJavob bering ({PROPOSAL_TIMEOUT} soniya)...",
+                reply_markup=dkb, parse_mode="HTML"
+            )
+            return
+
+        picked = _pick_gendered_pair(chat_id)
     gender_note = ""
     if picked:
         id1, id2, m1, m2 = picked  # id1=yigit, id2=qiz — kafolatlangan
@@ -1229,6 +1250,161 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await loading.edit_text(text, parse_mode="HTML")
 
 
+
+# ── Taklif (proposal) tizimi ─────────────────────────────────────────────────
+
+_pending_proposals: dict = {}
+PROPOSAL_TIMEOUT = 90
+
+
+async def proposal_callback(update, context):
+    """Handles accept/decline buttons for marry/dating proposals."""
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split(":")  # proposal:accept|decline:marry|dating:pid:tid
+    if len(parts) != 5:
+        return
+    _, action, kind, pid_s, tid_s = parts
+    pid, tid = int(pid_s), int(tid_s)
+    chat_id = query.message.chat_id
+
+    if query.from_user.id != tid:
+        await query.answer("Bu taklif senga emas!", show_alert=True)
+        return
+
+    bucket = _pending_proposals.get(chat_id, {})
+    key = (pid, tid)
+    if key not in bucket:
+        await query.message.edit_text("⏰ Taklif muddati o'tgan yoki allaqachon javob berilgan.")
+        return
+    bucket.pop(key)
+
+    if action == "decline":
+        try:
+            p = await context.bot.get_chat_member(chat_id, pid)
+            pname = p.user.first_name
+        except Exception:
+            pname = f"ID:{pid}"
+        try:
+            t = await context.bot.get_chat_member(chat_id, tid)
+            tname = t.user.first_name
+        except Exception:
+            tname = f"ID:{tid}"
+        icon = "💔" if kind == "marry" else "🙅"
+        await query.message.edit_text(
+            f"{icon} <b>{tname}</b> rad etdi... {pname} ga omad keyingi safar!",
+            parse_mode="HTML"
+        )
+        return
+
+    await query.message.delete()
+    if kind == "marry":
+        await _do_marry_ceremony(context, chat_id, pid, tid)
+    else:
+        await _do_dating_ceremony(context, chat_id, pid, tid)
+
+
+async def _do_marry_ceremony(context, chat_id: int, id1: int, id2: int) -> None:
+    """Wedding ceremony for two specific users."""
+    from datetime import datetime as _dt
+    try:
+        u1 = (await context.bot.get_chat_member(chat_id, id1)).user
+        u2 = (await context.bot.get_chat_member(chat_id, id2)).user
+    except Exception as e:
+        await context.bot.send_message(chat_id, f"❌ Xatolik: {e}")
+        return
+    name1 = u1.first_name or str(id1)
+    name2 = u2.first_name or str(id2)
+    tag1 = _mention(id1, name1, u1.username)
+    tag2 = _mention(id2, name2, u2.username)
+    facts1 = load_member_facts(chat_id, id1)
+    facts2 = load_member_facts(chat_id, id2)
+    happiness = random.randint(70, 99)
+    loyalty = random.randint(65, 99)
+    kids = random.randint(0, 4)
+    ring = random.choice(["💍", "💎", "✨💍✨"])
+    caption = _gen_couple_caption(name1, name2, "married", facts1 or None, facts2 or None)
+    bar = _couple_bar(happiness, "💍", "🖤")
+    ship_nm = _ship_name(name1, name2)
+    songs = [
+        "🎵 Can't Help Falling in Love — Elvis",
+        "🎵 Perfect — Ed Sheeran",
+        "🎵 A Thousand Years — Christina Perri",
+        "🎵 All of Me — John Legend",
+    ]
+    kids_line = (f"👶 Kelajakda: <b>{kids} ta farzand</b>!" if kids else "👶 Hozircha farzandsiz — vaqt bor!")
+    _married_couples[chat_id].append({
+        "id1": id1, "id2": id2, "name1": name1, "name2": name2,
+        "date": _dt.now().strftime("%Y-%m-%d")
+    })
+    text = (
+        f"╔══════════════════════╗\n"
+        f"║  {ring}  NIKOH MAROSIMI  {ring}  ║\n"
+        f"╚══════════════════════╝\n\n"
+        f"🤵 Kuyov: {tag1}\n👰 Kelin: {tag2}\n\n"
+        f"🏷 Oila nomi: <b>{ship_nm} oilasi</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"😊 Baxt: <b>{happiness}%</b>  {bar}\n"
+        f"🤝 Sadoqat: <b>{loyalty}%</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{kids_line}\n\n"
+        f"{random.choice(songs)}\n\n"
+        f"💬 <i>{caption}</i>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎊 Guruh a'zolari, tabriklar! Nikoh muborak! 🎊"
+    )
+    image_url = _get_couple_image()
+    try:
+        await context.bot.send_photo(chat_id=chat_id, photo=image_url, caption=text, parse_mode="HTML")
+    except Exception:
+        await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+
+
+async def _do_dating_ceremony(context, chat_id: int, id1: int, id2: int) -> None:
+    """Dating announcement for two specific users."""
+    from datetime import datetime as _dt
+    try:
+        u1 = (await context.bot.get_chat_member(chat_id, id1)).user
+        u2 = (await context.bot.get_chat_member(chat_id, id2)).user
+    except Exception as e:
+        await context.bot.send_message(chat_id, f"❌ Xatolik: {e}")
+        return
+    name1 = u1.first_name or str(id1)
+    name2 = u2.first_name or str(id2)
+    tag1 = _mention(id1, name1, u1.username)
+    tag2 = _mention(id2, name2, u2.username)
+    facts1 = load_member_facts(chat_id, id1)
+    facts2 = load_member_facts(chat_id, id2)
+    chemistry = random.randint(55, 99)
+    caption = _gen_couple_caption(name1, name2, "dating", facts1 or None, facts2 or None)
+    bar = _couple_bar(chemistry, "❤️", "🖤")
+    ship_nm = _ship_name(name1, name2)
+    date_ideas = ["☕ Qahvaxona", "🎬 Kino", "🌳 Park", "🍕 Pizza kechqurun", "🌅 Quyosh botishi"]
+    record_personal_ship(chat_id, id1, id2, name2, "dating")
+    record_personal_ship(chat_id, id2, id1, name1, "dating")
+    _dating_couples[chat_id].append({
+        "id1": id1, "id2": id2, "name1": name1, "name2": name2,
+        "date": _dt.now().strftime("%Y-%m-%d")
+    })
+    text = (
+        f"╔══════════════════════╗\n"
+        f"║  💏  SEVGI E'LONI  💏  ║\n"
+        f"╚══════════════════════╝\n\n"
+        f"💙 1-chi: {tag1}\n💗 2-chi: {tag2}\n\n"
+        f"🏷 Juft ismi: <b>{ship_nm}</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚡ Kimyo: <b>{chemistry}%</b>  {bar}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💡 Sana g'oyasi: {random.choice(date_ideas)}\n\n"
+        f"💬 <i>{caption}</i>\n\n"
+        f"🌹 Guruh shohid bo'ldi! Omad! 😍"
+    )
+    image_url = _get_couple_image()
+    try:
+        await context.bot.send_photo(chat_id=chat_id, photo=image_url, caption=text, parse_mode="HTML")
+    except Exception:
+        await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+
 # ── /marry — nikoh marosimi ───────────────────────────────────────────────────
 
 async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1259,28 +1435,36 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     loading = await message.reply_text("💍 Nikoh marosimi tayyorlanmoqda...")
     await loading.edit_text("💍 Nikoh marosimi tayyorlanmoqda... 🕊️")
 
-    # Mention orqali /marry @u1 @u2
+    # /marry @user — taklif rejimi; /marry — random
+    mentioned_ents = [e for e in (message.entities or []) if e.type in ("mention", "text_mention")]
+    proposer_id = message.from_user.id
+
+    if mentioned_ents:
+        e = mentioned_ents[0]
+        if e.type == "text_mention" and e.user and e.user.id != proposer_id:
+            tid = e.user.id
+            tname = e.user.first_name or str(tid)
+            ptag = _mention(proposer_id, message.from_user.first_name or str(proposer_id), message.from_user.username)
+            ttag = _mention(tid, tname, e.user.username)
+            _pending_proposals.setdefault(chat_id, {})[(proposer_id, tid)] = {"type": "marry", "ts": time.time()}
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Ha, roziman!", callback_data=f"proposal:accept:marry:{proposer_id}:{tid}"),
+                InlineKeyboardButton("Yo'q", callback_data=f"proposal:decline:marry:{proposer_id}:{tid}"),
+            ]])
+            await loading.edit_text(
+                f"Nikoh taklifi: {ptag} sizni kutmoqda, {ttag}!\n\nJavob bering ({PROPOSAL_TIMEOUT} soniya)...",
+                reply_markup=kb, parse_mode="HTML"
+            )
+            return
+
+    # Random nikoh
     id1 = id2 = None
     m1 = m2 = None
-
-    if message.entities and context.args:
-        mentioned = [e for e in message.entities
-                     if e.type in ("mention", "text_mention")]
-        if len(mentioned) >= 2:
-            e1, e2 = mentioned[0], mentioned[1]
-            if e1.type == "text_mention" and e2.type == "text_mention":
-                id1, id2 = e1.user.id, e2.user.id
-                m1 = {"name": e1.user.first_name or str(id1), "username": e1.user.username,
-                      "zodiac": _seen_members[chat_id].get(id1, {}).get("zodiac", random.randint(0, 11))}
-                m2 = {"name": e2.user.first_name or str(id2), "username": e2.user.username,
-                      "zodiac": _seen_members[chat_id].get(id2, {}).get("zodiac", random.randint(0, 11))}
-
-    if id1 is None:
-        picked = _pick_two(chat_id)
-        if not picked:
-            await loading.edit_text("❌ Kamida 2 ta a'zo kerak! Avval xabar yuboring 💬")
-            return
-        id1, id2, m1, m2 = picked
+    picked = _pick_two(chat_id)
+    if not picked:
+        await loading.edit_text("Kamida 2 ta azо kerak! Avval xabar yuboring")
+        return
+    id1, id2, m1, m2 = picked
 
     name1, name2 = m1["name"], m2["name"]
     tag1 = _mention(id1, name1, m1.get("username"))
@@ -1508,6 +1692,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("myhusband",    myhusband_cmd))
     app.add_handler(CommandHandler("setup",        setup_cmd))
     app.add_handler(CallbackQueryHandler(jins_button_cb, pattern=r"^jins:"))
+    app.add_handler(CallbackQueryHandler(proposal_callback, pattern=r"^proposal:"))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, _track_member),
