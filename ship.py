@@ -43,8 +43,122 @@ from telegram.ext import (
 
 import ai_core
 
-# ── xotira ───────────────────────────────────────────────────────────────────
-_seen_members: dict[int, dict[int, dict]] = defaultdict(dict)
+# ── Disk xotira papkasi ───────────────────────────────────────────────────────
+SHIP_MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "memory")) / "ship_members"
+SHIP_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+_ship_mem_lock = Lock()
+
+# ── Persistent state fayllari ─────────────────────────────────────────────────
+_STATE_FILE      = SHIP_MEMORY_DIR.parent / "ship_state.json"       # seen_members
+_MARRIED_FILE    = SHIP_MEMORY_DIR.parent / "ship_married.json"     # married couples
+_DATING_FILE     = SHIP_MEMORY_DIR.parent / "ship_dating.json"      # dating couples
+_LEADERBOARD_FILE= SHIP_MEMORY_DIR.parent / "ship_leaderboard.json" # leaderboard
+_PERSONAL_FILE   = SHIP_MEMORY_DIR.parent / "ship_personal.json"    # personal ships
+_state_lock = Lock()
+
+
+def _load_json(path: Path, default):
+    """JSON fayldan yuklaydi, mavjud bo'lmasa default qaytaradi."""
+    try:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[ship:load_json:{path.name}] {e}")
+    return default
+
+
+def _save_json(path: Path, data) -> None:
+    """JSON faylga yozadi (atomik)."""
+    try:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+    except Exception as e:
+        print(f"[ship:save_json:{path.name}] {e}")
+
+
+# ── seen_members — diskdan yuklash ────────────────────────────────────────────
+def _load_seen_members() -> dict:
+    raw = _load_json(_STATE_FILE, {})
+    result = defaultdict(dict)
+    for chat_id_s, members in raw.items():
+        chat_id = int(chat_id_s)
+        for uid_s, data in members.items():
+            result[chat_id][int(uid_s)] = data
+    return result
+
+def _save_seen_members() -> None:
+    with _state_lock:
+        serializable = {
+            str(cid): {str(uid): d for uid, d in members.items()}
+            for cid, members in _seen_members.items()
+        }
+        _save_json(_STATE_FILE, serializable)
+
+# ── married/dating — diskdan yuklash ─────────────────────────────────────────
+def _load_married() -> dict:
+    raw = _load_json(_MARRIED_FILE, {})
+    result = defaultdict(list)
+    for cid_s, lst in raw.items():
+        result[int(cid_s)] = lst
+    return result
+
+def _save_married() -> None:
+    with _state_lock:
+        _save_json(_MARRIED_FILE, {str(k): v for k, v in _married_couples.items()})
+
+def _load_dating() -> dict:
+    raw = _load_json(_DATING_FILE, {})
+    result = defaultdict(list)
+    for cid_s, lst in raw.items():
+        result[int(cid_s)] = lst
+    return result
+
+def _save_dating() -> None:
+    with _state_lock:
+        _save_json(_DATING_FILE, {str(k): v for k, v in _dating_couples.items()})
+
+# ── leaderboard — diskdan yuklash ─────────────────────────────────────────────
+def _load_leaderboard() -> dict:
+    raw = _load_json(_LEADERBOARD_FILE, {})
+    result = defaultdict(dict)
+    for cid_s, board in raw.items():
+        cid = int(cid_s)
+        for key_s, val in board.items():
+            id1, id2 = map(int, key_s.split(","))
+            result[cid][(id1, id2)] = val
+    return result
+
+def _save_leaderboard() -> None:
+    with _state_lock:
+        serializable = {}
+        for cid, board in _couple_leaderboard.items():
+            serializable[str(cid)] = {
+                f"{k[0]},{k[1]}": v for k, v in board.items()
+            }
+        _save_json(_LEADERBOARD_FILE, serializable)
+
+# ── personal ships — diskdan yuklash ──────────────────────────────────────────
+def _load_personal() -> dict:
+    raw = _load_json(_PERSONAL_FILE, {})
+    result = defaultdict(dict)
+    for cid_s, users in raw.items():
+        cid = int(cid_s)
+        for uid_s, data in users.items():
+            result[cid][int(uid_s)] = data
+    return result
+
+def _save_personal() -> None:
+    with _state_lock:
+        serializable = {
+            str(cid): {str(uid): d for uid, d in users.items()}
+            for cid, users in _last_personal_ship.items()
+        }
+        _save_json(_PERSONAL_FILE, serializable)
+
+
+# ── xotira (RAM) — diskdan boshlang'ich yuklash ───────────────────────────────
+_seen_members: dict[int, dict[int, dict]] = _load_seen_members()
 _last_ship_group: dict[int, float] = {}
 GROUP_COOLDOWN = 60
 
@@ -53,12 +167,7 @@ USER_DAILY_LIMIT = 10
 USER_LIMIT_COOLDOWN = 3600
 
 # TOP juftlar: {chat_id: {(id1,id2): {"count": int, "names": (n1,n2), "last": float}}}
-_couple_leaderboard: dict[int, dict[tuple, dict]] = defaultdict(dict)
-
-# ── Ship xotirasi (disk, persistent) ─────────────────────────────────────────
-SHIP_MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "memory")) / "ship_members"
-SHIP_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-_ship_mem_lock = Lock()
+_couple_leaderboard: dict[int, dict[tuple, dict]] = _load_leaderboard()
 
 SHIP_KNOWN_FACTS = [
     "ism", "kasb", "yosh", "shahar", "xarakter", "sevimli_narsa",
@@ -198,6 +307,7 @@ def record_member(chat_id: int, user_id: int, first_name: str, username: str | N
         "zodiac": _seen_members[chat_id].get(user_id, {}).get("zodiac", random.randint(0, 11)),
         "gender": _seen_members[chat_id].get(user_id, {}).get("gender"),
     }
+    _save_seen_members()
 
 
 def set_gender(chat_id: int, user_id: int, gender: str) -> None:
@@ -379,6 +489,7 @@ def _update_leaderboard(chat_id: int, id1: int, id2: int, name1: str, name2: str
         _couple_leaderboard[chat_id][key] = {"count": 0, "names": (name1, name2), "last": 0}
     _couple_leaderboard[chat_id][key]["count"] += 1
     _couple_leaderboard[chat_id][key]["last"] = time.time()
+    _save_leaderboard()
 
 
 def _build_message(
@@ -806,7 +917,7 @@ async def members_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 # ── /mywife, /myhusband — o'zining oxirgi ship natijasi ─────────────────────
 # {chat_id: {user_id: {"partner_id": int, "partner_name": str, "kind": str, "when": float}}}
-_last_personal_ship: dict[int, dict[int, dict]] = defaultdict(dict)
+_last_personal_ship: dict[int, dict[int, dict]] = _load_personal()
 
 
 def record_personal_ship(chat_id: int, uid: int, partner_id: int, partner_name: str, kind: str) -> None:
@@ -814,6 +925,7 @@ def record_personal_ship(chat_id: int, uid: int, partner_id: int, partner_name: 
         "partner_id": partner_id, "partner_name": partner_name,
         "kind": kind, "when": time.time(),
     }
+    _save_personal()
 
 
 async def mywife_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -946,9 +1058,9 @@ def _register_v1_unused(app: Application) -> None:  # eski, ishlatilmaydi — v2
 # YANGI KOMANDALAR: /couple, /dating, /marry
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Yodlangan juftliklar (marry bo'lganlar) ───────────────────────────────────
-_married_couples: dict[int, list[dict]] = defaultdict(list)   # {chat_id: [{id1,id2,name1,name2,date}]}
-_dating_couples:  dict[int, list[dict]] = defaultdict(list)   # {chat_id: [{id1,id2,...}]}
+# ── Yodlangan juftliklar (married/dating) — diskdan yuklanadi ────────────────
+_married_couples: dict[int, list[dict]] = _load_married()
+_dating_couples:  dict[int, list[dict]] = _load_dating()
 
 
 # ── AI caption generatorlar ───────────────────────────────────────────────────
@@ -1244,6 +1356,7 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "name1": name1, "name2": name2,
         "date": datetime.now().strftime("%Y-%m-%d")
     })
+    _save_dating()
 
     # Dating: id1=yigit/noma'lum, id2=qiz/noma'lum (yuqorida tartib to'g'rilangan)
     dl1, dl2 = "💙 Yigit:", "💗 Qiz:"
@@ -1371,6 +1484,7 @@ async def _do_marry_ceremony(context, chat_id: int, id1: int, id2: int) -> None:
         "name1": groom_data["name"], "name2": bride_data["name"],
         "date": datetime.now().strftime("%Y-%m-%d")
     })
+    _save_married()
     record_personal_ship(chat_id, groom_id, bride_id, bride_data["name"], "marry")
     record_personal_ship(chat_id, bride_id, groom_id, groom_data["name"], "marry")
 
@@ -1411,6 +1525,7 @@ async def _do_dating_ceremony(context, chat_id: int, id1: int, id2: int) -> None
         "id1": id1, "id2": id2, "name1": name1, "name2": name2,
         "date": _dt.now().strftime("%Y-%m-%d")
     })
+    _save_dating()
     text = (
         f"╔══════════════════════╗\n"
         f"║  💏  SEVGI E'LONI  💏  ║\n"
@@ -1642,6 +1757,7 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "name1": groom_data["name"], "name2": bride_data["name"],
         "date": datetime.now().strftime("%Y-%m-%d")
     })
+    _save_married()
     record_personal_ship(chat_id, groom_id, bride_id, bride_data["name"], "marry")
     record_personal_ship(chat_id, bride_id, groom_id, groom_data["name"], "marry")
 
