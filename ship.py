@@ -1156,27 +1156,30 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     loading = await message.reply_text(random.choice(loading_texts))
 
     # /dating @user — taklif rejimi
-    dating_mentioned = [e for e in (message.entities or []) if e.type in ("mention", "text_mention")]
     dating_proposer = message.from_user.id
-    if dating_mentioned:
-        e2 = dating_mentioned[0]
-        if e2.type == "text_mention" and e2.user and e2.user.id != dating_proposer:
-            dtid = e2.user.id
-            dtname = e2.user.first_name or str(dtid)
+    has_dating_mention = any(e.type in ("mention", "text_mention") for e in (message.entities or []))
+
+    if has_dating_mention:
+        dtid, dtname, dtusername = await _resolve_mention(message, context, chat_id)
+        if dtid and dtid != dating_proposer:
             dptag = _mention(dating_proposer, message.from_user.first_name or str(dating_proposer), message.from_user.username)
-            dttag = _mention(dtid, dtname, e2.user.username)
+            dttag = _mention(dtid, dtname or str(dtid), dtusername)
             _pending_proposals.setdefault(chat_id, {})[(dating_proposer, dtid)] = {"type": "dating", "ts": time.time()}
             dkb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Ha, roziman!", callback_data=f"proposal:accept:dating:{dating_proposer}:{dtid}"),
-                InlineKeyboardButton("Yo'q", callback_data=f"proposal:decline:dating:{dating_proposer}:{dtid}"),
+                InlineKeyboardButton("❤️ Ha, roziman!", callback_data=f"proposal:accept:dating:{dating_proposer}:{dtid}"),
+                InlineKeyboardButton("🙅 Yo'q", callback_data=f"proposal:decline:dating:{dating_proposer}:{dtid}"),
             ]])
             await loading.edit_text(
-                f"Dating taklifi: {dptag} siz bilan dating qilmoqchi, {dttag}!\n\nJavob bering ({PROPOSAL_TIMEOUT} soniya)...",
+                f"💘 {dptag} siz bilan dating qilmoqchi, {dttag}!\n\n"
+                f"⏰ {PROPOSAL_TIMEOUT} soniya ichida javob bering...",
                 reply_markup=dkb, parse_mode="HTML"
             )
             return
+        elif not dtid:
+            await loading.edit_text("❌ Foydalanuvchi topilmadi. U guruhda xabar yozganmi?")
+            return
 
-        picked = _pick_gendered_pair(chat_id)
+    picked = _pick_gendered_pair(chat_id)
     gender_note = ""
     if picked:
         id1, id2, m1, m2 = picked  # id1=yigit, id2=qiz — kafolatlangan
@@ -1252,6 +1255,27 @@ async def dating_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 # ── Taklif (proposal) tizimi ─────────────────────────────────────────────────
+
+
+async def _resolve_mention(message, context, chat_id: int) -> tuple:
+    """Extract first @mention or text_mention from message.
+    Returns (user_id, first_name, username) or (None, None, None).
+    Handles both @username (plain mention) and text_mention (no-username users).
+    """
+    for e in (message.entities or []):
+        if e.type == "text_mention" and e.user:
+            u = e.user
+            return u.id, u.first_name or str(u.id), u.username
+        if e.type == "mention":
+            # @username — extract and resolve via getChatMember
+            uname = message.text[e.offset + 1: e.offset + e.length]  # strip @
+            try:
+                member = await context.bot.get_chat_member(chat_id, "@" + uname)
+                u = member.user
+                return u.id, u.first_name or uname, u.username
+            except Exception:
+                return None, uname, uname  # couldn't resolve, at least return name
+    return None, None, None
 
 _pending_proposals: dict = {}
 PROPOSAL_TIMEOUT = 90
@@ -1436,25 +1460,27 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await loading.edit_text("💍 Nikoh marosimi tayyorlanmoqda... 🕊️")
 
     # /marry @user — taklif rejimi; /marry — random
-    mentioned_ents = [e for e in (message.entities or []) if e.type in ("mention", "text_mention")]
     proposer_id = message.from_user.id
+    has_mention = any(e.type in ("mention", "text_mention") for e in (message.entities or []))
 
-    if mentioned_ents:
-        e = mentioned_ents[0]
-        if e.type == "text_mention" and e.user and e.user.id != proposer_id:
-            tid = e.user.id
-            tname = e.user.first_name or str(tid)
+    if has_mention:
+        tid, tname, tusername = await _resolve_mention(message, context, chat_id)
+        if tid and tid != proposer_id:
             ptag = _mention(proposer_id, message.from_user.first_name or str(proposer_id), message.from_user.username)
-            ttag = _mention(tid, tname, e.user.username)
+            ttag = _mention(tid, tname or str(tid), tusername)
             _pending_proposals.setdefault(chat_id, {})[(proposer_id, tid)] = {"type": "marry", "ts": time.time()}
             kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Ha, roziman!", callback_data=f"proposal:accept:marry:{proposer_id}:{tid}"),
-                InlineKeyboardButton("Yo'q", callback_data=f"proposal:decline:marry:{proposer_id}:{tid}"),
+                InlineKeyboardButton("💍 Ha, roziman!", callback_data=f"proposal:accept:marry:{proposer_id}:{tid}"),
+                InlineKeyboardButton("❌ Yo'q", callback_data=f"proposal:decline:marry:{proposer_id}:{tid}"),
             ]])
             await loading.edit_text(
-                f"Nikoh taklifi: {ptag} sizni kutmoqda, {ttag}!\n\nJavob bering ({PROPOSAL_TIMEOUT} soniya)...",
+                f"💍 {ptag} sizga nikoh taklif qilmoqda, {ttag}!\n\n"
+                f"⏰ {PROPOSAL_TIMEOUT} soniya ichida javob bering...",
                 reply_markup=kb, parse_mode="HTML"
             )
+            return
+        elif not tid:
+            await loading.edit_text("❌ Foydalanuvchi topilmadi. U guruhda xabar yozganmi?")
             return
 
     # Random nikoh
