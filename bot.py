@@ -613,7 +613,8 @@ def _start_webapp_server():
 async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Track when the bot is added to or removed from a group/channel.
     Updates admin_store so the Groups tab in the admin panel shows
-    a live 'Bot a'zo' / 'Chiqarilgan' status badge for every group.
+    a live 'Bot a\'zo' / 'Chiqarilgan' status badge for every group.
+    Bot guruhga qo\'shilganda adminlarni ship._seen_members ga yozadi.
     """
     result = update.my_chat_member
     if result is None:
@@ -636,6 +637,22 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
         f"[MyChatMember] chat={chat.id} ({chat.title!r}) "
         f"status={new_status} is_member={is_member}"
     )
+
+    # Bot guruhga qo'shilganda — adminlarni ship xotirasiga yozamiz
+    # (Telegram API oddiy a'zolarni bermaydi, faqat adminlar)
+    if is_member:
+        try:
+            admins = await context.bot.get_chat_administrators(chat.id)
+            count = 0
+            for admin in admins:
+                u = admin.user
+                if u.is_bot:
+                    continue
+                ship.record_member(chat.id, u.id, u.first_name or "", u.username)
+                count += 1
+            logger.info(f"[MyChatMember] {chat.id}: {count} ta admin ship xotirasiga yozildi")
+        except Exception as e:
+            logger.warning(f"[MyChatMember] adminlarni olishda xato: {e}")
 
 
 def main():
@@ -677,6 +694,26 @@ def main():
 
     async def _post_init(_app):
         await userbot_manager.resume_all()
+
+        # Bot restart bo'lganda — barcha ma'lum guruhlardagi adminlarni yuklaymiz
+        # Bu ship._seen_members ni to'ldiradi (Telegram faqat adminlarni beradi)
+        known_groups = admin_store.get_groups(limit=500)
+        loaded_total = 0
+        for group in known_groups:
+            gid = group.get("chat_id")
+            if not gid:
+                continue
+            try:
+                admins = await _app.bot.get_chat_administrators(gid)
+                for admin in admins:
+                    u = admin.user
+                    if u.is_bot:
+                        continue
+                    ship.record_member(gid, u.id, u.first_name or "", u.username)
+                    loaded_total += 1
+            except Exception as e:
+                logger.warning(f"[post_init] guruh {gid} adminlarini olishda xato: {e}")
+        logger.info(f"[post_init] {loaded_total} ta a'zo {len(known_groups)} ta guruhdan yuklandi")
 
     app.post_init = _post_init
 
