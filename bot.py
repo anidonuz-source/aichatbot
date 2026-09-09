@@ -556,8 +556,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         reply_text = ai_core.get_ai_reply(chat_id, user_text, name=display_name, source="telegram")
-    except Exception:
-        logger.exception("Gemini error")
+    except Exception as exc:
+        logger.exception("AI provider chain failed: %s", exc)
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
 
     # Repeat detection returned empty string = total silence, skip sending
