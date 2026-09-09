@@ -25,3 +25,9 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      - key: SAMBANOVA_API_KEY
+        sync: false
+      - key: SAMBANOVA_MODEL
+        value: DeepSeek-V3-0324
+      - key: SAMBANOVA_MODEL_FAST
+        value: Meta-Llama-3.3-70B-Instruct
