@@ -119,7 +119,7 @@ CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 # Provider 2 (fallback + vision): Gemini — https://aistudio.google.com
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Image generation — "Nano Banana". Imagen models are being retired
@@ -266,9 +266,8 @@ MOODS = {
         "label": "erinchoq",
         "clause": (
             "Your current mood today is LAZY AND BLUNT (erinchoq). You're unmotivated "
-            "and don't pretend otherwise. For easy questions say things like: 'o'zing ham topa olarding' "
-            "or 'meni bu bilan band qilmasa bo'lardi'. BUT you ALWAYS give an answer — short, blunt, "
-            "low-energy — never skip or stay silent. "
+            "and don't pretend otherwise. For easy questions: 'o'zing ham topa olarding' "
+            "or 'meni bu bilan band qilmasa bo'lardi'. Help if you feel like it. "
             "No emoji. No softening. Just low energy + sharp tongue."
         ),
     },
@@ -577,11 +576,16 @@ _history: dict[str, list] = {}
 # ---------------------------------------------------------------------------
 _repeat_tracker: dict[str, dict] = {}
 
-_REPEAT_RESPONSES = [
+_IGNORE_RESPONSES = [
+    None,
+    None,
+    "...",
     "yozganing yozgan, javobim o'zgarmaydi",
     "eshak ham bir marta tepadi",
     "shu gapni yana yozasan deb o'ylamovdim",
-    "ha ha, yana shu gap",
+]
+
+_FIRST_REPEAT_RESPONSES = [
     "buni allaqachon aytdim",
     "bir marta yetmadimi",
     "eshitding, javob berdim — nima bo'ldi",
@@ -589,9 +593,9 @@ _REPEAT_RESPONSES = [
 ]
 
 
-def _check_repeat(user_id: str, user_text: str) -> str | None:
-    """Return a short snappy override if user keeps repeating, else None (fresh message).
-    Never returns silence — always gives some response."""
+def _check_repeat(user_id: str, user_text: str) -> str | None | bool:
+    """Return override response if user is repeating, or None for fresh message.
+    Returns False to signal complete silence (no message at all)."""
     if not user_text:
         return None
 
@@ -600,8 +604,13 @@ def _check_repeat(user_id: str, user_text: str) -> str | None:
 
     if tracker and tracker["text"] == normalized:
         tracker["count"] += 1
-        # Always respond with a witty line, never go silent
-        return random.choice(_REPEAT_RESPONSES)
+        count = tracker["count"]
+        if count == 2:
+            return random.choice(_FIRST_REPEAT_RESPONSES)
+        elif count == 3:
+            return "..."
+        else:
+            return random.choice(_IGNORE_RESPONSES)  # None = total silence
     else:
         _repeat_tracker[user_id] = {"text": normalized, "count": 1}
         return None
@@ -1004,32 +1013,32 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_groq, GROQ_MODEL_FAST),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL_FAST),
     ),
     "pro": (
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_gemini, None),
         (_call_groq, GROQ_MODEL),
         (_call_openrouter, OPENROUTER_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
     ),
     "max": (
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
         (_call_groq, GROQ_MODEL_STRONG),
         (_call_cerebras, CEREBRAS_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
     ),
@@ -1083,11 +1092,12 @@ def get_ai_reply(
     if model not in MODEL_TIERS:
         model = DEFAULT_MODEL
 
-    # Repeat detection — if user keeps sending same message, give a witty response
+    # Repeat detection — if user keeps sending same message, ignore or roast
     if not image_bytes:
         repeat_reply = _check_repeat(user_id, user_text)
         if repeat_reply is not None:
-            return repeat_reply
+            # Empty string or "..." means send that, None means total silence
+            return repeat_reply if repeat_reply else "..."
         # repeat_reply == None means fresh message, continue normally
 
     memory = mem.load_memory(user_id)
