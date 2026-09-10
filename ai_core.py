@@ -266,8 +266,9 @@ MOODS = {
         "label": "erinchoq",
         "clause": (
             "Your current mood today is LAZY AND BLUNT (erinchoq). You're unmotivated "
-            "and don't pretend otherwise. For easy questions: 'o'zing ham topa olarding' "
-            "or 'meni bu bilan band qilmasa bo'lardi'. Help if you feel like it. "
+            "and don't pretend otherwise. For easy questions say things like: 'o'zing ham topa olarding' "
+            "or 'meni bu bilan band qilmasa bo'lardi'. BUT you ALWAYS give an answer — short, blunt, "
+            "low-energy — never skip or stay silent. "
             "No emoji. No softening. Just low energy + sharp tongue."
         ),
     },
@@ -576,14 +577,11 @@ _history: dict[str, list] = {}
 # ---------------------------------------------------------------------------
 _repeat_tracker: dict[str, dict] = {}
 
-_IGNORE_RESPONSES = [
+_REPEAT_RESPONSES = [
     "yozganing yozgan, javobim o'zgarmaydi",
     "eshak ham bir marta tepadi",
     "shu gapni yana yozasan deb o'ylamovdim",
     "ha ha, yana shu gap",
-]
-
-_FIRST_REPEAT_RESPONSES = [
     "buni allaqachon aytdim",
     "bir marta yetmadimi",
     "eshitding, javob berdim — nima bo'ldi",
@@ -591,9 +589,9 @@ _FIRST_REPEAT_RESPONSES = [
 ]
 
 
-def _check_repeat(user_id: str, user_text: str) -> str | None | bool:
-    """Return override response if user is repeating, or None for fresh message.
-    Returns False to signal complete silence (no message at all)."""
+def _check_repeat(user_id: str, user_text: str) -> str | None:
+    """Return a short snappy override if user keeps repeating, else None (fresh message).
+    Never returns silence — always gives some response."""
     if not user_text:
         return None
 
@@ -602,13 +600,8 @@ def _check_repeat(user_id: str, user_text: str) -> str | None | bool:
 
     if tracker and tracker["text"] == normalized:
         tracker["count"] += 1
-        count = tracker["count"]
-        if count == 2:
-            return random.choice(_FIRST_REPEAT_RESPONSES)
-        elif count == 3:
-            return "..."
-        else:
-            return random.choice(_IGNORE_RESPONSES)  # hech qachon None qaytarmaydi
+        # Always respond with a witty line, never go silent
+        return random.choice(_REPEAT_RESPONSES)
     else:
         _repeat_tracker[user_id] = {"text": normalized, "count": 1}
         return None
@@ -1090,12 +1083,11 @@ def get_ai_reply(
     if model not in MODEL_TIERS:
         model = DEFAULT_MODEL
 
-    # Repeat detection — if user keeps sending same message, ignore or roast
+    # Repeat detection — if user keeps sending same message, give a witty response
     if not image_bytes:
         repeat_reply = _check_repeat(user_id, user_text)
         if repeat_reply is not None:
-            # Empty string or "..." means send that, None means total silence
-            return repeat_reply if repeat_reply else "..."
+            return repeat_reply
         # repeat_reply == None means fresh message, continue normally
 
     memory = mem.load_memory(user_id)
