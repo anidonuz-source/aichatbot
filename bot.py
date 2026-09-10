@@ -63,8 +63,7 @@ ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
 
 
 def _authorized(chat_id) -> bool:
-    # ALLOWED_CHAT_IDS tekshiruvini o'chirilgan — hamma chatga javob beradi
-    return True
+    return not ALLOWED_CHAT_IDS or str(chat_id) in ALLOWED_CHAT_IDS
 
 
 def _is_admin(chat_id) -> bool:
@@ -475,44 +474,29 @@ async def ub_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
-    """Hamma xabarga javob beradi — guruh yoki private farq qilmaydi."""
-    return True
+    """In group chats, only respond when explicitly addressed: a reply to
+    the bot's own message, an @mention of the bot, or the word 'misumi'
+    (or 'misumi ai') anywhere in the text. Private chats always respond.
+    """
+    message = update.message
+    if update.effective_chat.type == "private":
+        return True
 
+    # Reply to one of the bot's own messages.
+    if message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.is_bot:
+        if bot_username and message.reply_to_message.from_user.username == bot_username:
+            return True
 
+    text = (message.text or "").lower()
 
-async def handle_sticker_gif(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if not _authorized(chat_id):
-        return
-    if admin_store.is_blocked(chat_id):
-        return
+    if bot_username and f"@{bot_username.lower()}" in text:
+        return True
 
-    bot_username = context.bot.username
-    msg = update.message
-    if not msg:
-        return
+    if "misumi ai" in text or "misumi" in text:
+        return True
 
-    roll = random.random()
+    return False
 
-    if roll < 0.30:
-        is_gif = msg.animation is not None
-        user = update.effective_user
-        display_name = user.first_name if user else None
-        prompt = "gif yubordi" if is_gif else "sticker yubordi"
-        try:
-            reply_text = ai_core.get_ai_reply(chat_id, prompt, name=display_name, source="telegram")
-            await msg.reply_text(reply_text)
-        except Exception:
-            pass
-    elif roll < 0.60:
-        category = random.choice(list(sticker_store.CHAT_CATEGORIES))
-        file_id = sticker_store.get_random(category)
-        if file_id:
-            try:
-                await msg.reply_sticker(sticker=file_id)
-            except Exception:
-                pass
-    # 40% jim
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -521,15 +505,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     if not user_text:
         return
-
-    # Qvot qilingan xabarni ham prompt ichiga qo'shish
-    replied = update.message.reply_to_message
-    if replied and replied.text:
-        if replied.from_user and replied.from_user.id == context.bot.id:
-            replied_by = "sen"
-        else:
-            replied_by = replied.from_user.first_name if (replied.from_user and replied.from_user.first_name) else "boshqa"
-        user_text = f'[{replied_by} yozgan: "{replied.text}"]\n{user_text}'
 
     bot_username = context.bot.username
     if not _should_respond_in_group(update, bot_username):
@@ -584,6 +559,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as exc:
         logger.exception("AI provider chain failed: %s", exc)
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
+
+    # Repeat detection returned empty string = total silence, skip sending
+    if not reply_text and reply_text is not None:
+        return
 
     await ai_core.deliver_ai_reply(
         context.bot,
@@ -709,7 +688,6 @@ def main():
     app.add_handler(CallbackQueryHandler(ub_callback_router, pattern="^ub:"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.Sticker.ALL | filters.ANIMATION, handle_sticker_gif))
 
     # Track when the bot is added/removed from groups
     app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
