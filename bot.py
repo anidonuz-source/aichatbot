@@ -482,22 +482,18 @@ def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
     if update.effective_chat.type == "private":
         return True
 
-    # Reply to bot's own message
-    if message.reply_to_message:
-        if (message.reply_to_message.from_user and
-                message.reply_to_message.from_user.username == bot_username):
-            return True
-        # Istalgan xabarga reply + "misumi" yoki @mention
-        text_check = (message.text or "").lower()
-        if "misumi" in text_check or (bot_username and f"@{bot_username.lower()}" in text_check):
-            return True
-
     text = (message.text or "").lower()
 
+    # "misumi" so'zi xabarda bo'lsa — javob ber (bot_username dan qat'i nazar)
+    if "misumi" in text:
+        return True
+
+    # @mention
     if bot_username and f"@{bot_username.lower()}" in text:
         return True
 
-    if "misumi ai" in text or "misumi" in text:
+    # Istalgan xabarga reply qilingan bo'lsa — javob ber
+    if message.reply_to_message:
         return True
 
     return False
