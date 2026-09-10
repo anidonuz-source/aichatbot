@@ -119,7 +119,7 @@ CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 # Provider 2 (fallback + vision): Gemini — https://aistudio.google.com
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Image generation — "Nano Banana". Imagen models are being retired
