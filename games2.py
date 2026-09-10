@@ -12,8 +12,7 @@ import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
-from telegram import filters
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 
 import game_store
