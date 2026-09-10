@@ -522,6 +522,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
 
+    # Qvot qilingan xabarni ham prompt ichiga qo'shish
+    replied = update.message.reply_to_message
+    if replied and replied.text:
+        if replied.from_user and replied.from_user.id == context.bot.id:
+            replied_by = "sen"
+        else:
+            replied_by = replied.from_user.first_name if (replied.from_user and replied.from_user.first_name) else "boshqa"
+        user_text = f'[{replied_by} yozgan: "{replied.text}"]\n{user_text}'
+
     bot_username = context.bot.username
     if not _should_respond_in_group(update, bot_username):
         return
