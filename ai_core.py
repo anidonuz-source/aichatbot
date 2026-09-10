@@ -44,7 +44,6 @@ import random
 import re
 import time
 
-import logging
 import requests
 from google import genai
 from google.genai import types
@@ -1014,32 +1013,32 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_groq, GROQ_MODEL_FAST),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL_FAST),
     ),
     "pro": (
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_gemini, None),
         (_call_groq, GROQ_MODEL),
         (_call_openrouter, OPENROUTER_MODEL),
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
     ),
     "max": (
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
         (_call_groq, GROQ_MODEL_STRONG),
         (_call_cerebras, CEREBRAS_MODEL),
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
     ),
@@ -1123,13 +1122,13 @@ def get_ai_reply(
                     raw_reply = call(system_instruction, history, user_text)
                 break
             except Exception as e:
-                logging.getLogger("misumi-bot").warning(f"[{call.__name__}:{call_model}] failed: {e}")
+                print(f"[{call.__name__}:{call_model}] failed: {e}")
                 last_error = e
                 continue
 
     if raw_reply is None:
         if last_error and _looks_like_rate_limit(last_error):
-            logging.getLogger("misumi-bot").warning(f"[get_ai_reply] all providers rate-limited/out of quota: {last_error}")
+            print(f"[get_ai_reply] all providers rate-limited/out of quota: {last_error}")
             return (
                 "Hozircha foydalanuvchilar juda ko'p va AI xizmatlari band bo'lib turibdi 🙏 "
                 "Bir necha daqiqadan so'ng qayta urinib ko'ring — odatda tezda tiklanadi."
