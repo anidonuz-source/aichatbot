@@ -489,18 +489,8 @@ async def handle_sticker_gif(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     bot_username = context.bot.username
     msg = update.message
-
-    # Guruhda faqat: Misumi ga reply bo'lsa yoki Misumi mention bo'lsa
-    if update.effective_chat.type in ("group", "supergroup"):
-        is_reply_to_bot = (
-            msg.reply_to_message and
-            msg.reply_to_message.from_user and
-            msg.reply_to_message.from_user.username == bot_username
-        )
-        text = (msg.caption or "").lower()
-        mentioned = bot_username and f"@{bot_username.lower()}" in text
-        if not is_reply_to_bot and not mentioned:
-            return
+    if not msg:
+        return
 
     roll = random.random()
 
