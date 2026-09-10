@@ -63,7 +63,8 @@ ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
 
 
 def _authorized(chat_id) -> bool:
-    return not ALLOWED_CHAT_IDS or str(chat_id) in ALLOWED_CHAT_IDS
+    # ALLOWED_CHAT_IDS tekshiruvini o'chirilgan — hamma chatga javob beradi
+    return True
 
 
 def _is_admin(chat_id) -> bool:
