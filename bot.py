@@ -482,9 +482,14 @@ def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
     if update.effective_chat.type == "private":
         return True
 
-    # Reply to one of the bot's own messages.
-    if message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.is_bot:
-        if bot_username and message.reply_to_message.from_user.username == bot_username:
+    # Reply to bot's own message
+    if message.reply_to_message:
+        if (message.reply_to_message.from_user and
+                message.reply_to_message.from_user.username == bot_username):
+            return True
+        # Istalgan xabarga reply + "misumi" yoki @mention
+        text_check = (message.text or "").lower()
+        if "misumi" in text_check or (bot_username and f"@{bot_username.lower()}" in text_check):
             return True
 
     text = (message.text or "").lower()
