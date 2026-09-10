@@ -44,6 +44,7 @@ import random
 import re
 import time
 
+import logging
 import requests
 from google import genai
 from google.genai import types
@@ -1122,13 +1123,13 @@ def get_ai_reply(
                     raw_reply = call(system_instruction, history, user_text)
                 break
             except Exception as e:
-                print(f"[{call.__name__}:{call_model}] failed: {e}")
+                logging.getLogger("misumi-bot").warning(f"[{call.__name__}:{call_model}] failed: {e}")
                 last_error = e
                 continue
 
     if raw_reply is None:
         if last_error and _looks_like_rate_limit(last_error):
-            print(f"[get_ai_reply] all providers rate-limited/out of quota: {last_error}")
+            logging.getLogger("misumi-bot").warning(f"[get_ai_reply] all providers rate-limited/out of quota: {last_error}")
             return (
                 "Hozircha foydalanuvchilar juda ko'p va AI xizmatlari band bo'lib turibdi 🙏 "
                 "Bir necha daqiqadan so'ng qayta urinib ko'ring — odatda tezda tiklanadi."
