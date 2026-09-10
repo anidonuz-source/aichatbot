@@ -474,29 +474,8 @@ async def ub_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
-    """In group chats, only respond when explicitly addressed: a reply to
-    the bot's own message, an @mention of the bot, or the word 'misumi'
-    (or 'misumi ai') anywhere in the text. Private chats always respond.
-    """
-    message = update.message
-    if update.effective_chat.type == "private":
-        return True
-
-    text = (message.text or "").lower()
-
-    # "misumi" so'zi xabarda bo'lsa — javob ber (bot_username dan qat'i nazar)
-    if "misumi" in text:
-        return True
-
-    # @mention
-    if bot_username and f"@{bot_username.lower()}" in text:
-        return True
-
-    # Istalgan xabarga reply qilingan bo'lsa — javob ber
-    if message.reply_to_message:
-        return True
-
-    return False
+    """Hamma xabarga javob beradi — guruh yoki private farq qilmaydi."""
+    return True
 
 
 
