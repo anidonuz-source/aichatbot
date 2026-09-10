@@ -577,12 +577,10 @@ _history: dict[str, list] = {}
 _repeat_tracker: dict[str, dict] = {}
 
 _IGNORE_RESPONSES = [
-    None,
-    None,
-    "...",
     "yozganing yozgan, javobim o'zgarmaydi",
     "eshak ham bir marta tepadi",
     "shu gapni yana yozasan deb o'ylamovdim",
+    "ha ha, yana shu gap",
 ]
 
 _FIRST_REPEAT_RESPONSES = [
@@ -610,7 +608,7 @@ def _check_repeat(user_id: str, user_text: str) -> str | None | bool:
         elif count == 3:
             return "..."
         else:
-            return random.choice(_IGNORE_RESPONSES)  # None = total silence
+            return random.choice(_IGNORE_RESPONSES)  # hech qachon None qaytarmaydi
     else:
         _repeat_tracker[user_id] = {"text": normalized, "count": 1}
         return None
