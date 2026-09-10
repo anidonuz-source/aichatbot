@@ -585,10 +585,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("AI provider chain failed: %s", exc)
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
 
-    # Repeat detection returned empty string = total silence, skip sending
-    if not reply_text and reply_text is not None:
-        return
-
     await ai_core.deliver_ai_reply(
         context.bot,
         chat_id,
