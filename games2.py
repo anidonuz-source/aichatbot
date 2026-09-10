@@ -12,7 +12,9 @@ import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram import filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler
+
 
 import game_store
 
@@ -273,3 +275,116 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(ttt_cb, pattern=r"^ttt:"))
     app.add_handler(CommandHandler("quiz", quiz_cmd))
     app.add_handler(CallbackQueryHandler(quiz_cb, pattern=r"^quiz:"))
+    app.add_handler(CommandHandler("viktorina", viktorina_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, viktorina_check))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🧠 VIKTORINA — AI savol yaratadi, birinchi to'g'ri javob bergan yutadi
+# ═══════════════════════════════════════════════════════════════════════════
+
+import ai_core
+
+# chat_id -> {question, answer, message_id, expires_at, topic}
+_viktorina_active: dict[int, dict] = {}
+
+VIKTORINA_TIMEOUT = 60  # 60 soniya
+
+VIKTORINA_TOPICS = [
+    "tarix", "geografiya", "sport", "kino", "musiqa",
+    "fan va texnologiya", "ozbekiston", "matematika", "tabiat"
+]
+
+
+async def viktorina_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    # Agar hozir faol viktorina bo'lsa
+    active = _viktorina_active.get(chat_id)
+    if active and time.time() < active["expires_at"]:
+        await update.message.reply_text(
+            f"Hozir savol turibdi — avval shu savolga javob bering!\n\n"
+            f"❓ {active['question']}"
+        )
+        return
+
+    topic = random.choice(VIKTORINA_TOPICS)
+
+    # AI dan savol va javob ol
+    prompt = (
+        f"Menga {topic} mavzusida bitta qiziqarli viktorina savoli yoz. "
+        "Javob qisqa bo'lsin (1-3 so'z). "
+        "Faqat JSON formatda yoz, boshqa hech narsa yo'q: "
+        '{\"question\": \"savol matni\", \"answer\": \"to\'g\'ri javob\"}'
+    )
+    try:
+        raw = ai_core._call_mistral(
+            "Sen viktorina savollari yaratuvchisan. Faqat JSON qaytarasan.",
+            [], prompt
+        )
+        import json, re
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        data = json.loads(match.group())
+        question = data["question"]
+        answer = data["answer"].strip().lower()
+    except Exception:
+        await update.message.reply_text("savol yaratib bo'lmadi, keyinroq ur")
+        return
+
+    msg = await update.message.reply_text(
+        f"🧠 *Viktorina!* — {topic.upper()}\n\n"
+        f"❓ {question}\n\n"
+        f"⏱ 60 soniya vaqt bor — guruhda javob yozing!",
+        parse_mode="Markdown"
+    )
+
+    _viktorina_active[chat_id] = {
+        "question": question,
+        "answer": answer,
+        "message_id": msg.message_id,
+        "expires_at": time.time() + VIKTORINA_TIMEOUT,
+        "topic": topic,
+    }
+
+    # 60 soniyadan so'ng javobni oshkor qil
+    async def reveal_answer(ctx):
+        active = _viktorina_active.get(chat_id)
+        if active and active["message_id"] == msg.message_id:
+            _viktorina_active.pop(chat_id, None)
+            await ctx.bot.send_message(
+                chat_id,
+                f"⏰ Vaqt tugadi! Hech kim topa olmadi.\n"
+                f"✅ To'g'ri javob: *{data['answer']}*",
+                parse_mode="Markdown"
+            )
+
+    context.job_queue.run_once(reveal_answer, VIKTORINA_TIMEOUT)
+
+
+async def viktorina_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Har bir xabarni tekshir — viktorina javobi emasmi."""
+    chat_id = update.effective_chat.id
+    active = _viktorina_active.get(chat_id)
+    if not active:
+        return
+    if time.time() > active["expires_at"]:
+        _viktorina_active.pop(chat_id, None)
+        return
+
+    user_text = (update.message.text or "").strip().lower()
+    correct = active["answer"]
+
+    # To'g'ri javob tekshiruvi — to'liq yoki qisman moslik
+    if correct in user_text or user_text in correct:
+        _viktorina_active.pop(chat_id, None)
+        user = update.effective_user
+        name = user.first_name if user else "Noma'lum"
+
+        # Ball qo'sh
+        game_store.add_win(chat_id, user.id, name)
+
+        await update.message.reply_text(
+            f"✅ To'g'ri! *{name}* yutdi! 🎉\n"
+            f"Javob: *{active['answer']}*",
+            parse_mode="Markdown"
+        )
