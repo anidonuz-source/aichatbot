@@ -1,21 +1,15 @@
 """
-Long-term memory manager for Jarvis Telegram Bot.
-Adapted from the original Jarvis MK37 memory_manager.py, but keyed per
-Telegram chat_id so every user gets their own isolated memory file.
+Long-term memory manager for Misumi AI.
+Keyed per Telegram chat_id — every user gets their own isolated memory.
+Uses db.py (PostgreSQL via DATABASE_URL) so memories survive redeploys on Render.
 """
 import json
-import os
 from datetime import datetime
-from threading import Lock
-from pathlib import Path
 
-# Where memory JSON files live. On Render, set MEMORY_DIR to a path on a
-# mounted Persistent Disk (e.g. /data/memory) so memories survive redeploys.
-# Without a persistent disk, this directory is wiped on every deploy/restart.
-MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "memory"))
-MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+import db
 
-_lock = Lock()
+_STORE = "memory"
+
 MAX_VALUE_LENGTH = 380
 MEMORY_MAX_CHARS = 2200
 
@@ -31,27 +25,18 @@ def _empty_memory() -> dict:
     }
 
 
-def _memory_path(chat_id: int | str) -> Path:
-    return MEMORY_DIR / f"{chat_id}.json"
-
-
 def load_memory(chat_id: int | str) -> dict:
-    path = _memory_path(chat_id)
-    if not path.exists():
-        return _empty_memory()
-    with _lock:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                base = _empty_memory()
-                for key in base:
-                    if key not in data:
-                        data[key] = {}
-                return data
-            return _empty_memory()
-        except Exception as e:
-            print(f"[Memory] Load error for {chat_id}: {e}")
-            return _empty_memory()
+    try:
+        data = db.load(_STORE, str(chat_id), default=None)
+        if isinstance(data, dict):
+            base = _empty_memory()
+            for key in base:
+                if key not in data:
+                    data[key] = {}
+            return data
+    except Exception as e:
+        print(f"[Memory] Load error for {chat_id}: {e}")
+    return _empty_memory()
 
 
 def _all_entries(memory: dict) -> list[tuple]:
@@ -82,11 +67,10 @@ def save_memory(chat_id: int | str, memory: dict) -> None:
     if not isinstance(memory, dict):
         return
     memory = _trim_to_limit(memory)
-    with _lock:
-        _memory_path(chat_id).write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+    try:
+        db.save(_STORE, str(chat_id), memory)
+    except Exception as e:
+        print(f"[Memory] Save error for {chat_id}: {e}")
 
 
 def _truncate_value(val: str) -> str:
@@ -129,9 +113,10 @@ def update_memory(chat_id: int | str, memory_update: dict) -> dict:
 
 
 def clear_memory(chat_id: int | str) -> None:
-    path = _memory_path(chat_id)
-    if path.exists():
-        path.unlink()
+    try:
+        db.delete(_STORE, str(chat_id))
+    except Exception as e:
+        print(f"[Memory] Clear error for {chat_id}: {e}")
 
 
 def format_memory_for_prompt(memory: dict | None) -> str:
