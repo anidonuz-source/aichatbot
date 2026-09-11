@@ -564,11 +564,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat and chat.id < 0 and chat.title:
         admin_store.record_message(chat_id, name=chat.title, source="telegram")
 
+    user_id = str(user.id) if user else str(chat_id)
+
     if ai_core.wants_image(user_text):
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_PHOTO)
         try:
             image_bytes, _mime = ai_core.generate_image_reply(
-                chat_id, user_text, name=display_name, source="telegram"
+                user_id, user_text, name=display_name, source="telegram"
             )
         except Exception:
             logger.exception("Image generation error")
@@ -580,7 +582,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        reply_text = ai_core.get_ai_reply(chat_id, user_text, name=display_name, source="telegram")
+        reply_text = ai_core.get_ai_reply(user_id, user_text, name=display_name, source="telegram")
     except Exception as exc:
         logger.exception("AI provider chain failed: %s", exc)
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
@@ -588,7 +590,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ai_core.deliver_ai_reply(
         context.bot,
         chat_id,
-        chat_id,
+        user_id,
         reply_text,
         reply_to_message_id=update.message.message_id,
     )
