@@ -475,8 +475,44 @@ async def ub_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
-    """Hamma xabarga javob beradi — guruh yoki private farq qilmaydi."""
-    return True
+    """Guruhda faqat misumi deb chaqirilganda yoki reply qilinganda javob beradi.
+    Lichkada esa har doim javob beradi."""
+    msg = update.message
+    if msg is None:
+        return False
+
+    chat_type = update.effective_chat.type if update.effective_chat else "private"
+
+    # Lichkada har doim javob ber
+    if chat_type == "private":
+        return True
+
+    text = (msg.text or "").lower()
+
+    # Botga reply qilingan bo'lsa — javob ber
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        if msg.reply_to_message.from_user.is_bot:
+            # Faqat BU botga reply qilinsa
+            if bot_username and msg.reply_to_message.from_user.username == bot_username:
+                return True
+
+    # "misumi" so'zi xabarda bo'lsa — javob ber
+    if "misumi" in text:
+        return True
+
+    # @mention bo'lsa — javob ber
+    if bot_username and f"@{bot_username.lower()}" in text:
+        return True
+
+    # Entities ichida mention bor-yo'qligini tekshir
+    if msg.entities:
+        for entity in msg.entities:
+            if entity.type == "mention":
+                mention_text = text[entity.offset: entity.offset + entity.length].lower()
+                if bot_username and mention_text == f"@{bot_username.lower()}":
+                    return True
+
+    return False
 
 
 
@@ -499,8 +535,10 @@ async def handle_sticker_gif(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user = update.effective_user
         display_name = user.first_name if user else None
         prompt = "gif yubordi" if is_gif else "sticker yubordi"
+        # user_id ishlatamiz (chat_id emas) — history to'g'ri saqlansin
+        sticker_user_id = str(user.id) if user else str(chat_id)
         try:
-            reply_text = ai_core.get_ai_reply(chat_id, prompt, name=display_name, source="telegram")
+            reply_text = ai_core.get_ai_reply(sticker_user_id, prompt, name=display_name, source="telegram")
             await msg.reply_text(reply_text)
         except Exception:
             pass
@@ -562,9 +600,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # can show a human-readable name instead of the raw negative chat_id.
     chat = update.effective_chat
     if chat and chat.id < 0 and chat.title:
-        admin_store.record_message(chat_id, name=chat.title, source="telegram")
+        # Guruh meta-ma'lumotini chat_id bilan yozamiz (admin panel uchun)
+        admin_store.record_message(str(chat_id), name=chat.title, source="telegram")
 
+    # user_id = foydalanuvchi ID (musbat), chat_id = chat ID (guruhda manfiy)
     user_id = str(user.id) if user else str(chat_id)
+    # Foydalanuvchini ham DB ga yozamiz (alohida, user nomi bilan)
+    if user:
+        admin_store.record_message(user_id, name=display_name, source="telegram")
 
     if ai_core.wants_image(user_text):
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_PHOTO)
