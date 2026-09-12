@@ -750,13 +750,11 @@ def main():
         )
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("broadcast", broadcast_cmd))
-    game.register(app)
-    ship.register(app)
-    fun.register(app)
-    games2.register(app)
+
+    # GROUP 0 — asosiy handlerlar (birinchi ishlaydi)
+    app.add_handler(CommandHandler("start", start), group=0)
+    app.add_handler(CommandHandler("reset", reset), group=0)
+    app.add_handler(CommandHandler("broadcast", broadcast_cmd), group=0)
 
     ub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(ub_connect_entry, pattern="^ub:connect$")],
@@ -767,14 +765,19 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", ub_cancel)],
     )
-    app.add_handler(ub_conv)
-    app.add_handler(CallbackQueryHandler(ub_callback_router, pattern="^ub:"))
+    app.add_handler(ub_conv, group=0)
+    app.add_handler(CallbackQueryHandler(ub_callback_router, pattern="^ub:"), group=0)
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.Sticker.ALL | filters.ANIMATION, handle_sticker_gif))
+    # Asosiy xabar handleri — GROUP 0 da, barcha game/ship/fun lardan oldin
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message), group=0)
+    app.add_handler(MessageHandler(filters.Sticker.ALL | filters.ANIMATION, handle_sticker_gif), group=0)
+    app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER), group=0)
 
-    # Track when the bot is added/removed from groups
-    app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+    # GROUP 1 — yordamchi handlerlar (handle_message dan keyin ishlaydi)
+    game.register(app)
+    ship.register(app)
+    fun.register(app)
+    games2.register(app)
 
     async def _post_init(_app):
         await userbot_manager.resume_all()
