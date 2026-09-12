@@ -24,6 +24,7 @@ import threading
 from datetime import datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
+from telegram.error import Conflict
 from telegram.constants import ChatAction, ChatMemberStatus
 from telegram.ext import (
     Application,
@@ -788,8 +789,16 @@ def main():
         idle_starter_job, interval=IDLE_CHECK_INTERVAL, first=IDLE_CHECK_INTERVAL
     )
 
+    async def conflict_handler(update, context):
+        """Conflict xatosida bot o'zini restart qiladi."""
+        if isinstance(context.error, Conflict):
+            logger.warning("Conflict: boshqa bot instance ishlayapdi. 5 soniya kutib qayta uriniladi...")
+            import time; time.sleep(5)
+
+    app.add_error_handler(conflict_handler)
+
     logger.info(f"{ai_core.BOT_NAME} Telegram bot starting (polling)...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 if __name__ == "__main__":
