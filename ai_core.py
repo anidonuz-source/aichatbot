@@ -1004,28 +1004,28 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
-        (_call_openrouter, OPENROUTER_MODEL),
-        (_call_mistral, MISTRAL_MODEL),
-        (_call_gemini, None),
-        (_call_cloudflare, CLOUDFLARE_MODEL),
+        (_call_gemini, None),           # Gemini - har doim ishlaydi (API key bor)
         (_call_cerebras, CEREBRAS_MODEL),
+        (_call_mistral, MISTRAL_MODEL),
         (_call_groq, GROQ_MODEL_FAST),
+        (_call_openrouter, OPENROUTER_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL_FAST),
     ),
     "pro": (
-        (_call_openrouter, OPENROUTER_MODEL),
-        (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
-        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
+        (_call_mistral, MISTRAL_MODEL),
         (_call_groq, GROQ_MODEL),
+        (_call_openrouter, OPENROUTER_MODEL),
+        (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
     ),
     "max": (
-        (_call_openrouter, OPENROUTER_MODEL),
         (_call_gemini, None),
+        (_call_openrouter, OPENROUTER_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_groq, GROQ_MODEL_STRONG),
@@ -1123,7 +1123,8 @@ def get_ai_reply(
                 "Hozircha foydalanuvchilar juda ko'p va AI xizmatlari band bo'lib turibdi 🙏 "
                 "Bir necha daqiqadan so'ng qayta urinib ko'ring — odatda tezda tiklanadi."
             )
-        raise last_error or RuntimeError("All AI providers failed")
+        print(f"[get_ai_reply] ALL providers failed! last_error: {last_error}")
+        return "miya ishlamayapti hozir, keyinroq gap."
 
     clean_text, tags = _extract_memory_tags(raw_reply)
     for category, key, value in tags:
