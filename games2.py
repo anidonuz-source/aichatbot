@@ -275,7 +275,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("quiz", quiz_cmd))
     app.add_handler(CallbackQueryHandler(quiz_cb, pattern=r"^quiz:"))
     app.add_handler(CommandHandler("viktorina", viktorina_cmd))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, viktorina_check))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, viktorina_check), group=1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
