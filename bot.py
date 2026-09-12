@@ -636,13 +636,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("AI provider chain failed: %s", exc)
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
 
-    await ai_core.deliver_ai_reply(
-        context.bot,
-        chat_id,
-        user_id,
-        reply_text,
-        reply_to_message_id=update.message.message_id,
-    )
+    logger.info(f"[MSG] reply_text={reply_text!r}")
+
+    if not reply_text or reply_text == "...":
+        reply_text = "miya ishlamayapti hozir, keyinroq gap."
+
+    await update.message.reply_text(reply_text)
 
 
 # ── O'zi gap boshlaydi ─────────────────────────────────────────────────
