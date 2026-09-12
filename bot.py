@@ -555,10 +555,13 @@ async def handle_sticker_gif(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    logger.info(f"[MSG] chat_id={chat_id} type={update.effective_chat.type} text={update.message.text!r}")
     if not _authorized(chat_id):
+        logger.info(f"[MSG] not authorized, skip")
         return
     user_text = update.message.text
     if not user_text:
+        logger.info(f"[MSG] no text, skip")
         return
 
     # Qvot qilingan xabarni ham prompt ichiga qo'shish
@@ -571,7 +574,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_text = f'[{replied_by} yozgan: "{replied.text}"]\n{user_text}'
 
     bot_username = context.bot.username
-    if not _should_respond_in_group(update, bot_username):
+    should = _should_respond_in_group(update, bot_username)
+    logger.info(f"[MSG] should_respond={should} bot_username={bot_username}")
+    if not should:
         return
 
     if admin_store.is_blocked(chat_id):
