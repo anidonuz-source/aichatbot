@@ -143,7 +143,7 @@ GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-imag
 # ---------------------------------------------------------------------------
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "llama-3.1-8b-instant")
+GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "llama-3.3-70b-versatile")
 GROQ_MODEL_STRONG = os.environ.get("GROQ_MODEL_STRONG", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -162,7 +162,7 @@ MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 # exact failure mode that broke Cerebras/Groq above).
 # ---------------------------------------------------------------------------
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "mistralai/mistral-nemo:free")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # ---------------------------------------------------------------------------
@@ -204,6 +204,14 @@ SAMBANOVA_API_KEY = os.environ.get("SAMBANOVA_API_KEY")
 SAMBANOVA_MODEL = os.environ.get("SAMBANOVA_MODEL", "DeepSeek-V3-0324")
 SAMBANOVA_MODEL_FAST = os.environ.get("SAMBANOVA_MODEL_FAST", "Meta-Llama-3.3-70B-Instruct")
 SAMBANOVA_URL = "https://api.sambanova.ai/v1/chat/completions"
+
+# ---------------------------------------------------------------------------
+# Provider 9: Chutes.ai — https://chutes.ai
+# Bepul, katta limit, ko'p modellar. OpenAI-compatible endpoint.
+# ---------------------------------------------------------------------------
+CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
+CHUTES_MODEL = os.environ.get("CHUTES_MODEL", "deepseek-ai/DeepSeek-V3-0324")
+CHUTES_URL = "https://llm.chutes.ai/v1/chat/completions"
 
 # Curated subset of Telegram's allowed message-reaction emoji (the API
 # only accepts a fixed set — this list is deliberately small and mapped
@@ -917,6 +925,31 @@ def _call_cloudflare(
     return (data["result"]["response"] or "").strip()
 
 
+def _call_chutes(
+    messages: list[dict],
+    system: str,
+    model: str | None = None,
+) -> str:
+    if not CHUTES_API_KEY:
+        raise RuntimeError("CHUTES_API_KEY not set")
+    resp = httpx.post(
+        CHUTES_URL,
+        headers={
+            "Authorization": f"Bearer {CHUTES_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model or CHUTES_MODEL,
+            "messages": [{"role": "system", "content": system}] + messages,
+            "temperature": 0.8,
+            "max_tokens": 1000,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
 def _call_deepseek(
     system_instruction: str, history: list, user_text: str, model: str | None = None
 ) -> str:
@@ -1009,6 +1042,7 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
+        (_call_chutes, CHUTES_MODEL),          # Chutes — birinchi, katta limit
         (_call_mistral, MISTRAL_MODEL),
         (_call_groq, GROQ_MODEL_FAST),
         (_call_gemini, None),
@@ -1019,6 +1053,7 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "pro": (
+        (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_groq, GROQ_MODEL),
         (_call_gemini, None),
@@ -1029,6 +1064,7 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "max": (
+        (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
         (_call_groq, GROQ_MODEL_STRONG),
