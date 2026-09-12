@@ -119,12 +119,12 @@ CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 # Provider 2 (fallback + vision): Gemini — https://aistudio.google.com
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # Render env da noto'g'ri model nomi yozilgan bo'lsa — to'g'rilaymiz
-_KNOWN_BAD_GEMINI_MODELS = {"gemini-3.6-flash", "gemini-3.6-flash-latest", "gemini-3.5-flash"}
+_KNOWN_BAD_GEMINI_MODELS = {"gemini-3.6-flash", "gemini-3.6-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash-latest"}
 if GEMINI_MODEL in _KNOWN_BAD_GEMINI_MODELS:
     print(f"[ai_core] WARNING: GEMINI_MODEL='{GEMINI_MODEL}' mavjud emas, 'gemini-2.5-flash' ga o'zgartirildi")
-    GEMINI_MODEL = "gemini-2.5-flash"
+    GEMINI_MODEL = "gemini-3.5-flash-lite"
 _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Image generation — "Nano Banana". Imagen models are being retired
@@ -142,9 +142,9 @@ GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-imag
 # as the Max tier's Groq step.
 # ---------------------------------------------------------------------------
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "openai/gpt-oss-20b")
-GROQ_MODEL_STRONG = os.environ.get("GROQ_MODEL_STRONG", "qwen/qwen3.6-27b")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "llama-3.1-8b-instant")
+GROQ_MODEL_STRONG = os.environ.get("GROQ_MODEL_STRONG", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 # exact failure mode that broke Cerebras/Groq above).
 # ---------------------------------------------------------------------------
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-8b-instruct:free")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # ---------------------------------------------------------------------------
