@@ -526,7 +526,7 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(on_decline, pattern=r"^dg:d:"))
     # Dice messages have no .text, so this never collides with
     # handle_message's filters.TEXT handler in bot.py.
-    app.add_handler(MessageHandler(filters.Dice(), on_player_dice))
+    app.add_handler(MessageHandler(filters.Dice(), on_player_dice), group=1)
     # Passive background collectors — group=1 so they run in a separate
     # handler group and never block/compete with the /stiker command or
     # anything else reacting to the same message.
