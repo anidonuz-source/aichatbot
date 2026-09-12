@@ -1930,7 +1930,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("setup",        setup_cmd))
     app.add_handler(CallbackQueryHandler(jins_button_cb, pattern=r"^jins:"))
     app.add_handler(CallbackQueryHandler(proposal_callback, pattern=r"^proposal:"))
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member), group=1)
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, _track_member),
         group=2,
