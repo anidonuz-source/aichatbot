@@ -476,43 +476,42 @@ async def ub_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def _should_respond_in_group(update: Update, bot_username: str | None) -> bool:
-    """Guruhda faqat misumi deb chaqirilganda yoki reply qilinganda javob beradi.
-    Lichkada esa har doim javob beradi."""
     msg = update.message
     if msg is None:
+        logger.info("[FILTER] msg=None, skip")
         return False
 
     chat_type = update.effective_chat.type if update.effective_chat else "private"
+    text = (msg.text or "").lower()
+    logger.info(f"[FILTER] chat_type={chat_type} text={text!r} bot={bot_username}")
 
-    # Lichkada har doim javob ber
     if chat_type == "private":
+        logger.info("[FILTER] private -> True")
         return True
 
-    text = (msg.text or "").lower()
-
-    # Botga reply qilingan bo'lsa — javob ber
     if msg.reply_to_message and msg.reply_to_message.from_user:
         if msg.reply_to_message.from_user.is_bot:
-            # Faqat BU botga reply qilinsa
             if bot_username and msg.reply_to_message.from_user.username == bot_username:
+                logger.info("[FILTER] reply to bot -> True")
                 return True
 
-    # "misumi" so'zi xabarda bo'lsa — javob ber
     if "misumi" in text:
+        logger.info("[FILTER] misumi in text -> True")
         return True
 
-    # @mention bo'lsa — javob ber
     if bot_username and f"@{bot_username.lower()}" in text:
+        logger.info("[FILTER] mention -> True")
         return True
 
-    # Entities ichida mention bor-yo'qligini tekshir
     if msg.entities:
         for entity in msg.entities:
             if entity.type == "mention":
                 mention_text = text[entity.offset: entity.offset + entity.length].lower()
                 if bot_username and mention_text == f"@{bot_username.lower()}":
+                    logger.info("[FILTER] entity mention -> True")
                     return True
 
+    logger.info("[FILTER] no match -> False")
     return False
 
 
@@ -554,14 +553,20 @@ async def handle_sticker_gif(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # 40% jim
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    logger.info(f"[MSG] chat_id={chat_id} type={update.effective_chat.type} text={update.message.text!r}")
-    if not _authorized(chat_id):
-        logger.info(f"[MSG] not authorized, skip")
+    # Xavfsizlik tekshiruvi
+    if not update.message or not update.effective_chat:
         return
+
+    chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
     user_text = update.message.text
+
+    logger.info(f"[MSG] chat_id={chat_id} type={chat_type} text={user_text!r}")
+
+    if not _authorized(chat_id):
+        return
+
     if not user_text:
-        logger.info(f"[MSG] no text, skip")
         return
 
     # Qvot qilingan xabarni ham prompt ichiga qo'shish
@@ -580,6 +585,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if admin_store.is_blocked(chat_id):
+        logger.info(f"[MSG] blocked: {chat_id}")
         return
 
     if admin_store.is_maintenance() and not _is_admin(chat_id):
@@ -591,6 +597,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     if user and not ai_core.check_rate_limit(chat_id, user.id):
+        logger.info(f"[MSG] rate_limit hit for user={user.id}")
         if ai_core.should_warn(chat_id, user.id):
             await update.message.reply_text(random.choice([
                 "sekin bro, men robot emasman — yo'q, aslida robotman, lekin baribir sekin",
@@ -630,18 +637,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=image_bytes)
         return
 
+    logger.info(f"[MSG] calling get_ai_reply for user={user_id}")
     try:
         reply_text = ai_core.get_ai_reply(user_id, user_text, name=display_name, source="telegram")
+        logger.info(f"[MSG] got reply: {reply_text!r}")
     except Exception as exc:
         logger.exception("AI provider chain failed: %s", exc)
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
 
-    logger.info(f"[MSG] reply_text={reply_text!r}")
-
     if not reply_text or reply_text == "...":
         reply_text = "miya ishlamayapti hozir, keyinroq gap."
 
-    await update.message.reply_text(reply_text)
+    logger.info(f"[MSG] sending: {reply_text!r}")
+    try:
+        await update.message.reply_text(reply_text)
+        logger.info("[MSG] sent OK")
+    except Exception as e:
+        logger.error(f"[MSG] send failed: {e}")
 
 
 # ── O'zi gap boshlaydi ─────────────────────────────────────────────────
