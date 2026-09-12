@@ -30,6 +30,12 @@
     --overlay:rgba(6,6,7,0.6);
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+    /* Missing aliases — used by group/persona/tab components */
+    --border: rgba(201,162,39,0.18);
+    --surface: #1b1b1f;
+    --text: #f2efe9;
+    --subtext: #a9a6a0;
+    --accent: #c9a227;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
@@ -54,6 +60,8 @@
   @keyframes shimmer{ 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
   @keyframes toastIn{ from{opacity:0; transform:translate(-50%, 8px);} to{opacity:1; transform:translate(-50%, 0);} }
   @keyframes spin{ to{ transform:rotate(360deg); } }
+  @keyframes fadeIn{ from{opacity:0;} to{opacity:1;} }
+  @keyframes slideUp{ from{opacity:0;transform:translateY(16px);} to{opacity:1;transform:translateY(0);} }
 
   header{
     flex:0 0 auto;
@@ -123,7 +131,7 @@
   #gate h2{font-family:'Cormorant Garamond',serif; font-size:22px; margin:0; color:var(--paper);}
   #gate p{font-size:13px; color:var(--paper-dim); max-width:280px; line-height:1.6; margin:0;}
 
-  /* ---------- Loading skeleton ---------- */
+  /* Skeleton */
   #loading{display:none;}
   #loading.container{padding-top:4px;}
   .skel{
@@ -141,6 +149,7 @@
 
   #dash{display:none;}
 
+  /* ── Stats grid ── */
   .stats-grid{
     display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;
   }
@@ -170,6 +179,7 @@
     text-transform:uppercase; color:var(--paper-dim); margin-top:5px;
   }
 
+  /* ── Panel ── */
   .panel{
     background:var(--panel); border:1px solid var(--hairline); border-radius:14px;
     padding:14px 16px; margin-bottom:16px;
@@ -186,6 +196,7 @@
   .panel-row .txt-inner .t{font-size:14px; font-weight:600; color:var(--paper);}
   .panel-row .txt-inner .d{font-size:12px; color:var(--paper-dim); margin-top:2px; line-height:1.4;}
 
+  /* ── Toggle switch ── */
   .switch{
     position:relative; width:44px; height:26px; flex:0 0 auto; cursor:pointer;
   }
@@ -201,6 +212,7 @@
   .switch input:checked + .track{background:rgba(201,82,74,0.25); border-color:var(--danger);}
   .switch input:checked + .track + .thumb{transform:translateX(18px); background:var(--danger);}
 
+  /* ── Section head ── */
   .section-head{
     display:flex; align-items:baseline; justify-content:space-between;
     margin:20px 2px 10px;
@@ -213,6 +225,7 @@
     font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--paper-dim);
   }
 
+  /* ── Search ── */
   .search{
     width:100%; padding:10px 14px; border-radius:12px; border:1px solid var(--hairline);
     background:var(--ink-2); color:var(--paper); font-family:'Manrope',sans-serif;
@@ -222,6 +235,7 @@
   .search:focus{border-color:var(--hairline-strong);}
   .search::placeholder{color:var(--paper-dim);}
 
+  /* ── Filter tabs ── */
   .filter-tabs{display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; scrollbar-width:none;}
   .filter-tabs::-webkit-scrollbar{display:none;}
   .filter-tab{
@@ -237,11 +251,13 @@
     background:var(--brass-dim); border-color:var(--hairline-strong); color:var(--brass);
   }
 
+  /* ── User card ── */
   .user-card{
     background:var(--panel); border:1px solid var(--hairline); border-radius:14px;
     padding:12px 14px; margin-bottom:10px;
     opacity:0; animation:rise .4s ease forwards;
     transition:border-color .2s ease;
+    cursor:pointer;
   }
   .user-card:hover{border-color:var(--hairline-strong);}
   .user-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
@@ -293,12 +309,14 @@
   .action-btn.block-on{color:var(--danger); border-color:rgba(201,82,74,0.4); background:var(--danger-dim);}
   .action-btn.loading{opacity:0.5; pointer-events:none;}
 
+  /* ── Empty state ── */
   .empty{
     display:flex; flex-direction:column; align-items:center; gap:10px;
     text-align:center; color:var(--paper-dim); font-size:13px; padding:40px 10px;
   }
   .empty svg{width:26px;height:26px; opacity:0.5;}
 
+  /* ── Toast ── */
   .toast{
     position:fixed; left:50%; bottom:calc(20px + var(--safe-bottom));
     transform:translateX(-50%);
@@ -313,87 +331,158 @@
   .toast .dot{width:6px;height:6px;border-radius:50%; background:var(--success); flex:0 0 auto;}
   .toast.err .dot{background:var(--danger);}
 
-  /* ── Main Tab Nav ──────────────────────────────────────────────── */
-  .main-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
+  /* ── Main Tabs ── */
+  .main-tabs{
+    display:flex; gap:8px; margin-bottom:16px;
   }
-  .main-tab {
-    flex: 1;
-    padding: 10px 8px;
-    border-radius: 12px;
-    border: 1.5px solid var(--border);
-    background: var(--surface);
-    color: var(--subtext);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all .2s;
+  .main-tab{
+    flex:1; padding:10px 8px; border-radius:12px;
+    border:1.5px solid var(--border);
+    background:var(--surface);
+    color:var(--subtext);
+    font-family:inherit; font-size:13px; font-weight:600;
+    cursor:pointer; transition:all .2s;
   }
-  .main-tab.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  .main-tab.active{
+    border-color:var(--accent); color:var(--accent);
+    background:color-mix(in srgb, var(--accent) 10%, transparent);
   }
-  .main-tab:active { transform: scale(.97); }
+  .main-tab:active{transform:scale(.97);}
 
-  /* ── Group cards ────────────────────────────────────────────────── */
-  .group-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 14px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  /* ── Persona ── */
+  .persona-btn{
+    display:flex; flex-direction:column; align-items:center;
+    gap:5px; padding:14px 10px;
+    border-radius:14px; border:2px solid var(--border);
+    background:var(--surface); cursor:pointer;
+    transition:border-color .2s, background .2s, transform .1s;
+    color:var(--text); font-family:inherit;
   }
-  .group-avatar {
-    width: 40px; height: 40px;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; flex: 0 0 auto;
+  .persona-btn:active{transform:scale(.97);}
+  .persona-btn.active{
+    border-color:var(--accent);
+    background:color-mix(in srgb, var(--accent) 12%, transparent);
   }
-  .group-info { flex: 1; min-width: 0; }
-  .group-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .group-meta { font-size: 11px; color: var(--subtext); margin-top: 2px; }
-  .group-select {
-    width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); flex: 0 0 auto;
+  .persona-label{font-size:13px; font-weight:600; line-height:1.2;}
+  .persona-desc{font-size:11px; color:var(--subtext); text-align:center; line-height:1.3;}
+
+  /* ── Group cards ── */
+  .group-card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:14px;
+    margin-bottom:10px; display:flex; align-items:center; gap:12px;
+  }
+  .group-avatar{
+    width:40px; height:40px; border-radius:12px;
+    background:color-mix(in srgb, var(--accent) 18%, transparent);
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; flex:0 0 auto;
+  }
+  .group-info{flex:1; min-width:0;}
+  .group-title{font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .group-meta{font-size:11px; color:var(--subtext); margin-top:2px;}
+  .group-select{width:18px; height:18px; cursor:pointer; accent-color:var(--accent); flex:0 0 auto;}
+
+  /* ── Broadcast panel ── */
+  .broadcast-panel{
+    background:var(--panel); border:1px solid var(--hairline);
+    border-radius:14px; padding:14px 16px; margin-bottom:14px;
+  }
+  .broadcast-panel textarea{
+    width:100%; box-sizing:border-box; resize:vertical; min-height:80px;
+    padding:10px 12px; border-radius:10px;
+    border:1.5px solid var(--hairline); background:var(--ink-2);
+    color:var(--paper); font-family:inherit; font-size:13px;
+    outline:none; transition:border-color .2s; margin-top:10px;
+  }
+  .broadcast-panel textarea:focus{border-color:var(--brass);}
+
+  /* ── Photo upload ── */
+  .photo-upload-btn{
+    display:flex; align-items:center; gap:8px;
+    padding:8px 12px; border-radius:10px;
+    border:1px dashed var(--hairline); background:var(--ink-2);
+    color:var(--paper-dim); font-size:12px; cursor:pointer;
+    transition:border-color .2s, color .2s;
+  }
+  .photo-upload-btn:hover{border-color:var(--brass); color:var(--brass);}
+  .photo-preview{
+    width:100%; border-radius:10px; margin-top:8px;
+    max-height:120px; object-fit:cover; display:none;
   }
 
-  /* ── Persona Selector ─────────────────────────────────────────── */
-  .persona-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    padding: 14px 10px;
-    border-radius: 14px;
-    border: 2px solid var(--border);
-    background: var(--surface);
-    cursor: pointer;
-    transition: border-color .2s, background .2s, transform .1s;
-    color: var(--text);
-    font-family: inherit;
+  /* ── Broadcast history ── */
+  .history-item{
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px;
+    border-bottom:1px solid var(--hairline);
+    font-size:12px;
   }
-  .persona-btn:active { transform: scale(.97); }
-  .persona-btn.active {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  .history-item:last-child{border-bottom:none;}
+  .history-badge{
+    font-family:'JetBrains Mono',monospace; font-size:10px;
+    padding:2px 7px; border-radius:8px; flex:0 0 auto;
   }
-  .persona-label {
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.2;
+  .history-badge.ok{background:var(--success-dim); color:var(--success);}
+  .history-badge.fail{background:var(--danger-dim); color:var(--danger);}
+
+  /* ── User detail modal ── */
+  .modal-overlay{
+    position:fixed; inset:0; background:var(--overlay); z-index:20;
+    display:flex; align-items:flex-end; justify-content:center;
+    animation:fadeIn .2s ease;
   }
-  .persona-desc {
-    font-size: 11px;
-    color: var(--subtext);
-    text-align: center;
-    line-height: 1.3;
+  .modal{
+    background:var(--panel-2); border:1px solid var(--hairline-strong);
+    border-radius:20px 20px 0 0;
+    padding:20px 20px calc(24px + var(--safe-bottom));
+    width:100%; max-width:560px;
+    animation:slideUp .25s ease;
+    max-height:80vh; overflow-y:auto;
+  }
+  .modal-handle{
+    width:36px; height:4px; border-radius:2px;
+    background:rgba(255,255,255,0.12); margin:0 auto 16px;
+  }
+  .modal-title{
+    font-family:'Cormorant Garamond',serif; font-weight:600;
+    font-size:20px; margin-bottom:14px;
+  }
+  .modal-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0; border-bottom:1px solid var(--hairline);
+    font-size:13px;
+  }
+  .modal-row:last-child{border-bottom:none;}
+  .modal-row .k{color:var(--paper-dim); font-size:12px;}
+  .modal-row .v{font-weight:600; color:var(--paper); text-align:right; max-width:60%;}
+  .modal-close{
+    position:absolute; top:16px; right:16px;
+    width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,0.06); border:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--paper-dim);
+  }
+
+  /* ── Mini bar chart ── */
+  .bar-chart{
+    display:flex; align-items:flex-end; gap:3px;
+    height:40px; margin-top:8px;
+  }
+  .bar{
+    flex:1; border-radius:3px 3px 0 0; min-height:3px;
+    background:linear-gradient(180deg, var(--brass) 0%, var(--brass-soft) 100%);
+    opacity:0.7; transition:opacity .2s;
+  }
+  .bar:hover{opacity:1;}
+
+  /* ── Stat detail ── */
+  .stat-detail{font-size:11px; color:var(--success); margin-top:3px; font-weight:600;}
+
+  /* ── Prem btn variant ── */
+  .action-btn.prem{
+    flex:none; padding:8px 18px; font-size:13px;
+    color:var(--brass); border-color:rgba(201,162,39,0.4); background:var(--brass-dim);
   }
 </style>
 </head>
@@ -412,6 +501,9 @@
     <div class="sub"><span class="live-dot"></span>Admin panel</div>
   </div>
   <div class="header-actions">
+    <button class="icon-btn" id="historyBtn" title="Broadcast tarixi" onclick="toggleHistory()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </button>
     <button class="icon-btn" id="refreshBtn" title="Yangilash">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
@@ -420,14 +512,16 @@
 
 <main>
   <div class="container">
+    <!-- Access denied -->
     <div id="gate" style="display:none;">
       <div class="gate-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
       </div>
       <h2>Ruxsat yo'q</h2>
       <p>Bu sahifa faqat botning administratori uchun. Agar bu xato deb hisoblasangiz, ADMIN_ID sozlamasini tekshiring.</p>
     </div>
 
+    <!-- Loading skeleton -->
     <div id="loading" class="container">
       <div class="skel-stats">
         <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
@@ -436,12 +530,15 @@
       <div class="skel skel-search"></div>
       <div class="skel skel-card"></div>
       <div class="skel skel-card"></div>
-      <div class="skel skel-card"></div>
     </div>
 
+    <!-- Dashboard -->
     <div id="dash">
+
+      <!-- Stats -->
       <div class="stats-grid" id="statsGrid"></div>
 
+      <!-- Maintenance -->
       <div class="panel">
         <div class="panel-row">
           <div class="txt">
@@ -450,7 +547,7 @@
             </div>
             <div class="txt-inner">
               <div class="t">Texnik ishlar rejimi</div>
-              <div class="d">Yoqilsa, faqat siz botdan foydalana olasiz — boshqalarga xabar ko'rsatiladi.</div>
+              <div class="d">Yoqilsa, faqat siz botdan foydalana olasiz.</div>
             </div>
           </div>
           <label class="switch">
@@ -461,7 +558,7 @@
         </div>
       </div>
 
-      <!-- ── Persona Selector ────────────────────────────────────────── -->
+      <!-- Persona -->
       <div class="panel" id="personaPanel">
         <div class="panel-row" style="align-items:flex-start;gap:12px">
           <div class="txt" style="flex:1">
@@ -470,7 +567,7 @@
             </div>
             <div class="txt-inner">
               <div class="t">Bot harakteri</div>
-              <div class="d">Barcha foydalanuvchilar uchun botning muloqot uslubini tanlang.</div>
+              <div class="d">Barcha foydalanuvchilar uchun muloqot uslubi.</div>
             </div>
           </div>
         </div>
@@ -483,19 +580,19 @@
           <button id="personaHard" class="persona-btn" onclick="setPersona('hard')" style="flex:1">
             <span style="font-size:20px">😤</span>
             <span class="persona-label">Hard AI</span>
-            <span class="persona-desc">Ko'cha bola uslubi, kesatgich, o'tkir</span>
+            <span class="persona-desc">Ko'cha bola uslubi, kesatgich</span>
           </button>
         </div>
       </div>
-      <!-- ── /Persona Selector ───────────────────────────────────────── -->
 
-            <!-- Main Tab Nav -->
+      <!-- Main Tabs -->
       <div class="main-tabs">
-        <button class="main-tab active" id="tabUsers" onclick="switchMainTab('users')">&#128100; Foydalanuvchilar</button>
-        <button class="main-tab" id="tabGroups" onclick="switchMainTab('groups')">&#128101; Guruhlar</button>
+        <button class="main-tab active" id="tabUsers" onclick="switchMainTab('users')">👤 Foydalanuvchilar</button>
+        <button class="main-tab" id="tabGroups" onclick="switchMainTab('groups')">👥 Guruhlar</button>
+        <button class="main-tab" id="tabBroadcast" onclick="switchMainTab('broadcast')">📢 Broadcast</button>
       </div>
 
-      <!-- Users Tab -->
+      <!-- ══ USERS TAB ══ -->
       <div id="panelUsers">
         <div class="section-head" style="margin-top:0">
           <div class="section-title"></div>
@@ -504,50 +601,111 @@
         <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
         <div class="filter-tabs" id="filterTabs">
           <button class="filter-tab active" data-filter="all">Hammasi</button>
-          <button class="filter-tab" data-filter="premium">Premium</button>
-          <button class="filter-tab" data-filter="blocked">Bloklangan</button>
-          <button class="filter-tab" data-filter="miniapp">Mini App</button>
+          <button class="filter-tab" data-filter="premium">⭐ Premium</button>
+          <button class="filter-tab" data-filter="blocked">🚫 Bloklangan</button>
+          <button class="filter-tab" data-filter="miniapp">📱 Mini App</button>
         </div>
         <div id="usersList"></div>
       </div>
 
-      <!-- Groups Tab -->
+      <!-- ══ GROUPS TAB ══ -->
       <div id="panelGroups" style="display:none">
         <div class="section-head" style="margin-top:0">
           <div class="section-title"></div>
           <div class="section-count" id="groupCount"></div>
         </div>
-        <input class="search" id="groupSearch" placeholder="Guruh nomi yoki ID bo'yicha qidirish…" oninput="renderGroups()">
+        <input class="search" id="groupSearch" placeholder="Guruh nomi yoki ID…" oninput="renderGroups()">
         <div class="filter-tabs" id="groupFilterTabs" style="margin-bottom:12px">
-          <button class="filter-tab active" data-gfilter="all" onclick="setGroupFilter('all', this)">Hammasi</button>
-          <button class="filter-tab" data-gfilter="member" onclick="setGroupFilter('member', this)">✅ A'zo</button>
-          <button class="filter-tab" data-gfilter="left" onclick="setGroupFilter('left', this)">❌ Chiqarilgan</button>
-          <button class="filter-tab" data-gfilter="unknown" onclick="setGroupFilter('unknown', this)">❓ Noma'lum</button>
+          <button class="filter-tab active" data-gfilter="all" onclick="setGroupFilter('all',this)">Hammasi</button>
+          <button class="filter-tab" data-gfilter="member" onclick="setGroupFilter('member',this)">✅ A'zo</button>
+          <button class="filter-tab" data-gfilter="left" onclick="setGroupFilter('left',this)">❌ Chiqarilgan</button>
+          <button class="filter-tab" data-gfilter="unknown" onclick="setGroupFilter('unknown',this)">❓ Noma'lum</button>
+        </div>
+        <div id="groupsList"></div>
+      </div>
+
+      <!-- ══ BROADCAST TAB ══ -->
+      <div id="panelBroadcast" style="display:none">
+
+        <!-- Users broadcast -->
+        <div class="broadcast-panel">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Foydalanuvchilarga xabar
+          </div>
+          <div style="font-size:12px;color:var(--paper-dim);margin-bottom:2px">Barcha foydalanuvchilarga matn yoki rasm yuborish</div>
+          <textarea id="uBroadcastMsg" placeholder="Xabar matni… (HTML teglar qo'llab-quvvatlanadi)"></textarea>
+          <div style="margin-top:8px;">
+            <label class="photo-upload-btn" for="uPhotoInput">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Rasm biriktirish (ixtiyoriy)
+            </label>
+            <input type="file" id="uPhotoInput" accept="image/*" style="display:none" onchange="previewPhoto('uPhotoInput','uPhotoPreview')">
+            <img id="uPhotoPreview" class="photo-preview" alt="">
+            <button id="uPhotoClear" style="display:none;margin-top:4px;font-size:11px;color:var(--danger);background:none;border:none;cursor:pointer;padding:0" onclick="clearPhoto('uPhotoInput','uPhotoPreview','uPhotoClear')">✕ Rasmni olib tashlash</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+            <span id="uBroadcastCount" style="font-size:12px;color:var(--subtext)"></span>
+            <span style="flex:1"></span>
+            <button class="action-btn prem" id="uBroadcastBtn" onclick="sendUserBroadcast()">Yuborish</button>
+          </div>
+          <div id="uBroadcastResult" style="margin-top:8px;font-size:12px;color:var(--subtext);display:none"></div>
         </div>
 
-        <div class="panel" style="margin-bottom:14px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
-            Guruhlarga xabar yuborish
+        <!-- Groups broadcast -->
+        <div class="broadcast-panel">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+            Guruhlarga xabar
           </div>
-          <textarea id="broadcastMsg" placeholder="Xabar matni… (HTML teglar qo'llab-quvvatlanadi)" style="width:100%;box-sizing:border-box;resize:vertical;min-height:80px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <div style="font-size:12px;color:var(--paper-dim);margin-bottom:2px">Bot a'zo bo'lgan guruhlarga yuborish</div>
+          <textarea id="broadcastMsg" placeholder="Xabar matni… (HTML teglar qo'llab-quvvatlanadi)"></textarea>
+          <div style="margin-top:8px;">
+            <label class="photo-upload-btn" for="gPhotoInput">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Rasm biriktirish (ixtiyoriy)
+            </label>
+            <input type="file" id="gPhotoInput" accept="image/*" style="display:none" onchange="previewPhoto('gPhotoInput','gPhotoPreview')">
+            <img id="gPhotoPreview" class="photo-preview" alt="">
+            <button id="gPhotoClear" style="display:none;margin-top:4px;font-size:11px;color:var(--danger);background:none;border:none;cursor:pointer;padding:0" onclick="clearPhoto('gPhotoInput','gPhotoPreview','gPhotoClear')">✕ Rasmni olib tashlash</button>
+          </div>
           <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--subtext);cursor:pointer;user-select:none">
               <input type="checkbox" id="broadcastAll" checked onchange="toggleBroadcastMode()"> Barcha guruhlarga
             </label>
             <span style="flex:1"></span>
             <span id="broadcastTargetCount" style="font-size:12px;color:var(--subtext)"></span>
-            <button class="action-btn prem" id="broadcastSendBtn" onclick="sendGroupBroadcast()" style="padding:8px 18px;font-size:13px">Yuborish</button>
+            <button class="action-btn prem" id="broadcastSendBtn" onclick="sendGroupBroadcast()">Yuborish</button>
           </div>
           <div id="broadcastResult" style="margin-top:8px;font-size:12px;color:var(--subtext);display:none"></div>
         </div>
 
-        <div id="groupsList"></div>
-      </div>
+        <!-- Broadcast history -->
+        <div id="historyPanel" style="display:none">
+          <div class="section-head"><div class="section-title">Broadcast tarixi</div></div>
+          <div class="panel" style="padding:0;overflow:hidden">
+            <div id="historyList"></div>
+          </div>
+        </div>
 
-    </div>
+      </div><!-- /panelBroadcast -->
+
+    </div><!-- /dash -->
   </div>
 </main>
+
+<!-- User detail modal -->
+<div id="userModal" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" style="position:relative">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeUserModal()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-title" id="modalName"></div>
+    <div id="modalRows"></div>
+    <div id="modalActions" style="display:flex;gap:8px;margin-top:14px"></div>
+  </div>
+</div>
 
 <script>
   const tg = window.Telegram?.WebApp;
@@ -566,8 +724,14 @@
   const refreshBtn = document.getElementById('refreshBtn');
 
   let allUsers = [];
+  let allGroups = [];
+  let selectedGroupIds = new Set();
+  let groupMemberFilter = 'all';
   let currentFilter = 'all';
+  let currentTab = 'users';
+  let modalUserId = null;
 
+  /* ── SVG Icons ─────────────────────────────────────────────────────── */
   const ICONS = {
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     messages: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
@@ -577,9 +741,11 @@
     clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
     starSm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
     shieldOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-    empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
   };
 
+  /* ── API helper ─────────────────────────────────────────────────────── */
   async function api(path, body) {
     const res = await fetch(path, {
       method: 'POST',
@@ -590,6 +756,7 @@
     return res.json();
   }
 
+  /* ── Toast ──────────────────────────────────────────────────────────── */
   function showToast(msg, isErr) {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
@@ -600,6 +767,7 @@
     setTimeout(() => t.remove(), 2400);
   }
 
+  /* ── Relative time ──────────────────────────────────────────────────── */
   function relativeTime(str) {
     if (!str) return '—';
     const then = new Date(str.replace(' ', 'T'));
@@ -617,17 +785,31 @@
 
   function initials(name) {
     if (!name) return '?';
-    const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p[0]?.toUpperCase() || '').join('') || name[0]?.toUpperCase() || '?';
+    return name.trim().split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()||'').join('') || name[0]?.toUpperCase() || '?';
   }
 
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s ?? '';
+    return d.innerHTML;
+  }
+
+  /* ── Stats ──────────────────────────────────────────────────────────── */
   function renderStats(stats) {
     const avg = stats.total_users ? (stats.total_messages / stats.total_users).toFixed(1) : '0';
+    // Yangi foydalanuvchilar (so'nggi 7 kun taxminan)
+    const newUsers7 = allUsers.filter(u => {
+      if (!u.first_seen) return false;
+      const d = new Date(u.first_seen.replace(' ','T'));
+      return (Date.now() - d.getTime()) < 7*24*3600*1000;
+    }).length;
+
     statsGrid.innerHTML = `
       <div class="stat-card c-brass" style="animation-delay:.02s">
         <div class="icon">${ICONS.users}</div>
         <div class="num">${stats.total_users}</div>
         <div class="label">Foydalanuvchilar</div>
+        ${newUsers7>0?`<div class="stat-detail">+${newUsers7} bu hafta</div>`:''}
       </div>
       <div class="stat-card c-plum" style="animation-delay:.06s">
         <div class="icon">${ICONS.messages}</div>
@@ -646,12 +828,55 @@
       </div>
     `;
     maintenanceToggle.checked = !!stats.maintenance;
+
+    // Mini bar chart — so'nggi 7 kun faollik
+    renderActivityChart();
   }
 
+  function renderActivityChart() {
+    // Oxirgi 7 kun uchun kunlik xabar soni
+    const days = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      days[key] = 0;
+    }
+    allUsers.forEach(u => {
+      if (u.last_seen) {
+        const key = u.last_seen.split(' ')[0];
+        if (days.hasOwnProperty(key)) days[key]++;
+      }
+    });
+    const vals = Object.values(days);
+    const maxVal = Math.max(...vals, 1);
+    const labels = Object.keys(days).map(k => {
+      const d = new Date(k);
+      return ['Ya','Du','Se','Ch','Pa','Sh','Ya'][d.getDay()];
+    });
+    const chartHtml = `
+      <div style="margin-bottom:16px; padding:14px 16px; background:var(--panel); border:1px solid var(--hairline); border-radius:14px; opacity:0; animation:rise .5s ease .2s forwards">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--brass-soft);margin-bottom:10px">7 kunlik faollik</div>
+        <div class="bar-chart">
+          ${vals.map((v,i)=>`<div class="bar" title="${labels[i]}: ${v}" style="height:${Math.max(5,Math.round(v/maxVal*100))}%"></div>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          ${labels.map(l=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--paper-dim)">${l}</div>`).join('')}
+        </div>
+      </div>
+    `;
+    const existing = document.getElementById('activityChart');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = 'activityChart';
+    el.innerHTML = chartHtml;
+    statsGrid.after(el);
+  }
+
+  /* ── Users ──────────────────────────────────────────────────────────── */
   function renderUsers(users) {
     sectionCount.textContent = `${users.length} / ${allUsers.length}`;
     if (!allUsers.length) {
-      usersList.innerHTML = `<div class="empty">${ICONS.empty}<div>Hozircha foydalanuvchilar yo'q.<br>Bot birinchi xabarni qabul qilgach, shu yerda paydo bo'ladi.</div></div>`;
+      usersList.innerHTML = `<div class="empty">${ICONS.empty}<div>Hozircha foydalanuvchilar yo'q.</div></div>`;
       return;
     }
     if (!users.length) {
@@ -659,7 +884,7 @@
       return;
     }
     usersList.innerHTML = users.map((u, i) => `
-      <div class="user-card" data-id="${u.id}" style="animation-delay:${Math.min(i * 0.03, 0.3)}s">
+      <div class="user-card" data-id="${u.id}" style="animation-delay:${Math.min(i * 0.03, 0.3)}s" onclick="openUserModal('${u.id}')">
         <div class="user-top">
           <div class="user-id-row">
             <div class="avatar">${escapeHtml(initials(u.name))}</div>
@@ -678,18 +903,12 @@
           <span>${ICONS.clock}${relativeTime(u.last_seen)}</span>
           <span class="src-pill">${u.source === 'miniapp' ? 'Mini App' : 'Telegram'}</span>
         </div>
-        <div class="user-actions">
+        <div class="user-actions" onclick="event.stopPropagation()">
           <button class="action-btn ${u.premium ? 'premium-on' : ''}" data-action="premium">${ICONS.starSm}${u.premium ? 'Premium faol' : 'Premium berish'}</button>
           <button class="action-btn ${u.blocked ? 'block-on' : ''}" data-action="block">${ICONS.shieldOff}${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
         </div>
       </div>
     `).join('');
-  }
-
-  function escapeHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s ?? '';
-    return d.innerHTML;
   }
 
   function applyFilter() {
@@ -717,6 +936,7 @@
   usersList.addEventListener('click', async (e) => {
     const btn = e.target.closest('.action-btn');
     if (!btn) return;
+    e.stopPropagation();
     const card = e.target.closest('.user-card');
     const userId = card.dataset.id;
     const action = btn.dataset.action;
@@ -727,12 +947,12 @@
         const r = await api('/api/admin/toggle-premium', { user_id: userId });
         const u = allUsers.find(x => x.id === userId);
         if (u) u.premium = r.premium;
-        showToast(r.premium ? "Premium berildi" : "Premium bekor qilindi");
+        showToast(r.premium ? "Premium berildi ⭐" : "Premium bekor qilindi");
       } else if (action === 'block') {
         const r = await api('/api/admin/toggle-block', { user_id: userId });
         const u = allUsers.find(x => x.id === userId);
         if (u) u.blocked = r.blocked;
-        showToast(r.blocked ? "Foydalanuvchi bloklandi" : "Blokdan chiqarildi", r.blocked);
+        showToast(r.blocked ? "Foydalanuvchi bloklandi 🚫" : "Blokdan chiqarildi ✅", r.blocked);
       }
       const stats = await api('/api/admin/stats', {});
       renderStats(stats);
@@ -744,12 +964,69 @@
     }
   });
 
+  /* ── User Modal ─────────────────────────────────────────────────────── */
+  function openUserModal(userId) {
+    const u = allUsers.find(x => x.id === userId);
+    if (!u) return;
+    modalUserId = userId;
+    tg?.HapticFeedback?.impactOccurred('light');
+    document.getElementById('modalName').textContent = u.name;
+    document.getElementById('modalRows').innerHTML = `
+      <div class="modal-row"><span class="k">Telegram ID</span><span class="v" style="font-family:'JetBrains Mono',monospace;font-size:12px">${u.id}</span></div>
+      <div class="modal-row"><span class="k">Xabarlar soni</span><span class="v">${u.message_count} ta</span></div>
+      <div class="modal-row"><span class="k">Manba</span><span class="v">${u.source === 'miniapp' ? '📱 Mini App' : '🤖 Telegram Bot'}</span></div>
+      <div class="modal-row"><span class="k">Birinchi ko'rilgan</span><span class="v">${u.first_seen || '—'}</span></div>
+      <div class="modal-row"><span class="k">So'nggi faollik</span><span class="v">${relativeTime(u.last_seen)}</span></div>
+      <div class="modal-row"><span class="k">Premium</span><span class="v">${u.premium ? '⭐ Ha' : '—'}</span></div>
+      <div class="modal-row"><span class="k">Holati</span><span class="v">${u.blocked ? '🚫 Bloklangan' : '✅ Faol'}</span></div>
+    `;
+    document.getElementById('modalActions').innerHTML = `
+      <button class="action-btn ${u.premium ? 'premium-on' : ''}" style="flex:1" onclick="modalTogglePremium()">${ICONS.starSm}${u.premium ? 'Premium bekor' : 'Premium berish'}</button>
+      <button class="action-btn ${u.blocked ? 'block-on' : ''}" style="flex:1" onclick="modalToggleBlock()">${ICONS.shieldOff}${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
+    `;
+    document.getElementById('userModal').style.display = 'flex';
+  }
+
+  function closeUserModal() {
+    document.getElementById('userModal').style.display = 'none';
+    modalUserId = null;
+  }
+
+  function closeModal(e) {
+    if (e.target === document.getElementById('userModal')) closeUserModal();
+  }
+
+  async function modalTogglePremium() {
+    if (!modalUserId) return;
+    try {
+      const r = await api('/api/admin/toggle-premium', { user_id: modalUserId });
+      const u = allUsers.find(x => x.id === modalUserId);
+      if (u) u.premium = r.premium;
+      showToast(r.premium ? "Premium berildi ⭐" : "Premium bekor qilindi");
+      openUserModal(modalUserId);
+      applyFilter();
+    } catch { showToast("Xatolik", true); }
+  }
+
+  async function modalToggleBlock() {
+    if (!modalUserId) return;
+    try {
+      const r = await api('/api/admin/toggle-block', { user_id: modalUserId });
+      const u = allUsers.find(x => x.id === modalUserId);
+      if (u) u.blocked = r.blocked;
+      showToast(r.blocked ? "Bloklandi 🚫" : "Blokdan chiqarildi ✅", r.blocked);
+      openUserModal(modalUserId);
+      applyFilter();
+    } catch { showToast("Xatolik", true); }
+  }
+
+  /* ── Maintenance ────────────────────────────────────────────────────── */
   maintenanceToggle.addEventListener('change', async () => {
     tg?.HapticFeedback?.impactOccurred('medium');
     try {
       await api('/api/admin/maintenance', { value: maintenanceToggle.checked });
-      showToast(maintenanceToggle.checked ? "Texnik ishlar rejimi yoqildi" : "Texnik ishlar rejimi o'chirildi", maintenanceToggle.checked);
-    } catch (err) {
+      showToast(maintenanceToggle.checked ? "Texnik ishlar rejimi yoqildi 🛠" : "Texnik ishlar rejimi o'chirildi");
+    } catch {
       maintenanceToggle.checked = !maintenanceToggle.checked;
       showToast("Xatolik yuz berdi", true);
     }
@@ -760,7 +1037,7 @@
     load(true);
   });
 
-  // ── Persona selector ────────────────────────────────────────────────
+  /* ── Persona ────────────────────────────────────────────────────────── */
   function renderPersona(persona) {
     document.getElementById('personaYaxshi').classList.toggle('active', persona === 'yaxshi');
     document.getElementById('personaHard').classList.toggle('active', persona === 'hard');
@@ -772,38 +1049,37 @@
       const r = await api('/api/admin/persona', { persona: value });
       renderPersona(r.persona);
       showToast(value === 'yaxshi' ? "Yaxshi AI yoqildi 😊" : "Hard AI yoqildi 😤");
-    } catch (e) {
-      showToast("Xatolik yuz berdi", true);
-    }
+    } catch { showToast("Xatolik", true); }
   }
 
   async function loadPersona() {
     try {
       const r = await api('/api/admin/persona', {});
       renderPersona(r.persona);
-    } catch (_) { /* non-critical, skip */ }
+    } catch (_) {}
   }
-  // ── /Persona selector ───────────────────────────────────────────────
 
-  // ── Groups tab ──────────────────────────────────────────────────────
-  let allGroups = [];
-  let selectedGroupIds = new Set();
-  let groupMemberFilter = 'all';
+  /* ── Main tab switching ─────────────────────────────────────────────── */
+  function switchMainTab(tab) {
+    currentTab = tab;
+    ['users','groups','broadcast'].forEach(t => {
+      document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
+      document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = t===tab ? '' : 'none';
+    });
+    if (tab === 'groups' && allGroups.length === 0) loadGroups();
+    if (tab === 'broadcast') {
+      updateUBroadcastCount();
+      if (allGroups.length === 0) loadGroups();
+    }
+    tg?.HapticFeedback?.selectionChanged();
+  }
 
+  /* ── Groups ─────────────────────────────────────────────────────────── */
   function setGroupFilter(filter, btn) {
     groupMemberFilter = filter;
     document.getElementById('groupFilterTabs').querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     renderGroups();
-  }
-
-  function switchMainTab(tab) {
-    const isGroups = tab === 'groups';
-    document.getElementById('tabUsers').classList.toggle('active', !isGroups);
-    document.getElementById('tabGroups').classList.toggle('active', isGroups);
-    document.getElementById('panelUsers').style.display = isGroups ? 'none' : '';
-    document.getElementById('panelGroups').style.display = isGroups ? '' : 'none';
-    if (isGroups && allGroups.length === 0) loadGroups();
   }
 
   async function loadGroups() {
@@ -813,7 +1089,7 @@
       selectedGroupIds = new Set(allGroups.map(g => g.id));
       renderGroups();
       updateBroadcastCount();
-    } catch (e) {
+    } catch {
       document.getElementById('groupsList').innerHTML = '<div class="empty">Guruhlar yuklanmadi.</div>';
     }
   }
@@ -836,26 +1112,21 @@
     el.innerHTML = filtered.map(g => {
       const checked = selectedGroupIds.has(g.id);
       const lastSeen = g.last_seen ? relativeTime(g.last_seen) : '—';
-      // Membership badge
       let memberBadge = '';
-      if (g.is_member === true) {
-        memberBadge = '<span style="font-size:11px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:6px;padding:2px 7px;font-weight:600">✅ A\'zo</span>';
-      } else if (g.is_member === false) {
-        memberBadge = '<span style="font-size:11px;background:rgba(239,68,68,.12);color:var(--danger);border-radius:6px;padding:2px 7px;font-weight:600">❌ Chiqarilgan</span>';
-      } else {
-        memberBadge = '<span style="font-size:11px;background:rgba(148,163,184,.12);color:var(--subtext);border-radius:6px;padding:2px 7px">❓ Noma\'lum</span>';
-      }
+      if (g.is_member === true) memberBadge = '<span style="font-size:11px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:6px;padding:2px 7px;font-weight:600">✅ A\'zo</span>';
+      else if (g.is_member === false) memberBadge = '<span style="font-size:11px;background:rgba(239,68,68,.12);color:var(--danger);border-radius:6px;padding:2px 7px;font-weight:600">❌ Chiqarilgan</span>';
+      else memberBadge = '<span style="font-size:11px;background:rgba(148,163,184,.12);color:var(--subtext);border-radius:6px;padding:2px 7px">❓ Noma\'lum</span>';
       return `<div class="group-card">
-        <input type="checkbox" class="group-select" ${checked ? 'checked' : ''}
-          onchange="toggleGroupSelect('${g.id}', this.checked)">
-        <div class="group-avatar">&#128101;</div>
+        <input type="checkbox" class="group-select" ${checked?'checked':''}
+          onchange="toggleGroupSelect('${g.id}',this.checked)">
+        <div class="group-avatar">👥</div>
         <div class="group-info">
           <div class="group-title">${escapeHtml(g.title)}</div>
-          <div class="group-meta">ID: ${g.id} &nbsp;·&nbsp; ${g.message_count} xabar &nbsp;·&nbsp; ${lastSeen}</div>
+          <div class="group-meta">ID: ${g.id} · ${g.message_count} xabar · ${lastSeen}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
           ${memberBadge}
-          ${g.blocked ? '<span style="font-size:11px;color:var(--danger);font-weight:600">Bloklangan</span>' : ''}
+          ${g.blocked?'<span style="font-size:11px;color:var(--danger);font-weight:600">Bloklangan</span>':''}
         </div>
       </div>`;
     }).join('');
@@ -865,57 +1136,140 @@
     if (checked) selectedGroupIds.add(id);
     else selectedGroupIds.delete(id);
     updateBroadcastCount();
-    // If user manually deselects any — uncheck "Barcha guruhlarga"
     if (!checked) document.getElementById('broadcastAll').checked = false;
   }
 
   function toggleBroadcastMode() {
     const all = document.getElementById('broadcastAll').checked;
-    if (all) {
-      selectedGroupIds = new Set(allGroups.map(g => g.id));
-    } else {
-      selectedGroupIds = new Set();
-    }
-    renderGroups();
+    selectedGroupIds = all ? new Set(allGroups.map(g=>g.id)) : new Set();
+    if (currentTab === 'groups') renderGroups();
     updateBroadcastCount();
   }
 
   function updateBroadcastCount() {
     const el = document.getElementById('broadcastTargetCount');
     const n = selectedGroupIds.size;
-    el.textContent = n === allGroups.length ? 'Barcha ' + n + ' ta guruh' : n + ' ta guruh tanlangan';
+    if (el) el.textContent = n === allGroups.length ? 'Barcha ' + n + ' ta guruh' : n + ' ta guruh tanlangan';
   }
 
+  /* ── Photo upload helpers ───────────────────────────────────────────── */
+  function previewPhoto(inputId, previewId) {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    const clearBtn = document.getElementById(inputId.replace('Input','Clear'));
+    if (!input.files || !input.files[0]) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      if (clearBtn) clearBtn.style.display = 'block';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+
+  function clearPhoto(inputId, previewId, clearBtnId) {
+    document.getElementById(inputId).value = '';
+    const p = document.getElementById(previewId);
+    p.src = ''; p.style.display = 'none';
+    document.getElementById(clearBtnId).style.display = 'none';
+  }
+
+  function getPhotoDataUrl(inputId) {
+    const preview = document.getElementById(inputId.replace('Input','Preview'));
+    return preview && preview.src && preview.style.display !== 'none' ? preview.src : '';
+  }
+
+  /* ── Broadcast — users ──────────────────────────────────────────────── */
+  function updateUBroadcastCount() {
+    const el = document.getElementById('uBroadcastCount');
+    if (el) el.textContent = allUsers.length + ' ta foydalanuvchi';
+  }
+
+  async function sendUserBroadcast() {
+    const msg = document.getElementById('uBroadcastMsg').value.trim();
+    const photo = getPhotoDataUrl('uPhotoInput');
+    if (!msg && !photo) { showToast('Xabar yoki rasm kiriting', true); return; }
+    const btn = document.getElementById('uBroadcastBtn');
+    const resultEl = document.getElementById('uBroadcastResult');
+    btn.disabled = true; btn.textContent = 'Yuborilyapti…';
+    resultEl.style.display = 'none';
+    try {
+      const body = { message: msg };
+      if (photo) body.photo = photo;
+      const r = await api('/api/admin/broadcast-users', body);
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `✅ Yuborildi: <b>${r.sent}</b> &nbsp;·&nbsp; ❌ Yetmadi: <b>${r.failed}</b>`;
+      showToast(`${r.sent} ta foydalanuvchiga yuborildi`);
+      document.getElementById('uBroadcastMsg').value = '';
+      clearPhoto('uPhotoInput','uPhotoPreview','uPhotoClear');
+    } catch { showToast("Yuborib bo'lmadi", true); }
+    finally { btn.disabled = false; btn.textContent = 'Yuborish'; }
+  }
+
+  /* ── Broadcast — groups ─────────────────────────────────────────────── */
   async function sendGroupBroadcast() {
     const msg = document.getElementById('broadcastMsg').value.trim();
-    if (!msg) { showToast('Xabar matni kiriting', true); return; }
+    const photo = getPhotoDataUrl('gPhotoInput');
+    if (!msg && !photo) { showToast('Xabar yoki rasm kiriting', true); return; }
     if (!selectedGroupIds.size) { showToast('Guruh tanlanmagan', true); return; }
-
     const btn = document.getElementById('broadcastSendBtn');
     const resultEl = document.getElementById('broadcastResult');
-    btn.disabled = true;
-    btn.textContent = 'Yuborilyapti…';
+    btn.disabled = true; btn.textContent = 'Yuborilyapti…';
     resultEl.style.display = 'none';
-
     const useAll = document.getElementById('broadcastAll').checked;
     const body = { message: msg };
+    if (photo) body.photo = photo;
     if (!useAll) body.group_ids = [...selectedGroupIds];
-
+    const endpoint = photo ? '/api/admin/broadcast-groups-v2' : '/api/admin/broadcast-groups';
     try {
-      const r = await api('/api/admin/broadcast-groups', body);
+      const r = await api(endpoint, body);
       resultEl.style.display = 'block';
-      resultEl.innerHTML = `&#9989; Yuborildi: <b>${r.sent}</b> &nbsp;·&nbsp; &#10060; Yetmadi: <b>${r.failed}</b> &nbsp;·&nbsp; Jami: ${r.total}`;
+      resultEl.innerHTML = `✅ Yuborildi: <b>${r.sent}</b> &nbsp;·&nbsp; ❌ Yetmadi: <b>${r.failed}</b> &nbsp;·&nbsp; Jami: ${r.total}`;
       showToast(`${r.sent} ta guruhga yuborildi`);
       document.getElementById('broadcastMsg').value = '';
-    } catch (e) {
-      showToast('Yuborib bo\'lmadi', true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Yuborish';
+      clearPhoto('gPhotoInput','gPhotoPreview','gPhotoClear');
+    } catch { showToast("Yuborib bo'lmadi", true); }
+    finally { btn.disabled = false; btn.textContent = 'Yuborish'; }
+  }
+
+  /* ── Broadcast history ──────────────────────────────────────────────── */
+  let historyVisible = false;
+
+  async function toggleHistory() {
+    historyVisible = !historyVisible;
+    if (currentTab !== 'broadcast') {
+      switchMainTab('broadcast');
+      await new Promise(r=>setTimeout(r,100));
+    }
+    const panel = document.getElementById('historyPanel');
+    if (!historyVisible) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    try {
+      // Re-use stats endpoint indirectly — need a /api/admin/broadcast-history
+      // Fallback: show what we already know from api calls
+      panel.style.display = 'block';
+      document.getElementById('historyList').innerHTML = '<div style="padding:14px;font-size:12px;color:var(--paper-dim)">Tarix yuklanmoqda…</div>';
+      const r = await api('/api/admin/broadcast-history', {});
+      const items = r.history || [];
+      if (!items.length) {
+        document.getElementById('historyList').innerHTML = '<div style="padding:14px;font-size:12px;color:var(--paper-dim)">Hali broadcast amalga oshirilmagan.</div>';
+        return;
+      }
+      document.getElementById('historyList').innerHTML = items.map(h=>`
+        <div class="history-item">
+          <span class="history-badge ${h.failed===0?'ok':'fail'}">${h.sent}/${h.sent+h.failed}</span>
+          <div style="flex:1;min-width:0">
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.summary)}</div>
+            <div style="font-size:10px;color:var(--paper-dim);margin-top:2px">${h.time}</div>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      document.getElementById('historyList').innerHTML = '<div style="padding:14px;font-size:12px;color:var(--danger)">Tarix yuklanmadi.</div>';
     }
   }
-  // ── /Groups tab ─────────────────────────────────────────────────────
 
+  /* ── Main load ──────────────────────────────────────────────────────── */
   async function load(isRefresh) {
     if (isRefresh) refreshBtn.classList.add('spinning');
     else {
@@ -933,11 +1287,12 @@
       loadingEl.style.display = 'none';
       dashEl.style.display = 'block';
       loadPersona();
-      if (isRefresh) showToast("Yangilandi");
-    } catch (err) {
+      updateUBroadcastCount();
+      if (isRefresh) showToast("Yangilandi ✓");
+    } catch {
       loadingEl.style.display = 'none';
-      if (isRefresh) { showToast("Yangilab bo'lmadi", true); }
-      else { gateEl.style.display = 'flex'; }
+      if (isRefresh) showToast("Yangilab bo'lmadi", true);
+      else gateEl.style.display = 'flex';
     } finally {
       refreshBtn.classList.remove('spinning');
     }
