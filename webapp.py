@@ -474,3 +474,12 @@ def api_admin_group_info():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/broadcast-history", methods=["POST"])
+def api_admin_broadcast_history():
+    """Return recent broadcast history for the admin panel."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify({"history": admin_store.get_broadcast_history(limit=20)})
