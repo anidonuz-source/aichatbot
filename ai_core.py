@@ -1009,30 +1009,30 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
-        (_call_groq, GROQ_MODEL_FAST),       # Groq — bepul, tez, ishonchli
-        (_call_gemini, None),                  # Gemini — bepul (20 req/min limit)
-        (_call_openrouter, OPENROUTER_MODEL),  # OpenRouter free models
-        (_call_mistral, MISTRAL_MODEL),        # Mistral — limit bo'lsa o'tadi
+        (_call_mistral, MISTRAL_MODEL),
+        (_call_groq, GROQ_MODEL_FAST),
+        (_call_gemini, None),
+        (_call_openrouter, OPENROUTER_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL_FAST),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "pro": (
+        (_call_mistral, MISTRAL_MODEL),
         (_call_groq, GROQ_MODEL),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
-        (_call_mistral, MISTRAL_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_cloudflare, CLOUDFLARE_MODEL),
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "max": (
+        (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
         (_call_groq, GROQ_MODEL_STRONG),
         (_call_openrouter, OPENROUTER_MODEL),
-        (_call_mistral, MISTRAL_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
         (_call_cloudflare, CLOUDFLARE_MODEL),
