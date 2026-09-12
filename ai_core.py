@@ -926,12 +926,17 @@ def _call_cloudflare(
 
 
 def _call_chutes(
-    messages: list[dict],
-    system: str,
+    system_instruction: str,
+    history: list,
+    user_text: str,
     model: str | None = None,
 ) -> str:
     if not CHUTES_API_KEY:
         raise RuntimeError("CHUTES_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    for h in history:
+        messages.append(h)
+    messages.append({"role": "user", "content": user_text})
     resp = httpx.post(
         CHUTES_URL,
         headers={
@@ -940,7 +945,7 @@ def _call_chutes(
         },
         json={
             "model": model or CHUTES_MODEL,
-            "messages": [{"role": "system", "content": system}] + messages,
+            "messages": messages,
             "temperature": 0.8,
             "max_tokens": 1000,
         },
