@@ -210,7 +210,7 @@ SAMBANOVA_URL = "https://api.sambanova.ai/v1/chat/completions"
 # Bepul, katta limit, ko'p modellar. OpenAI-compatible endpoint.
 # ---------------------------------------------------------------------------
 CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
-CHUTES_MODEL = os.environ.get("CHUTES_MODEL", "deepseek-ai/DeepSeek-V3-0324")
+CHUTES_MODEL = os.environ.get("CHUTES_MODEL", "deepseek-ai/DeepSeek-V4-Flash-0731-TEE")
 CHUTES_URL = "https://llm.chutes.ai/v1/chat/completions"
 
 # Curated subset of Telegram's allowed message-reaction emoji (the API
