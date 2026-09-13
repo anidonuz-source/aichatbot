@@ -219,6 +219,11 @@ COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
 COHERE_MODEL = os.environ.get("COHERE_MODEL", "command-a-03-2025")
 COHERE_URL = "https://api.cohere.com/v2/chat"
 
+# Xkiro
+XKIRO_API_KEY = os.environ.get("XKIRO_API_KEY")
+XKIRO_MODEL = os.environ.get("XKIRO_MODEL", "mistralai/mistral-small-2603")
+XKIRO_URL = "https://xkiro.com/api/v1/chat/completions"
+
 # Curated subset of Telegram's allowed message-reaction emoji (the API
 # only accepts a fixed set — this list is deliberately small and mapped
 # to common chat moods rather than using the full ~80-emoji set).
@@ -931,6 +936,36 @@ def _call_cloudflare(
     return (data["result"]["response"] or "").strip()
 
 
+def _call_xkiro(
+    system_instruction: str,
+    history: list,
+    user_text: str,
+    model: str | None = None,
+) -> str:
+    if not XKIRO_API_KEY:
+        raise RuntimeError("XKIRO_API_KEY not set")
+    messages = [{"role": "system", "content": system_instruction}]
+    for h in history:
+        messages.append(h)
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        XKIRO_URL,
+        headers={
+            "Authorization": f"Bearer {XKIRO_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model or XKIRO_MODEL,
+            "messages": messages,
+            "temperature": 0.8,
+            "max_tokens": 1000,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
 def _call_cohere(
     system_instruction: str,
     history: list,
@@ -1082,7 +1117,8 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
-        (_call_cohere, COHERE_MODEL),           # Cohere — birinchi, 1000 req/min
+        (_call_xkiro, XKIRO_MODEL),             # Xkiro — birinchi, bepul
+        (_call_cohere, COHERE_MODEL),
         (_call_groq, GROQ_MODEL_FAST),
         (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
@@ -1094,6 +1130,7 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "pro": (
+        (_call_xkiro, XKIRO_MODEL),
         (_call_cohere, COHERE_MODEL),
         (_call_groq, GROQ_MODEL),
         (_call_chutes, CHUTES_MODEL),
@@ -1106,6 +1143,7 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "max": (
+        (_call_xkiro, XKIRO_MODEL),
         (_call_cohere, COHERE_MODEL),
         (_call_groq, GROQ_MODEL_STRONG),
         (_call_chutes, CHUTES_MODEL),
