@@ -214,6 +214,11 @@ CHUTES_API_KEY = os.environ.get("CHUTES_API_KEY")
 CHUTES_MODEL = os.environ.get("CHUTES_MODEL", "deepseek-ai/DeepSeek-V4-Flash-0731-TEE")
 CHUTES_URL = "https://llm.chutes.ai/v1/chat/completions"
 
+# Cohere
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
+COHERE_MODEL = os.environ.get("COHERE_MODEL", "command-a-03-2025")
+COHERE_URL = "https://api.cohere.com/v2/chat"
+
 # Curated subset of Telegram's allowed message-reaction emoji (the API
 # only accepts a fixed set — this list is deliberately small and mapped
 # to common chat moods rather than using the full ~80-emoji set).
@@ -926,6 +931,35 @@ def _call_cloudflare(
     return (data["result"]["response"] or "").strip()
 
 
+def _call_cohere(
+    system_instruction: str,
+    history: list,
+    user_text: str,
+    model: str | None = None,
+) -> str:
+    if not COHERE_API_KEY:
+        raise RuntimeError("COHERE_API_KEY not set")
+    messages = []
+    for h in history:
+        messages.append(h)
+    messages.append({"role": "user", "content": user_text})
+    resp = requests.post(
+        COHERE_URL,
+        headers={
+            "Authorization": f"Bearer {COHERE_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model or COHERE_MODEL,
+            "system": system_instruction,
+            "messages": messages,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["message"]["content"][0]["text"].strip()
+
+
 def _call_chutes(
     system_instruction: str,
     history: list,
@@ -1048,7 +1082,8 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
-        (_call_groq, GROQ_MODEL_FAST),         # Groq — birinchi, 14400/kun
+        (_call_cohere, COHERE_MODEL),           # Cohere — birinchi, 1000 req/min
+        (_call_groq, GROQ_MODEL_FAST),
         (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
@@ -1059,6 +1094,7 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "pro": (
+        (_call_cohere, COHERE_MODEL),
         (_call_groq, GROQ_MODEL),
         (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
@@ -1070,6 +1106,7 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "max": (
+        (_call_cohere, COHERE_MODEL),
         (_call_groq, GROQ_MODEL_STRONG),
         (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
