@@ -1047,9 +1047,9 @@ def _call_gemini(
 # provider's global default".
 PROVIDER_CHAINS = {
     "flash": (
-        (_call_chutes, CHUTES_MODEL),          # Chutes — birinchi, katta limit
+        (_call_groq, GROQ_MODEL_FAST),         # Groq — birinchi, 14400/kun
+        (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
-        (_call_groq, GROQ_MODEL_FAST),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL_FAST),
@@ -1058,9 +1058,9 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "pro": (
+        (_call_groq, GROQ_MODEL),
         (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
-        (_call_groq, GROQ_MODEL),
         (_call_gemini, None),
         (_call_openrouter, OPENROUTER_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
@@ -1069,10 +1069,10 @@ PROVIDER_CHAINS = {
         (_call_deepseek, DEEPSEEK_MODEL),
     ),
     "max": (
+        (_call_groq, GROQ_MODEL_STRONG),
         (_call_chutes, CHUTES_MODEL),
         (_call_mistral, MISTRAL_MODEL),
         (_call_gemini, None),
-        (_call_groq, GROQ_MODEL_STRONG),
         (_call_openrouter, OPENROUTER_MODEL),
         (_call_sambanova, SAMBANOVA_MODEL),
         (_call_cerebras, CEREBRAS_MODEL),
