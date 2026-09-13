@@ -45,6 +45,7 @@ import re
 import time
 
 import requests
+import httpx
 from google import genai
 from google.genai import types
 
@@ -143,7 +144,7 @@ GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-imag
 # ---------------------------------------------------------------------------
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "llama-3.3-70b-versatile")
+GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "llama3-70b-8192")
 GROQ_MODEL_STRONG = os.environ.get("GROQ_MODEL_STRONG", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -937,7 +938,7 @@ def _call_chutes(
     for h in history:
         messages.append(h)
     messages.append({"role": "user", "content": user_text})
-    resp = httpx.post(
+    resp = requests.post(
         CHUTES_URL,
         headers={
             "Authorization": f"Bearer {CHUTES_API_KEY}",
