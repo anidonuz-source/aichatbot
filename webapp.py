@@ -59,12 +59,16 @@ def verify_admin(init_data: str) -> dict | None:
     isn't configured at all.
     """
     if not ADMIN_ID:
+        print(f"[verify_admin] FAIL: ADMIN_ID not set", flush=True)
         return None
     data = verify_init_data(init_data)
     if not data:
+        print(f"[verify_admin] FAIL: verify_init_data returned None (hash mismatch or empty initData)", flush=True)
         return None
     user = data.get("user", {})
-    if str(user.get("id", "")) != ADMIN_ID:
+    incoming_id = str(user.get("id", ""))
+    print(f"[verify_admin] incoming_id={incoming_id!r} ADMIN_ID={ADMIN_ID!r} match={incoming_id == ADMIN_ID}", flush=True)
+    if incoming_id != ADMIN_ID:
         return None
     return data
 
