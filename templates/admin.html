@@ -4,100 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Misumi AI · Admin</title>
-<script src="https://telegram.org/js/telegram-web-app.js">
-  /* ── Love confession ─────────────────────────────────────────────── */
-  let loveTargetId = null;
-  let loveStyle = 'romantic';
-  let loveGenerated = '';
 
-  function openLoveModal(userId, userName) {
-    loveTargetId = userId;
-    document.getElementById('loveTargetName').value = userName || '';
-    document.getElementById('loveHint').value = '';
-    document.getElementById('loveLang').value = 'uz';
-    document.getElementById('lovePreview').textContent = "Generatsiya qilingan xabar shu yerda ko'rinadi...";
-    document.getElementById('lovePreview').className = 'love-preview empty';
-    document.getElementById('loveSendBtn').disabled = true;
-    loveGenerated = '';
-    selectLoveStyle(document.querySelector('.style-chip[data-style="romantic"]'));
-    document.getElementById('loveModalOverlay').classList.add('open');
-    closeUserModal();
-  }
-
-  function closeLoveModal(e) {
-    if (!e || e.target === document.getElementById('loveModalOverlay')) {
-      document.getElementById('loveModalOverlay').classList.remove('open');
-      loveTargetId = null;
-      loveGenerated = '';
-    }
-  }
-
-  function selectLoveStyle(el) {
-    document.querySelectorAll('.style-chip').forEach(c => c.classList.remove('active'));
-    el.classList.add('active');
-    loveStyle = el.dataset.style;
-  }
-
-  async function generateLove() {
-    if (!loveTargetId) return;
-    const btn = document.getElementById('loveGenBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ Yaratilmoqda...';
-    const preview = document.getElementById('lovePreview');
-    preview.className = 'love-preview empty';
-    preview.textContent = 'AI yozmoqda...';
-
-    try {
-      const r = await api('/api/admin/love-message', {
-        target_id:   loveTargetId,
-        target_name: document.getElementById('loveTargetName').value.trim() || null,
-        style:       loveStyle,
-        custom_hint: document.getElementById('loveHint').value.trim() || null,
-        lang:        document.getElementById('loveLang').value,
-        send:        false,
-      });
-      loveGenerated = r.message;
-      preview.textContent = r.message;
-      preview.className = 'love-preview';
-      document.getElementById('loveSendBtn').disabled = false;
-    } catch (err) {
-      preview.textContent = 'Xatolik yuz berdi. Qayta urining.';
-      preview.className = 'love-preview empty';
-    }
-    btn.disabled = false;
-    btn.textContent = '✨ Qayta generatsiya';
-  }
-
-  async function sendLove() {
-    if (!loveTargetId || !loveGenerated) return;
-    const btn = document.getElementById('loveSendBtn');
-    btn.disabled = true;
-    btn.textContent = '📤 Yuborilmoqda...';
-    try {
-      const r = await api('/api/admin/love-message', {
-        target_id:   loveTargetId,
-        target_name: document.getElementById('loveTargetName').value.trim() || null,
-        style:       loveStyle,
-        custom_hint: document.getElementById('loveHint').value.trim() || null,
-        lang:        document.getElementById('loveLang').value,
-        send:        true,
-      });
-      if (r.sent) {
-        showToast('💌 Yuborildi!');
-        document.getElementById('loveModalOverlay').classList.remove('open');
-      } else {
-        showToast('Yuborishda xato: ' + (r.telegram_error || 'noma\'lum'), true);
-        btn.disabled = false;
-        btn.textContent = '💌 Yuborish';
-      }
-    } catch {
-      showToast('Xatolik', true);
-      btn.disabled = false;
-      btn.textContent = '💌 Yuborish';
-    }
-  }
-
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -1428,6 +1335,100 @@
   }
 
   load(false);
+
+  /* ── Love confession ─────────────────────────────────────────────── */
+  let loveTargetId = null;
+  let loveStyle = 'romantic';
+  let loveGenerated = '';
+
+  function openLoveModal(userId, userName) {
+    loveTargetId = userId;
+    document.getElementById('loveTargetName').value = userName || '';
+    document.getElementById('loveHint').value = '';
+    document.getElementById('loveLang').value = 'uz';
+    document.getElementById('lovePreview').textContent = "Generatsiya qilingan xabar shu yerda ko'rinadi...";
+    document.getElementById('lovePreview').className = 'love-preview empty';
+    document.getElementById('loveSendBtn').disabled = true;
+    loveGenerated = '';
+    selectLoveStyle(document.querySelector('.style-chip[data-style="romantic"]'));
+    document.getElementById('loveModalOverlay').classList.add('open');
+    closeUserModal();
+  }
+
+  function closeLoveModal(e) {
+    if (!e || e.target === document.getElementById('loveModalOverlay')) {
+      document.getElementById('loveModalOverlay').classList.remove('open');
+      loveTargetId = null;
+      loveGenerated = '';
+    }
+  }
+
+  function selectLoveStyle(el) {
+    document.querySelectorAll('.style-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    loveStyle = el.dataset.style;
+  }
+
+  async function generateLove() {
+    if (!loveTargetId) return;
+    const btn = document.getElementById('loveGenBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Yaratilmoqda...';
+    const preview = document.getElementById('lovePreview');
+    preview.className = 'love-preview empty';
+    preview.textContent = 'AI yozmoqda...';
+
+    try {
+      const r = await api('/api/admin/love-message', {
+        target_id:   loveTargetId,
+        target_name: document.getElementById('loveTargetName').value.trim() || null,
+        style:       loveStyle,
+        custom_hint: document.getElementById('loveHint').value.trim() || null,
+        lang:        document.getElementById('loveLang').value,
+        send:        false,
+      });
+      loveGenerated = r.message;
+      preview.textContent = r.message;
+      preview.className = 'love-preview';
+      document.getElementById('loveSendBtn').disabled = false;
+    } catch (err) {
+      preview.textContent = 'Xatolik yuz berdi. Qayta urining.';
+      preview.className = 'love-preview empty';
+    }
+    btn.disabled = false;
+    btn.textContent = '✨ Qayta generatsiya';
+  }
+
+  async function sendLove() {
+    if (!loveTargetId || !loveGenerated) return;
+    const btn = document.getElementById('loveSendBtn');
+    btn.disabled = true;
+    btn.textContent = '📤 Yuborilmoqda...';
+    try {
+      const r = await api('/api/admin/love-message', {
+        target_id:   loveTargetId,
+        target_name: document.getElementById('loveTargetName').value.trim() || null,
+        style:       loveStyle,
+        custom_hint: document.getElementById('loveHint').value.trim() || null,
+        lang:        document.getElementById('loveLang').value,
+        send:        true,
+      });
+      if (r.sent) {
+        showToast('💌 Yuborildi!');
+        document.getElementById('loveModalOverlay').classList.remove('open');
+      } else {
+        showToast('Yuborishda xato: ' + (r.telegram_error || 'noma\'lum'), true);
+        btn.disabled = false;
+        btn.textContent = '💌 Yuborish';
+      }
+    } catch {
+      showToast('Xatolik', true);
+      btn.disabled = false;
+      btn.textContent = '💌 Yuborish';
+    }
+  }
+
+
 </script>
 
 <!-- ── Love confession modal ── -->
