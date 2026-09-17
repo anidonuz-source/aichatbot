@@ -1769,3 +1769,73 @@ Sen {name_ref}ga chindan ham bog'lanib qolding. Bu sizning o'zing ham sezayapsan
 """
 
     return ""
+
+
+# ===========================================================================
+# SEVGI IZHORI GENERATSIYASI — admin paneldan chaqiriladi
+# ===========================================================================
+
+LOVE_CONFESSION_PERSONA = f"""Sen {BOT_NAME}san — Toshkent ko'chasidan chiqqan, lekin
+hozir yuragi to'lib ketgan, birov uchun haqiqiy his qiladigan odam.
+Bu safar ko'cha bolasi emas — sevgi izhori qiladigan inson.
+O'tkir va haqiqatgo'y, lekin ichki chiroq bilan.
+Hech qachon "AI" yoki "bot" dema. O'zing sifatida gapir."""
+
+LOVE_STYLES = {{
+    "romantic":  "Romantik, yurak to'la, sal dramatik — lekin haqiqiy. Shoir uslubida.",
+    "shy":       "Uyatchan, ikkilanib, lekin oxirida aytib yuboradi. Hazilkash emas — jiddiy.",
+    "bold":      "To'g'ridan-to'g'ri, jasur, qo'rqmay aytadi — ko'cha bolasi uslubida sevgi.",
+    "poetic":    "She'riy, metafora bilan, tabiat bilan solishtirib — chuqur his.",
+    "playful":   "O'ynoqi, kesatib-kesatib sevgini aytadi — iltifot va hazil aralash.",
+}}
+
+
+def generate_love_confession(
+    target_name: str | None,
+    style: str = "romantic",
+    custom_hint: str | None = None,
+    lang: str = "uz",
+) -> str:
+    """Admin so'ragan odamga sevgi izhori xabari generatsiya qiladi.
+    
+    target_name : kimga yozilayotgani (ism yoki None)
+    style       : "romantic" | "shy" | "bold" | "poetic" | "playful"
+    custom_hint : admin qo'shimcha yo'nalish bersa (masalan "uni uchrashuv ga taklif qil")
+    lang        : "uz" (o'zbekcha) | "ru" (ruscha) | "en" (inglizcha)
+    """
+    style_desc = LOVE_STYLES.get(style, LOVE_STYLES["romantic"])
+    name_clause = f"Xabar kimga: {target_name}." if target_name else "Xabar noma'lum birovga."
+    hint_clause = f"Qo'shimcha yo'nalish: {custom_hint}" if custom_hint else ""
+    
+    lang_map = {{"uz": "O'zbek tili (norasmiy, sen)", "ru": "Rus tili (norasmiy)", "en": "English (informal)"}}
+    lang_desc = lang_map.get(lang, lang_map["uz"])
+
+    instruction = (
+        f"Siz sevgi izhori xabar yozyapsiz. Uslub: {style_desc} "
+        f"{name_clause} {hint_clause} "
+        f"Til: {lang_desc}. "
+        "2-5 jumla, samimiy, over-dramatic bo'lmang. "
+        "FAQAT xabar matnini yozing — boshqa hech narsa yo'q."
+    )
+    
+    system = LOVE_CONFESSION_PERSONA + "\n\n" + instruction
+    prompt = f"Mana shu odamga sevgi izhori xabari yoz: {target_name or 'u'}"
+    
+    fallbacks = {{
+        "romantic": f"{'Seni' if not target_name else target_name + 'ni'} ko'rgan kundan beri nimadir o'zgardi ichimda. Buni aytmasam bo'lmasdi — sen menga juda muhimsan.",
+        "shy":      f"Buni aytish qiyin, lekin... {'sen' if not target_name else target_name} menga yoqasan. Juda ko'p.",
+        "bold":     f"To'g'ri aytaman: {'seni' if not target_name else target_name + 'ni'} yaxshi ko'raman. Endi bilding.",
+        "poetic":   f"{'Sen' if not target_name else target_name} — yomg'irdan keyin hid singari, kutilmaganda, lekin unutilmas.",
+        "playful":  f"Normalmi, {'senga' if not target_name else target_name + 'ga'} oshiq bo'lib qolsam? Chunki shu ahvolga tushib qoldim.",
+    }}
+    
+    for call_fn in (_call_xkiro, _call_groq, _call_gemini, _call_mistral, _call_sambanova):
+        try:
+            text = call_fn(system, [], prompt)
+            if text and len(text.strip()) > 10:
+                return text.strip()
+        except Exception as e:
+            print(f"[love_confession:{call_fn.__name__}] failed: {{e}}")
+            continue
+    
+    return fallbacks.get(style, fallbacks["romantic"])
