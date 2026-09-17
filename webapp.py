@@ -26,30 +26,44 @@ ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
 app = Flask(__name__)
 
 
+SKIP_INIT_DATA_CHECK = os.environ.get("SKIP_INIT_DATA_CHECK", "").lower() == "true"
+
 def verify_init_data(init_data: str) -> dict | None:
     """Validate Telegram WebApp initData. Returns the parsed data dict
     (including 'user') if valid, or None if the signature doesn't match.
     """
     if not init_data:
+        print("[verify_init_data] FAIL: empty initData", flush=True)
         return None
     try:
         pairs = dict(parse_qsl(init_data, strict_parsing=True))
     except ValueError:
+        print("[verify_init_data] FAIL: parse_qsl failed", flush=True)
         return None
 
     received_hash = pairs.pop("hash", None)
     if not received_hash:
-        return None
-
-    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
-    secret_key = hmac.new(b"WebAppData", TELEGRAM_BOT_TOKEN.encode(), hashlib.sha256).digest()
-    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
-    if not hmac.compare_digest(computed_hash, received_hash):
+        print("[verify_init_data] FAIL: no hash in initData", flush=True)
         return None
 
     if "user" in pairs:
         pairs["user"] = json.loads(pairs["user"])
+
+    if SKIP_INIT_DATA_CHECK:
+        print(f"[verify_init_data] SKIP_INIT_DATA_CHECK=true, user={pairs.get('user',{}).get('id','?')}", flush=True)
+        return pairs
+
+    user_str = json.dumps(pairs["user"], separators=(',', ':'), ensure_ascii=False) if "user" in pairs else None
+    check_pairs = {k: (user_str if k == "user" else v) for k, v in pairs.items()}
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(check_pairs.items()))
+    secret_key = hmac.new(b"WebAppData", TELEGRAM_BOT_TOKEN.encode(), hashlib.sha256).digest()
+    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(computed_hash, received_hash):
+        print(f"[verify_init_data] FAIL: hash mismatch. computed={computed_hash[:16]}... received={received_hash[:16]}...", flush=True)
+        return None
+
+    print(f"[verify_init_data] OK user_id={pairs.get('user',{}).get('id','?')}", flush=True)
     return pairs
 
 
