@@ -476,6 +476,68 @@ def api_admin_group_info():
         return jsonify({"error": str(e)}), 500
 
 
+
+
+@app.route("/api/admin/love-message", methods=["POST"])
+def api_admin_love_message():
+    """Admin paneldan istalgan userga yoki guruhga AI tomonidan
+    sevgi izhori xabari generatsiya qilib yuboradi.
+
+    Body params:
+      initData    : Telegram WebApp auth
+      target_id   : user yoki group chat_id (string)
+      target_name : ismini bilsa (ixtiyoriy)
+      style       : "romantic"|"shy"|"bold"|"poetic"|"playful" (default: romantic)
+      custom_hint : qo'shimcha yo'nalish (ixtiyoriy)
+      lang        : "uz"|"ru"|"en" (default: uz)
+      send        : true = Telegram ga yubor, false = faqat ko'rsat (default: false)
+    """
+    import requests as rq
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    target_id   = str(body.get("target_id", "")).strip()
+    target_name = body.get("target_name") or None
+    style       = body.get("style", "romantic")
+    custom_hint = body.get("custom_hint") or None
+    lang        = body.get("lang", "uz")
+    do_send     = bool(body.get("send", False))
+
+    if not target_id:
+        return jsonify({"error": "target_id talab qilinadi"}), 400
+
+    # Xabarni AI bilan generatsiya qilamiz
+    try:
+        message = ai_core.generate_love_confession(
+            target_name=target_name,
+            style=style,
+            custom_hint=custom_hint,
+            lang=lang,
+        )
+    except Exception as e:
+        return jsonify({"error": f"Generatsiya xatosi: {e}"}), 500
+
+    result = {"message": message, "sent": False}
+
+    # Agar "send" = true bo'lsa — Telegram ga yubor
+    if do_send:
+        try:
+            r = rq.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": int(target_id), "text": message},
+                timeout=10,
+            )
+            if r.ok and r.json().get("ok"):
+                result["sent"] = True
+            else:
+                result["telegram_error"] = r.json().get("description", "Noma'lum xato")
+        except Exception as e:
+            result["telegram_error"] = str(e)
+
+    return jsonify(result)
+
+
 @app.route("/api/admin/broadcast-history", methods=["POST"])
 def api_admin_broadcast_history():
     """Return recent broadcast history for the admin panel."""
