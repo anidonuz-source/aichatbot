@@ -4,7 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Misumi AI · Admin</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js">
+  /* ── Love confession ─────────────────────────────────────────────── */
+  let loveTargetId = null;
+  let loveStyle = 'romantic';
+  let loveGenerated = '';
+
+  function openLoveModal(userId, userName) {
+    loveTargetId = userId;
+    document.getElementById('loveTargetName').value = userName || '';
+    document.getElementById('loveHint').value = '';
+    document.getElementById('loveLang').value = 'uz';
+    document.getElementById('lovePreview').textContent = 'Generatsiya qilingan xabar shu yerda ko'rinadi...';
+    document.getElementById('lovePreview').className = 'love-preview empty';
+    document.getElementById('loveSendBtn').disabled = true;
+    loveGenerated = '';
+    selectLoveStyle(document.querySelector('.style-chip[data-style="romantic"]'));
+    document.getElementById('loveModalOverlay').classList.add('open');
+    closeUserModal();
+  }
+
+  function closeLoveModal(e) {
+    if (!e || e.target === document.getElementById('loveModalOverlay')) {
+      document.getElementById('loveModalOverlay').classList.remove('open');
+      loveTargetId = null;
+      loveGenerated = '';
+    }
+  }
+
+  function selectLoveStyle(el) {
+    document.querySelectorAll('.style-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    loveStyle = el.dataset.style;
+  }
+
+  async function generateLove() {
+    if (!loveTargetId) return;
+    const btn = document.getElementById('loveGenBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Yaratilmoqda...';
+    const preview = document.getElementById('lovePreview');
+    preview.className = 'love-preview empty';
+    preview.textContent = 'AI yozmoqda...';
+
+    try {
+      const r = await api('/api/admin/love-message', {
+        target_id:   loveTargetId,
+        target_name: document.getElementById('loveTargetName').value.trim() || null,
+        style:       loveStyle,
+        custom_hint: document.getElementById('loveHint').value.trim() || null,
+        lang:        document.getElementById('loveLang').value,
+        send:        false,
+      });
+      loveGenerated = r.message;
+      preview.textContent = r.message;
+      preview.className = 'love-preview';
+      document.getElementById('loveSendBtn').disabled = false;
+    } catch (err) {
+      preview.textContent = 'Xatolik yuz berdi. Qayta urining.';
+      preview.className = 'love-preview empty';
+    }
+    btn.disabled = false;
+    btn.textContent = '✨ Qayta generatsiya';
+  }
+
+  async function sendLove() {
+    if (!loveTargetId || !loveGenerated) return;
+    const btn = document.getElementById('loveSendBtn');
+    btn.disabled = true;
+    btn.textContent = '📤 Yuborilmoqda...';
+    try {
+      const r = await api('/api/admin/love-message', {
+        target_id:   loveTargetId,
+        target_name: document.getElementById('loveTargetName').value.trim() || null,
+        style:       loveStyle,
+        custom_hint: document.getElementById('loveHint').value.trim() || null,
+        lang:        document.getElementById('loveLang').value,
+        send:        true,
+      });
+      if (r.sent) {
+        showToast('💌 Yuborildi!');
+        document.getElementById('loveModalOverlay').classList.remove('open');
+      } else {
+        showToast('Yuborishda xato: ' + (r.telegram_error || 'noma\'lum'), true);
+        btn.disabled = false;
+        btn.textContent = '💌 Yuborish';
+      }
+    } catch {
+      showToast('Xatolik', true);
+      btn.disabled = false;
+      btn.textContent = '💌 Yuborish';
+    }
+  }
+
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -425,6 +518,41 @@
   }
   .history-badge.ok{background:var(--success-dim); color:var(--success);}
   .history-badge.fail{background:var(--danger-dim); color:var(--danger);}
+
+
+  /* ── Love confession modal ── */
+  .love-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);
+    display:none;align-items:flex-end;justify-content:center;z-index:200;}
+  .love-modal-overlay.open{display:flex;}
+  .love-modal{background:var(--surface);border-radius:20px 20px 0 0;
+    padding:20px 18px 32px;width:100%;max-width:480px;
+    box-shadow:0 -4px 24px rgba(0,0,0,0.3);}
+  .love-modal h3{margin:0 0 14px;font-size:16px;color:var(--paper);
+    display:flex;align-items:center;gap:8px;}
+  .love-field{margin-bottom:12px;}
+  .love-field label{font-size:11px;color:var(--paper-dim);display:block;margin-bottom:5px;}
+  .love-field select,.love-field input,.love-field textarea{
+    width:100%;background:var(--surface-raised,#1e1e1e);border:1px solid var(--hairline);
+    border-radius:10px;color:var(--paper);font-size:13px;padding:9px 12px;
+    box-sizing:border-box;outline:none;font-family:inherit;}
+  .love-field textarea{resize:vertical;min-height:80px;}
+  .love-preview{background:var(--surface-raised,#1e1e1e);border:1px solid var(--hairline);
+    border-radius:12px;padding:12px;font-size:13px;line-height:1.55;
+    color:var(--paper);min-height:60px;margin-bottom:12px;white-space:pre-wrap;
+    word-break:break-word;}
+  .love-preview.empty{color:var(--paper-dim);font-style:italic;}
+  .love-actions{display:flex;gap:8px;margin-top:4px;}
+  .love-btn{flex:1;padding:11px;border:none;border-radius:12px;
+    font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s;}
+  .love-btn.gen{background:var(--brass,#c9a84c);color:#000;}
+  .love-btn.send{background:#e05a7a;color:#fff;}
+  .love-btn.cancel{background:var(--surface-raised,#2a2a2a);color:var(--paper);}
+  .love-btn:disabled{opacity:0.45;cursor:not-allowed;}
+  .love-style-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .style-chip{padding:5px 11px;border-radius:20px;border:1px solid var(--hairline);
+    background:transparent;color:var(--paper-dim);font-size:11.5px;cursor:pointer;
+    transition:all .15s;}
+  .style-chip.active{background:var(--brass,#c9a84c);color:#000;border-color:transparent;}
 
   /* ── User detail modal ── */
   .modal-overlay{
@@ -983,6 +1111,7 @@
     document.getElementById('modalActions').innerHTML = `
       <button class="action-btn ${u.premium ? 'premium-on' : ''}" style="flex:1" onclick="modalTogglePremium()">${ICONS.starSm}${u.premium ? 'Premium bekor' : 'Premium berish'}</button>
       <button class="action-btn ${u.blocked ? 'block-on' : ''}" style="flex:1" onclick="modalToggleBlock()">${ICONS.shieldOff}${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
+      <button class="action-btn" style="flex:1;background:#e05a7a;color:#fff;border-color:#e05a7a" onclick="openLoveModal('${u.id}','${u.name.replace(/'/g,\"\'\").replace(/"/g,\"&quot;\")}')">💌 Sevgi izhori</button>
     `;
     document.getElementById('userModal').style.display = 'flex';
   }
@@ -1300,5 +1429,45 @@
 
   load(false);
 </script>
+
+<!-- ── Love confession modal ── -->
+<div id="loveModalOverlay" class="love-modal-overlay" onclick="closeLoveModal(event)">
+  <div class="love-modal">
+    <h3>💌 Sevgi izhori yuborish</h3>
+    <div class="love-field">
+      <label>Kimga (ism, ixtiyoriy)</label>
+      <input id="loveTargetName" type="text" placeholder="Masalan: Zulfiya, Ali...">
+    </div>
+    <div class="love-field">
+      <label>Uslub tanlang</label>
+      <div class="love-style-row" id="loveStyleRow">
+        <button class="style-chip active" data-style="romantic" onclick="selectLoveStyle(this)">💗 Romantik</button>
+        <button class="style-chip" data-style="shy" onclick="selectLoveStyle(this)">🙈 Uyatchan</button>
+        <button class="style-chip" data-style="bold" onclick="selectLoveStyle(this)">🔥 Jasur</button>
+        <button class="style-chip" data-style="poetic" onclick="selectLoveStyle(this)">🌸 She'riy</button>
+        <button class="style-chip" data-style="playful" onclick="selectLoveStyle(this)">😏 O'ynoqi</button>
+      </div>
+    </div>
+    <div class="love-field">
+      <label>Til</label>
+      <select id="loveLang">
+        <option value="uz">🇺🇿 O'zbekcha</option>
+        <option value="ru">🇷🇺 Ruscha</option>
+        <option value="en">🇬🇧 Inglizcha</option>
+      </select>
+    </div>
+    <div class="love-field">
+      <label>Qo'shimcha yo'nalish (ixtiyoriy)</label>
+      <input id="loveHint" type="text" placeholder="Masalan: uni uchrashuv ga taklif qil...">
+    </div>
+    <div id="lovePreview" class="love-preview empty">Generatsiya qilingan xabar shu yerda ko'rinadi...</div>
+    <div class="love-actions">
+      <button class="love-btn cancel" onclick="closeLoveModal()">Bekor</button>
+      <button class="love-btn gen" id="loveGenBtn" onclick="generateLove()">✨ Generatsiya</button>
+      <button class="love-btn send" id="loveSendBtn" onclick="sendLove()" disabled>💌 Yuborish</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
