@@ -15,7 +15,7 @@
     document.getElementById('loveTargetName').value = userName || '';
     document.getElementById('loveHint').value = '';
     document.getElementById('loveLang').value = 'uz';
-    document.getElementById('lovePreview').textContent = 'Generatsiya qilingan xabar shu yerda ko'rinadi...';
+    document.getElementById('lovePreview').textContent = "Generatsiya qilingan xabar shu yerda ko'rinadi...";
     document.getElementById('lovePreview').className = 'love-preview empty';
     document.getElementById('loveSendBtn').disabled = true;
     loveGenerated = '';
@@ -1111,7 +1111,7 @@
     document.getElementById('modalActions').innerHTML = `
       <button class="action-btn ${u.premium ? 'premium-on' : ''}" style="flex:1" onclick="modalTogglePremium()">${ICONS.starSm}${u.premium ? 'Premium bekor' : 'Premium berish'}</button>
       <button class="action-btn ${u.blocked ? 'block-on' : ''}" style="flex:1" onclick="modalToggleBlock()">${ICONS.shieldOff}${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
-      <button class="action-btn" style="flex:1;background:#e05a7a;color:#fff;border-color:#e05a7a" onclick="openLoveModal('${u.id}','${u.name.replace(/'/g,\"\'\").replace(/"/g,\"&quot;\")}')">💌 Sevgi izhori</button>
+      <button class="action-btn" style="flex:1;background:#e05a7a;color:#fff;border-color:#e05a7a" onclick="openLoveModal(String(u.id), u.name)">💌 Sevgi izhori</button>
     `;
     document.getElementById('userModal').style.display = 'flex';
   }
