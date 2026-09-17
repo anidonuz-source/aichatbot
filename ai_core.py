@@ -1781,13 +1781,13 @@ Bu safar ko'cha bolasi emas — sevgi izhori qiladigan inson.
 O'tkir va haqiqatgo'y, lekin ichki chiroq bilan.
 Hech qachon "AI" yoki "bot" dema. O'zing sifatida gapir."""
 
-LOVE_STYLES = {{
+LOVE_STYLES = {
     "romantic":  "Romantik, yurak to'la, sal dramatik — lekin haqiqiy. Shoir uslubida.",
     "shy":       "Uyatchan, ikkilanib, lekin oxirida aytib yuboradi. Hazilkash emas — jiddiy.",
     "bold":      "To'g'ridan-to'g'ri, jasur, qo'rqmay aytadi — ko'cha bolasi uslubida sevgi.",
     "poetic":    "She'riy, metafora bilan, tabiat bilan solishtirib — chuqur his.",
     "playful":   "O'ynoqi, kesatib-kesatib sevgini aytadi — iltifot va hazil aralash.",
-}}
+}
 
 
 def generate_love_confession(
@@ -1807,7 +1807,7 @@ def generate_love_confession(
     name_clause = f"Xabar kimga: {target_name}." if target_name else "Xabar noma'lum birovga."
     hint_clause = f"Qo'shimcha yo'nalish: {custom_hint}" if custom_hint else ""
     
-    lang_map = {{"uz": "O'zbek tili (norasmiy, sen)", "ru": "Rus tili (norasmiy)", "en": "English (informal)"}}
+    lang_map = {"uz": "O'zbek tili (norasmiy, sen)", "ru": "Rus tili (norasmiy)", "en": "English (informal)"}
     lang_desc = lang_map.get(lang, lang_map["uz"])
 
     instruction = (
@@ -1821,13 +1821,13 @@ def generate_love_confession(
     system = LOVE_CONFESSION_PERSONA + "\n\n" + instruction
     prompt = f"Mana shu odamga sevgi izhori xabari yoz: {target_name or 'u'}"
     
-    fallbacks = {{
+    fallbacks = {
         "romantic": f"{'Seni' if not target_name else target_name + 'ni'} ko'rgan kundan beri nimadir o'zgardi ichimda. Buni aytmasam bo'lmasdi — sen menga juda muhimsan.",
         "shy":      f"Buni aytish qiyin, lekin... {'sen' if not target_name else target_name} menga yoqasan. Juda ko'p.",
         "bold":     f"To'g'ri aytaman: {'seni' if not target_name else target_name + 'ni'} yaxshi ko'raman. Endi bilding.",
         "poetic":   f"{'Sen' if not target_name else target_name} — yomg'irdan keyin hid singari, kutilmaganda, lekin unutilmas.",
         "playful":  f"Normalmi, {'senga' if not target_name else target_name + 'ga'} oshiq bo'lib qolsam? Chunki shu ahvolga tushib qoldim.",
-    }}
+    }
     
     for call_fn in (_call_xkiro, _call_groq, _call_gemini, _call_mistral, _call_sambanova):
         try:
@@ -1835,7 +1835,7 @@ def generate_love_confession(
             if text and len(text.strip()) > 10:
                 return text.strip()
         except Exception as e:
-            print(f"[love_confession:{call_fn.__name__}] failed: {{e}}")
+            print(f"[love_confession:{call_fn.__name__}] failed: {e}")
             continue
     
     return fallbacks.get(style, fallbacks["romantic"])
