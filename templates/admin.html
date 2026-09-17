@@ -1342,22 +1342,33 @@
   let loveGenerated = '';
 
   function openLoveModal(userId, userName) {
-    loveTargetId = userId;
+    loveTargetId = String(userId);
+    // Avval user modalini yopamiz
+    document.getElementById('userModal').style.display = 'none';
+    modalUserId = null;
+    // Formni tozalaymiz
     document.getElementById('loveTargetName').value = userName || '';
     document.getElementById('loveHint').value = '';
     document.getElementById('loveLang').value = 'uz';
-    document.getElementById('lovePreview').textContent = "Generatsiya qilingan xabar shu yerda ko'rinadi...";
+    document.getElementById('lovePreview').textContent = "Generatsiya qilingan xabar shu yerda ko\'rinadi...";
     document.getElementById('lovePreview').className = 'love-preview empty';
     document.getElementById('loveSendBtn').disabled = true;
+    document.getElementById('loveGenBtn').textContent = '✨ Generatsiya';
+    document.getElementById('loveGenBtn').disabled = false;
     loveGenerated = '';
-    selectLoveStyle(document.querySelector('.style-chip[data-style="romantic"]'));
-    document.getElementById('loveModalOverlay').classList.add('open');
-    closeUserModal();
+    // Style chiplarni reset
+    document.querySelectorAll('.style-chip').forEach(c => c.classList.remove('active'));
+    const defChip = document.querySelector('.style-chip[data-style="romantic"]');
+    if (defChip) defChip.classList.add('active');
+    loveStyle = 'romantic';
+    // Overlay ni ko'rsatamiz — display:flex to'g'ridan-to'g'ri
+    const overlay = document.getElementById('loveModalOverlay');
+    overlay.style.display = 'flex';
   }
 
   function closeLoveModal(e) {
     if (!e || e.target === document.getElementById('loveModalOverlay')) {
-      document.getElementById('loveModalOverlay').classList.remove('open');
+      document.getElementById('loveModalOverlay').style.display = 'none';
       loveTargetId = null;
       loveGenerated = '';
     }
@@ -1415,7 +1426,7 @@
       });
       if (r.sent) {
         showToast('💌 Yuborildi!');
-        document.getElementById('loveModalOverlay').classList.remove('open');
+        document.getElementById('loveModalOverlay').style.display = 'none';
       } else {
         showToast('Yuborishda xato: ' + (r.telegram_error || 'noma\'lum'), true);
         btn.disabled = false;
@@ -1432,7 +1443,7 @@
 </script>
 
 <!-- ── Love confession modal ── -->
-<div id="loveModalOverlay" class="love-modal-overlay" onclick="closeLoveModal(event)">
+<div id="loveModalOverlay" class="love-modal-overlay" onclick="if(event.target===this)closeLoveModal(event)">
   <div class="love-modal">
     <h3>💌 Sevgi izhori yuborish</h3>
     <div class="love-field">
