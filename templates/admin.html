@@ -1032,11 +1032,35 @@
       <div class="modal-row"><span class="k">Premium</span><span class="v">${u.premium ? '⭐ Ha' : '—'}</span></div>
       <div class="modal-row"><span class="k">Holati</span><span class="v">${u.blocked ? '🚫 Bloklangan' : '✅ Faol'}</span></div>
     `;
-    document.getElementById('modalActions').innerHTML = `
-      <button class="action-btn ${u.premium ? 'premium-on' : ''}" style="flex:1" onclick="modalTogglePremium()">${ICONS.starSm}${u.premium ? 'Premium bekor' : 'Premium berish'}</button>
-      <button class="action-btn ${u.blocked ? 'block-on' : ''}" style="flex:1" onclick="modalToggleBlock()">${ICONS.shieldOff}${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
-      <button class="action-btn" style="flex:1;background:#e05a7a;color:#fff;border-color:#e05a7a" onclick="openLoveModal(String(u.id), u.name)">💌 Sevgi izhori</button>
-    `;
+    // Tugmalarni addEventListener bilan qo'shamiz — innerHTML onclick ishlamaydi
+    const actionsEl = document.getElementById('modalActions');
+    actionsEl.innerHTML = '';
+
+    const premBtn = document.createElement('button');
+    premBtn.className = 'action-btn' + (u.premium ? ' premium-on' : '');
+    premBtn.style.flex = '1';
+    premBtn.innerHTML = ICONS.starSm + (u.premium ? 'Premium bekor' : 'Premium berish');
+    premBtn.addEventListener('click', modalTogglePremium);
+
+    const blkBtn = document.createElement('button');
+    blkBtn.className = 'action-btn' + (u.blocked ? ' block-on' : '');
+    blkBtn.style.flex = '1';
+    blkBtn.innerHTML = ICONS.shieldOff + (u.blocked ? 'Blokdan chiqarish' : 'Bloklash');
+    blkBtn.addEventListener('click', modalToggleBlock);
+
+    const loveBtn = document.createElement('button');
+    loveBtn.className = 'action-btn';
+    loveBtn.style.cssText = 'flex:1;background:#e05a7a;color:#fff;border-color:#e05a7a';
+    loveBtn.textContent = '💌 Sevgi izhori';
+    loveBtn.addEventListener('click', function() {
+      console.log('[Love] tugma bosildi, id=', u.id, 'name=', u.name);
+      openLoveModal(String(u.id), u.name);
+    });
+
+    actionsEl.appendChild(premBtn);
+    actionsEl.appendChild(blkBtn);
+    actionsEl.appendChild(loveBtn);
+
     document.getElementById('userModal').style.display = 'flex';
   }
 
