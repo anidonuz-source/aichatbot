@@ -745,7 +745,7 @@
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
-  const initData = tg?.initData || '';
+  const getInitData = () => window.Telegram?.WebApp?.initData || tg?.initData || '';
 
   const gateEl = document.getElementById('gate');
   const loadingEl = document.getElementById('loading');
@@ -785,7 +785,7 @@
     const res = await fetch(path, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ initData, ...body })
+      body: JSON.stringify({ initData: getInitData(), ...body })
     });
     if (res.status === 403 || res.status === 401) throw new Error('unauthorized');
     return res.json();
@@ -1381,7 +1381,9 @@
   }
 
   async function generateLove() {
-    if (!loveTargetId) return;
+    if (!loveTargetId) { console.error('[Love] loveTargetId yo\'q!'); return; }
+    const _idata = getInitData();
+    console.log('[Love] generateLove called, targetId=', loveTargetId, 'initData len=', _idata.length);
     const btn = document.getElementById('loveGenBtn');
     btn.disabled = true;
     btn.textContent = '⏳ Yaratilmoqda...';
@@ -1411,7 +1413,8 @@
   }
 
   async function sendLove() {
-    if (!loveTargetId || !loveGenerated) return;
+    if (!loveTargetId || !loveGenerated) { console.error('[Love] missing targetId or generated text'); return; }
+    console.log('[Love] sendLove called, targetId=', loveTargetId);
     const btn = document.getElementById('loveSendBtn');
     btn.disabled = true;
     btn.textContent = '📤 Yuborilmoqda...';
