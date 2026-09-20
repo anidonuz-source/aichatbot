@@ -69,7 +69,11 @@ def _authorized(chat_id) -> bool:
 
 
 def _is_admin(chat_id) -> bool:
-    return bool(ADMIN_ID) and str(chat_id) == ADMIN_ID
+    result = bool(ADMIN_ID) and str(chat_id) == ADMIN_ID
+    import logging; logging.getLogger("misumi-bot").info(
+        f"[_is_admin] chat_id={str(chat_id)!r} ADMIN_ID={ADMIN_ID!r} => {result}"
+    )
+    return result
 
 
 def _webapp_keyboard(chat_id=None) -> InlineKeyboardMarkup | None:
