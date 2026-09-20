@@ -63,19 +63,29 @@ def verify_admin(init_data: str) -> dict | None:
     """
     import logging
     log = logging.getLogger("misumi-bot")
-    data = verify_init_data(init_data)
-    if not data:
-        log.warning("[verify_admin] initData noto'g'ri yoki bo'sh")
-        return None
-    user = data.get("user", {})
-    incoming_id = str(user.get("id", ""))
-    log.info(f"[verify_admin] incoming_id={incoming_id!r} ADMIN_ID={ADMIN_ID!r}")
-    # Agar ADMIN_ID sozlanmagan bo'lsa — istalgan foydalanuvchi kira oladi (debug)
-    # Agar sozlangan bo'lsa — faqat shu ID
-    if ADMIN_ID and incoming_id != ADMIN_ID:
-        log.warning(f"[verify_admin] ID mos kelmadi: {incoming_id!r} != {ADMIN_ID!r}")
-        return None
-    return data
+
+    # 1. Avval to'liq Telegram initData tekshiruvi
+    if init_data:
+        data = verify_init_data(init_data)
+        if data:
+            user = data.get("user", {})
+            incoming_id = str(user.get("id", ""))
+            log.info(f"[verify_admin] initData OK, incoming_id={incoming_id!r}")
+            if not ADMIN_ID or incoming_id == ADMIN_ID:
+                return data
+            log.warning(f"[verify_admin] ID mos kelmadi: {incoming_id!r} != {ADMIN_ID!r}")
+            return None
+
+    # 2. initData bo'sh yoki noto'g'ri — secret key tekshiruvi
+    # Admin panel Telegram desktop da ochilsa initData kelmaydi
+    # Shuning uchun X-Admin-Secret header orqali ham qabul qilamiz
+    secret = request.headers.get("X-Admin-Secret", "")
+    if secret and secret == ADMIN_ID:
+        log.info("[verify_admin] X-Admin-Secret orqali kirdi")
+        return {"user": {"id": int(ADMIN_ID)}}
+
+    log.warning(f"[verify_admin] initData bo'sh va secret yo'q")
+    return None
 
 
 @app.route("/")
