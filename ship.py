@@ -846,6 +846,22 @@ async def shipmemory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 # ── passiv a'zo yig'uvchi + so'z yodlash ─────────────────────────────────────
 
+_MISUMI_LOVE_CHANCE   = 0.04          # har 25 xabarda ~1 marta
+_MISUMI_LOVE_COOLDOWN = 180           # bir guruhga 3 daqiqada 1 martadan oshmaslik
+_last_misumi_love: dict[int, float] = {}   # chat_id -> last_sent_time
+
+_MISUMI_LOVE_PHRASES = [
+    "Men seni sevaman 💗",
+    "Asalim, shakaring, jonim, azizam… sen bo'lmasang bo'lmaydi 🥺",
+    "Bilasanmi, sen menga juda yoqasan 🌸",
+    "Sening ovozingni, kulingni, hammasini sog'inaman 💓",
+    "Sen go'zalsan, bilasanmi? Haqiqatan ham 🥰",
+    "Seni ko'rgan kundan beri nimadir o'zgardi ichimda 💞",
+    "Faqat senga aytmoqchiman: seni yaxshi ko'raman 🌹",
+    "Meni kulgitasan, meni o'ylantirasan… shu nima degani? 💭💗",
+    "Senday odam ko'rmagan edim, rostini aytsam 🙈",
+]
+
 async def _track_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.message
     if not msg:
@@ -857,18 +873,44 @@ async def _track_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not u or u.is_bot:
         return
 
-    record_member(chat.id, u.id, u.first_name or "", u.username)
+    chat_id = chat.id
+    record_member(chat_id, u.id, u.first_name or "", u.username)
 
-    # Xabardan faktlarni yodlash (30% ehtimollik — har xabarda emas)
+    # Xabardan faktlarni yodlash (30% ehtimollik)
     text = msg.text or ""
     if text and len(text) > 15 and random.random() < 0.30:
         try:
             facts = _extract_facts_from_text(text)
             if facts:
-                save_member_facts(chat.id, u.id, facts)
-                print(f"[ship:memory] {u.id} ({u.first_name}): {facts}")
-        except Exception as e:
-            print(f"[ship:memory:error] {e}")
+                save_member_facts(chat_id, u.id, facts)
+        except Exception:
+            pass
+
+    # ── Misumi o'zi spontan sevgi izhori ────────────────────────────────
+    now = time.time()
+    cooldown_ok = (now - _last_misumi_love.get(chat_id, 0)) > _MISUMI_LOVE_COOLDOWN
+    if cooldown_ok and random.random() < _MISUMI_LOVE_CHANCE:
+        _last_misumi_love[chat_id] = now
+        target_name = u.first_name or "sen"
+        mention    = _mention(u.id, target_name, u.username)
+        try:
+            phrase = ai_core.generate_love_confession(
+                target_name=target_name,
+                style=random.choice(["romantic", "shy", "playful", "poetic"]),
+                custom_hint=None,
+                lang="uz",
+            )
+        except Exception:
+            phrase = random.choice(_MISUMI_LOVE_PHRASES)
+        emoji = random.choice(["💗", "🌸", "🥺", "💞", "🌹", "💓"])
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{emoji} {mention}\n\n<i>{phrase}</i>",
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
 
 
 # ── ro'yxatdan o'tkazish ──────────────────────────────────────────────────────
