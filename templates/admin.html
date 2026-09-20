@@ -429,7 +429,7 @@
 
   /* ── Love confession modal ── */
   .love-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);
-    display:none;align-items:flex-end;justify-content:center;z-index:200;}
+    display:none;align-items:flex-end;justify-content:center;z-index:9999;}
   .love-modal-overlay.open{display:flex;}
   .love-modal{background:var(--surface);border-radius:20px 20px 0 0;
     padding:20px 18px 32px;width:100%;max-width:480px;
@@ -1378,9 +1378,11 @@
     const defChip = document.querySelector('.style-chip[data-style="romantic"]');
     if (defChip) defChip.classList.add('active');
     loveStyle = 'romantic';
-    // Overlay ni ko'rsatamiz — display:flex to'g'ridan-to'g'ri
+    // Overlay ni ko'rsatamiz
     const overlay = document.getElementById('loveModalOverlay');
-    overlay.style.display = 'flex';
+    if (!overlay) { console.error('[Love] loveModalOverlay element topilmadi!'); return; }
+    overlay.style.cssText = 'display:flex !important';
+    console.log('[Love] modal opened, display=', overlay.style.display);
   }
 
   function closeLoveModal(e) {
@@ -1463,7 +1465,7 @@
 </script>
 
 <!-- ── Love confession modal ── -->
-<div id="loveModalOverlay" class="love-modal-overlay" onclick="if(event.target===this)closeLoveModal(event)">
+<div id="loveModalOverlay" class="love-modal-overlay" style="display:none" onclick="if(event.target===this)closeLoveModal(event)">
   <div class="love-modal">
     <h3>💌 Sevgi izhori yuborish</h3>
     <div class="love-field">
