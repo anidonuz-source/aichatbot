@@ -151,6 +151,97 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------------------------------
+# /love command — sevgi izhori
+# ---------------------------------------------------------------------------
+
+async def cmd_love(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/love — Misumi qizlar nomidan sevgi izhori yuboradi.
+
+    Holatlar:
+      /love              → guruhda random qizga yuboradi
+      /love (reply)      → reply qilingan odamga yuboradi
+      /love @username    → o'sha foydalanuvchiga (agar ID topilsa)
+    """
+    msg = update.message
+    chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type  # "private" | "group" | "supergroup"
+
+    # ── 1. KIMGA yuborish kerakligini aniqlaymiz ──────────────────────────
+    target_id = None
+    target_name = None
+
+    if msg.reply_to_message:
+        # Reply qilingan odamga
+        replied = msg.reply_to_message.from_user
+        if replied and not replied.is_bot:
+            target_id = replied.id
+            target_name = replied.first_name
+
+    if target_id is None and chat_type in ("group", "supergroup"):
+        # Guruhda random foydalanuvchi — admin_store dan olamiz
+        users = admin_store.get_users(limit=300)
+        # Faqat private (pozitiv ID) foydalanuvchilarni olamiz, o'zini emas
+        sender_id = update.effective_user.id
+        candidates = [
+            u for u in users
+            if int(u["id"]) > 0 and int(u["id"]) != sender_id
+        ]
+        if candidates:
+            chosen = random.choice(candidates)
+            target_id = int(chosen["id"])
+            target_name = chosen.get("name") or "siz"
+
+    if target_id is None:
+        # Private chat yoki guruhda hech kim topilmasa — o'ziga
+        target_id = update.effective_user.id
+        target_name = update.effective_user.first_name
+
+    # ── 2. Xabar generatsiya qilamiz ─────────────────────────────────────
+    styles = ["romantic", "shy", "bold", "poetic", "playful"]
+    style = random.choice(styles)
+
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+
+    try:
+        text = await asyncio.to_thread(
+            ai_core.generate_love_confession,
+            target_name=target_name,
+            style=style,
+            custom_hint=None,
+            lang="uz",
+        )
+    except Exception as e:
+        logger.error(f"[cmd_love] generate error: {e}")
+        text = f"{target_name or 'Siz'}ni ko'rgan kundan beri nimadir o'zgardi ichimda 💗"
+
+    # ── 3. Yuborish ───────────────────────────────────────────────────────
+    style_emoji = {
+        "romantic": "💗", "shy": "🙈", "bold": "🔥", "poetic": "🌸", "playful": "😏"
+    }.get(style, "💌")
+
+    if chat_type in ("group", "supergroup") and target_id != update.effective_user.id:
+        # Guruhda: mention bilan yuborish
+        try:
+            mention = f'<a href="tg://user?id={target_id}">{target_name}</a>'
+            full_text = f"{style_emoji} {mention}, sizga bir narsa aytmoqchiman...\n\n{text}"
+            await msg.reply_html(full_text)
+        except Exception:
+            await msg.reply_text(f"{style_emoji} {text}")
+    else:
+        # Private yoki o'ziga — to'g'ridan yuborish
+        try:
+            await context.bot.send_message(
+                chat_id=target_id,
+                text=f"{style_emoji} {text}",
+            )
+            if chat_type in ("group", "supergroup"):
+                await msg.reply_text("💌 Yuborildi!")
+        except Exception:
+            # DM yuborib bo'lmasa — guruhda yozamiz
+            await msg.reply_text(f"{style_emoji} {text}")
+
+
+# ---------------------------------------------------------------------------
 # "Hisob" — userbot connect/manage flow (Misumi AI Pro feature)
 # ---------------------------------------------------------------------------
 
