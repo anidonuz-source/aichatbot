@@ -1878,6 +1878,103 @@ async def bestfriend_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await message.reply_text(text, parse_mode="HTML")
 
 
+_LOVE_COOLDOWN = 30
+_last_love_group: dict[int, float] = {}
+
+_LOVE_STYLES = {
+    "romantic": "💗",
+    "shy":      "🙈",
+    "bold":     "🔥",
+    "poetic":   "🌸",
+    "playful":  "😏",
+}
+
+async def love_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/love — Misumi qizlar nomidan sevgi izhori yuboradi.
+
+    /love            → guruhda random odamga (guruhdagi a'zolar ichidan)
+    /love (reply)    → reply qilingan odamga
+    """
+    chat = update.effective_chat
+    message = update.message
+
+    if chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ Bu komanda faqat guruhlarda ishlaydi! 👥")
+        return
+
+    chat_id = chat.id
+    now = time.time()
+
+    # Cooldown tekshiruv
+    remaining = _LOVE_COOLDOWN - (now - _last_love_group.get(chat_id, 0))
+    if remaining > 0:
+        await message.reply_text(
+            f"⏳ Keyingi <b>/love</b> uchun <b>{_fmt_time(remaining)}</b> kuting. 💌",
+            parse_mode="HTML"
+        )
+        return
+
+    # ── Kimga yuborish ─────────────────────────────────────────────
+    target_id = None
+    target_name = None
+    target_username = None
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        replied = message.reply_to_message.from_user
+        if not replied.is_bot:
+            target_id = replied.id
+            target_name = replied.first_name
+            target_username = replied.username
+
+    if target_id is None:
+        # Guruhdan random a'zo — ship.py ning seen_members dan
+        members = _seen_members.get(chat_id, {})
+        sender_id = update.effective_user.id
+        candidates = [
+            (uid, m) for uid, m in members.items()
+            if int(uid) != sender_id
+        ]
+        if not candidates:
+            await message.reply_text("😅 Guruhda yetarli a'zo yo'q hali!")
+            return
+        uid, m = random.choice(candidates)
+        target_id = int(uid)
+        target_name = m.get("name", "siz")
+        target_username = m.get("username")
+
+    # ── Xabar generatsiya ──────────────────────────────────────────
+    style = random.choice(list(_LOVE_STYLES.keys()))
+    emoji = _LOVE_STYLES[style]
+
+    loading = await message.reply_text("💌 Sevgi izhori tayyorlanmoqda...")
+
+    try:
+        text = ai_core.generate_love_confession(
+            target_name=target_name,
+            style=style,
+            custom_hint=None,
+            lang="uz",
+        )
+    except Exception:
+        text = f"{target_name}ni ko'rgan kundan beri nimadir o'zgardi ichimda."
+
+    try:
+        await loading.delete()
+    except Exception:
+        pass
+
+    _last_love_group[chat_id] = now
+
+    # ── Yuborish ───────────────────────────────────────────────────
+    mention = _mention(target_id, target_name, target_username)
+    full_text = (
+        f"{emoji} <b>SEVGI IZHORI</b>\n\n"
+        f"Kimga: {mention}\n\n"
+        f"<i>{text}</i>"
+    )
+    await message.reply_html(full_text)
+
+
 async def marriedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Guruhda /marry bilan nikohlanganlar ro'yxati."""
     chat = update.effective_chat
@@ -1923,6 +2020,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("marry",        marry_cmd))
     app.add_handler(CommandHandler("marriedlist",  marriedlist_cmd))
     app.add_handler(CommandHandler("bestfriend",   bestfriend_cmd))
+    app.add_handler(CommandHandler("love",         love_cmd))
     app.add_handler(CommandHandler("jins",         jins_cmd))
     app.add_handler(CommandHandler("members",      members_cmd))
     app.add_handler(CommandHandler("mywife",       mywife_cmd))
