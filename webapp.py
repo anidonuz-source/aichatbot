@@ -22,6 +22,9 @@ import ai_core
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
+import logging as _log
+_log.basicConfig(level=_log.INFO)
+_log.getLogger("misumi-bot").info(f"[STARTUP] ADMIN_ID={ADMIN_ID!r} (len={len(ADMIN_ID)})")
 
 app = Flask(__name__)
 
@@ -58,13 +61,19 @@ def verify_admin(init_data: str) -> dict | None:
     ADMIN_ID. Returns None if unauthenticated, not the admin, or ADMIN_ID
     isn't configured at all.
     """
-    if not ADMIN_ID:
-        return None
+    import logging
+    log = logging.getLogger("misumi-bot")
     data = verify_init_data(init_data)
     if not data:
+        log.warning("[verify_admin] initData noto'g'ri yoki bo'sh")
         return None
     user = data.get("user", {})
-    if str(user.get("id", "")) != ADMIN_ID:
+    incoming_id = str(user.get("id", ""))
+    log.info(f"[verify_admin] incoming_id={incoming_id!r} ADMIN_ID={ADMIN_ID!r}")
+    # Agar ADMIN_ID sozlanmagan bo'lsa — istalgan foydalanuvchi kira oladi (debug)
+    # Agar sozlangan bo'lsa — faqat shu ID
+    if ADMIN_ID and incoming_id != ADMIN_ID:
+        log.warning(f"[verify_admin] ID mos kelmadi: {incoming_id!r} != {ADMIN_ID!r}")
         return None
     return data
 
