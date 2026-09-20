@@ -1396,10 +1396,8 @@
 
 
 
-  // ═══════════════════════════════════════════════════
-  // LOVE MODAL — toza versiya
-  // ═══════════════════════════════════════════════════
-  document.addEventListener('DOMContentLoaded', function() { (function() {
+  // [ESKI KOD — O'CHIRILDI, pastdagi <script> blokiga ko'chirildi]
+  void(function() {
     var _targetId = null;
     var _style = 'romantic';
     var _generated = '';
@@ -1504,34 +1502,12 @@
       lHint.value = '';
     }
 
-    // Global funksiya — tugmadan chaqiriladi
-    window.openLoveModal = function(userId, userName) {
-      _targetId = String(userId);
-      lName.value = userName || '';
-      lHint.value = '';
-      lLang.value = 'uz';
-      lPreview.className = 'empty';
-      lPreview.textContent = 'Generatsiya tugmasi bosing...';
-      lGenBtn.textContent = '✨ Generatsiya';
-      lGenBtn.disabled = false;
-      lSendBtn.disabled = true;
-      _generated = '';
-      _style = 'romantic';
-      document.querySelectorAll('.lchip').forEach(function(c) { c.classList.remove('on'); });
-      var defChip = document.querySelector('.lchip[data-s="romantic"]');
-      if (defChip) defChip.classList.add('on');
-      // User modalini yopamiz
-      document.getElementById('userModal').style.display = 'none';
-      modalUserId = null;
-      // Love modalini ochamiz
-      overlay.classList.add('active');
-    };
-  })(); }); // DOMContentLoaded
+    // [ESKI openLoveModal — pastdagi script blokida yangi versiyasi bor]
+  }); // [ESKI KOD TUGADI]
 
 </script>
 
-
-
+<!-- LOVE MODAL HTML -->
 <div id="loveOverlay">
   <div id="loveBox">
     <h3>💌 Sevgi izhori</h3>
@@ -1569,6 +1545,117 @@
     </div>
   </div>
 </div>
+
+<!-- LOVE SCRIPT — HTML dan keyin, DOM tayyor -->
+<script>
+(function() {
+  var overlay   = document.getElementById('loveOverlay');
+  var lName     = document.getElementById('lName');
+  var lLang     = document.getElementById('lLang');
+  var lHint     = document.getElementById('lHint');
+  var lPreview  = document.getElementById('lovePreview');
+  var lGenBtn   = document.getElementById('lGenBtn');
+  var lSendBtn  = document.getElementById('lSendBtn');
+  var lCancelBtn= document.getElementById('lCancelBtn');
+  var _targetId = null, _style = 'romantic', _generated = '';
+
+  document.querySelectorAll('.lchip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.lchip').forEach(function(c){ c.classList.remove('on'); });
+      chip.classList.add('on');
+      _style = chip.getAttribute('data-s');
+    });
+  });
+
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) closeLove(); });
+  lCancelBtn.addEventListener('click', closeLove);
+
+  lGenBtn.addEventListener('click', function() {
+    if (!_targetId) return;
+    lGenBtn.disabled = true;
+    lGenBtn.textContent = '⏳ Yaratilmoqda...';
+    lPreview.className = 'empty';
+    lPreview.textContent = 'AI yozmoqda...';
+    lSendBtn.disabled = true;
+    _generated = '';
+    api('/api/admin/love-message', {
+      target_id:   _targetId,
+      target_name: lName.value.trim() || null,
+      style:       _style,
+      custom_hint: lHint.value.trim() || null,
+      lang:        lLang.value,
+      send:        false
+    }).then(function(r) {
+      _generated = r.message || '';
+      lPreview.className = '';
+      lPreview.textContent = _generated;
+      lSendBtn.disabled = false;
+      lGenBtn.textContent = '✨ Qayta generatsiya';
+      lGenBtn.disabled = false;
+    }).catch(function(err) {
+      lPreview.textContent = 'Xato: ' + err.message;
+      lGenBtn.textContent = '✨ Generatsiya';
+      lGenBtn.disabled = false;
+    });
+  });
+
+  lSendBtn.addEventListener('click', function() {
+    if (!_targetId || !_generated) return;
+    lSendBtn.disabled = true;
+    lSendBtn.textContent = '📤 Yuborilmoqda...';
+    api('/api/admin/love-message', {
+      target_id:   _targetId,
+      target_name: lName.value.trim() || null,
+      style:       _style,
+      custom_hint: lHint.value.trim() || null,
+      lang:        lLang.value,
+      send:        true
+    }).then(function(r) {
+      if (r.sent) {
+        showToast('💌 Yuborildi!');
+        closeLove();
+      } else {
+        showToast('Xato: ' + (r.telegram_error || 'noma\'lum'), true);
+        lSendBtn.disabled = false;
+        lSendBtn.textContent = '💌 Yuborish';
+      }
+    }).catch(function(err) {
+      showToast('Xato: ' + err.message, true);
+      lSendBtn.disabled = false;
+      lSendBtn.textContent = '💌 Yuborish';
+    });
+  });
+
+  function closeLove() {
+    overlay.classList.remove('active');
+    _targetId = null; _generated = '';
+    lPreview.className = 'empty';
+    lPreview.textContent = 'Generatsiya tugmasi bosing...';
+    lGenBtn.textContent = '✨ Generatsiya';
+    lGenBtn.disabled = false;
+    lSendBtn.disabled = true;
+    lName.value = ''; lHint.value = '';
+  }
+
+  window.openLoveModal = function(userId, userName) {
+    _targetId = String(userId);
+    lName.value = userName || '';
+    lHint.value = '';
+    lLang.value = 'uz';
+    lPreview.className = 'empty';
+    lPreview.textContent = 'Generatsiya tugmasi bosing...';
+    lGenBtn.textContent = '✨ Generatsiya';
+    lGenBtn.disabled = false;
+    lSendBtn.disabled = true;
+    _generated = ''; _style = 'romantic';
+    document.querySelectorAll('.lchip').forEach(function(c){ c.classList.remove('on'); });
+    var def = document.querySelector('.lchip[data-s="romantic"]');
+    if (def) def.classList.add('on');
+    document.getElementById('userModal').style.display = 'none';
+    overlay.classList.add('active');
+  };
+})();
+</script>
 
 </body>
 </html>
