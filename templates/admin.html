@@ -746,6 +746,9 @@
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
   const getInitData = () => window.Telegram?.WebApp?.initData || tg?.initData || '';
+  // URL dan secret parametrini olamiz: /admin?secret=7607916773
+  const _urlSecret = new URLSearchParams(window.location.search).get('secret') || '';
+  if (_urlSecret) window.__adminSecret = _urlSecret;
 
   const gateEl = document.getElementById('gate');
   const loadingEl = document.getElementById('loading');
@@ -796,10 +799,9 @@
       body: JSON.stringify({ initData: idata, ...body })
     });
     if (res.status === 403 || res.status === 401) {
-      // initData ishlamasa secret so'raymiz
       if (!window.__adminSecret) {
-        const s = prompt('Admin ID kiriting (tekshiruv uchun):');
-        if (s) { window.__adminSecret = s; return api(path, body); }
+        const s = prompt('Admin ID kiriting:');
+        if (s && s.trim()) { window.__adminSecret = s.trim(); return api(path, body); }
       }
       throw new Error('unauthorized');
     }
