@@ -782,12 +782,27 @@
 
   /* ── API helper ─────────────────────────────────────────────────────── */
   async function api(path, body) {
+    const idata = getInitData();
+    // ADMIN_ID ni tg user dan olamiz yoki fallback
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    const headers = {'Content-Type': 'application/json'};
+    // Agar initData bo'sh bo'lsa (desktop) — secret header yuboramiz
+    if (!idata && window.__adminSecret) {
+      headers['X-Admin-Secret'] = window.__adminSecret;
+    }
     const res = await fetch(path, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ initData: getInitData(), ...body })
+      headers,
+      body: JSON.stringify({ initData: idata, ...body })
     });
-    if (res.status === 403 || res.status === 401) throw new Error('unauthorized');
+    if (res.status === 403 || res.status === 401) {
+      // initData ishlamasa secret so'raymiz
+      if (!window.__adminSecret) {
+        const s = prompt('Admin ID kiriting (tekshiruv uchun):');
+        if (s) { window.__adminSecret = s; return api(path, body); }
+      }
+      throw new Error('unauthorized');
+    }
     return res.json();
   }
 
