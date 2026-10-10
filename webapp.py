@@ -28,6 +28,9 @@ _log.getLogger("misumi-bot").info(f"[STARTUP] ADMIN_ID={ADMIN_ID!r} (len={len(AD
 
 app = Flask(__name__)
 
+import web_api  # website API (/api/web/*)
+app.register_blueprint(web_api.bp)
+
 
 def verify_init_data(init_data: str) -> dict | None:
     """Validate Telegram WebApp initData. Returns the parsed data dict
