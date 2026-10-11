@@ -39,6 +39,13 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 _attempts: dict = defaultdict(list)
 
 
+@bp.errorhandler(Exception)
+def _err(e):
+    import logging
+    logging.getLogger("web_api").exception("web_api error")
+    return jsonify({"error": "Serverda xatolik: " + type(e).__name__}), 500
+
+
 @bp.after_request
 def _cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = _ORIGIN
