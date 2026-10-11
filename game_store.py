@@ -2,19 +2,37 @@
 Misumi AI — duel game data store.
 
 Tracks per-user win/loss/draw stats for the dice-emoji duel game
-(/duel). Same lightweight JSON+lock pattern as admin_store.py, stored
-alongside it on the same persistent disk.
+(/duel). Ma'lumot Postgres'da (db.py); Render diski vaqtinchalik, shuning
+uchun fayl ishlatilmaydi. Eski _game_data.json bo'lsa o'zi ko'chiriladi.
 """
-import json
+import functools
 import os
 from pathlib import Path
-from threading import Lock
+from threading import RLock
+
+import db
 
 STORE_DIR = Path(os.environ.get("MEMORY_DIR", "memory"))
 STORE_DIR.mkdir(parents=True, exist_ok=True)
-STORE_FILE = STORE_DIR / "_game_data.json"
+LEGACY_FILE = STORE_DIR / "_game_data.json"
+_STORE, _KEY = "gamestore", "main"
 
-_lock = Lock()
+_lock = RLock()
+
+
+def _safe(default):
+    """Qulf ostida ishlaydi; baza xatosida o'yin to'xtamaydi (default qaytadi)."""
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*a, **k):
+            with _lock:
+                try:
+                    return fn(*a, **k)
+                except Exception as e:
+                    print(f"[GameStore] {fn.__name__} xato: {e}")
+                    return default() if callable(default) else default
+        return wrapper
+    return deco
 
 
 def _empty() -> dict:
@@ -22,25 +40,15 @@ def _empty() -> dict:
 
 
 def _load() -> dict:
-    if not STORE_FILE.exists():
-        return _empty()
-    try:
-        data = json.loads(STORE_FILE.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return _empty()
-        base = _empty()
+    data = db.load_migrating(_STORE, _KEY, LEGACY_FILE, None)
+    base = _empty()
+    if isinstance(data, dict):
         base.update(data)
-        return base
-    except Exception as e:
-        print(f"[GameStore] Load error: {e}")
-        return _empty()
+    return base
 
 
 def _save(data: dict) -> None:
-    with _lock:
-        STORE_FILE.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+    db.save(_STORE, _KEY, data)
 
 
 def _entry(data: dict, user_id: str, name: str | None) -> dict:
@@ -52,6 +60,7 @@ def _entry(data: dict, user_id: str, name: str | None) -> dict:
     return e
 
 
+@_safe(None)
 def record_result(
     winner_id: str | None,
     winner_name: str | None,
@@ -76,6 +85,7 @@ def record_result(
     _save(data)
 
 
+@_safe(lambda: {"wins": 0, "losses": 0, "draws": 0})
 def get_stats(user_id) -> dict:
     data = _load()
     e = data.get("users", {}).get(str(user_id))
@@ -84,6 +94,7 @@ def get_stats(user_id) -> dict:
     return e
 
 
+@_safe(list)
 def get_leaderboard(limit: int = 10) -> list[dict]:
     data = _load()
     users = data.get("users", {})
