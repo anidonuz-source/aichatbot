@@ -299,20 +299,21 @@ def api_admin_maintenance():
 
 @app.route("/api/admin/daily-limit", methods=["POST"])
 def api_admin_daily_limit():
-    """Saytdagi bepul foydalanuvchilar uchun kunlik limitni o'qish yoki o'zgartirish.
-    Body: {initData, value?}. value berilsa saqlanadi (0 = cheksiz)."""
+    """Bepul foydalanuvchilar limitini o'qish/o'zgartirish. Body: {initData, value?, hourly?}.
+    value = kunlik, hourly = soatlik. 0 = o'chiq (ikkalasi 0 bo'lsa cheksiz)."""
     body = request.get_json(silent=True) or {}
     if not verify_admin(body.get("initData", "")):
         return jsonify({"error": "Unauthorized"}), 403
-    if "value" in body:
-        try:
-            raw = body.get("value")
-            if isinstance(raw, bool) or raw is None or str(raw).strip() == "":
-                raise ValueError
-            web_api.set_daily_limit(int(str(raw).strip()))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Limit 0 dan %d gacha butun son bo'lsin (0 = cheksiz)." % web_api.MAX_LIMIT}), 400
-    return jsonify({"daily_limit": web_api.get_daily_limit()})
+    for key, setter in (("value", web_api.set_daily_limit), ("hourly", web_api.set_hourly_limit)):
+        if key in body:
+            try:
+                raw = body.get(key)
+                if isinstance(raw, bool) or raw is None or str(raw).strip() == "":
+                    raise ValueError
+                setter(int(str(raw).strip()))
+            except (TypeError, ValueError):
+                return jsonify({"error": "Limit 0 dan %d gacha butun son bo'lsin." % web_api.MAX_LIMIT}), 400
+    return jsonify({"daily_limit": web_api.get_daily_limit(), "hourly_limit": web_api.get_hourly_limit()})
 
 
 @app.route("/api/admin/persona", methods=["POST"])
