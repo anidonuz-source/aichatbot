@@ -3,7 +3,7 @@ Misumi AI — sticker + GIF library.
 
 Stores Telegram sticker file_ids grouped by category (mood for normal
 chat, win/lose/draw for the duel game) plus a flat GIF pool. Same
-JSON+lock pattern as admin_store.py / game_store.py.
+pattern as admin_store.py / game_store.py; ma'lumot Postgres'da (Render diski vaqtinchalik).
 
 Two ways stickers/GIFs get in:
   1. Automatic — any sticker or GIF/animation any group member sends
@@ -19,17 +19,34 @@ Two ways stickers/GIFs get in:
 
 See CATEGORIES below for the full list of valid category names.
 """
-import json
+import functools
 import os
 import random
 from pathlib import Path
-from threading import Lock
+from threading import RLock
+
+import db
 
 STORE_DIR = Path(os.environ.get("MEMORY_DIR", "memory"))
 STORE_DIR.mkdir(parents=True, exist_ok=True)
-STORE_FILE = STORE_DIR / "_sticker_data.json"
+LEGACY_FILE = STORE_DIR / "_sticker_data.json"
+_STORE, _KEY = "stickerstore", "main"
 
-_lock = Lock()
+_lock = RLock()
+
+
+def _safe(default):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*a, **k):
+            with _lock:
+                try:
+                    return fn(*a, **k)
+                except Exception as e:
+                    print(f"[StickerStore] {fn.__name__} xato: {e}")
+                    return default() if callable(default) else default
+        return wrapper
+    return deco
 
 # Mood categories used in normal chat + result categories used by the
 # duel game. Kept in one list so /stiker validates against both uses.
@@ -71,31 +88,23 @@ def _empty() -> dict:
 
 
 def _load() -> dict:
-    if not STORE_FILE.exists():
-        return _empty()
-    try:
-        data = json.loads(STORE_FILE.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return _empty()
-        base = _empty()
+    data = db.load_migrating(_STORE, _KEY, LEGACY_FILE, None)
+    base = _empty()
+    if isinstance(data, dict):
         cats = base["categories"]
         cats.update(data.get("categories", {}))
         gifs = data.get("gifs", [])
         if not isinstance(gifs, list):
             gifs = []
         return {"categories": cats, "gifs": gifs}
-    except Exception as e:
-        print(f"[StickerStore] Load error: {e}")
-        return _empty()
+    return base
 
 
 def _save(data: dict) -> None:
-    with _lock:
-        STORE_FILE.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+    db.save(_STORE, _KEY, data)
 
 
+@_safe(False)
 def add_sticker(category: str, file_id: str) -> bool:
     """Add a sticker's file_id under a category. Returns False if the
     category name isn't recognized."""
@@ -110,6 +119,7 @@ def add_sticker(category: str, file_id: str) -> bool:
     return True
 
 
+@_safe(None)
 def get_random(category: str) -> str | None:
     """Return a random sticker file_id from a category, or None if that
     category is empty (or unrecognized) — caller should just skip
@@ -119,6 +129,7 @@ def get_random(category: str) -> str | None:
     return random.choice(ids) if ids else None
 
 
+@_safe(None)
 def add_gif(file_id: str) -> None:
     """Add a GIF's file_id to the flat pool (GIFs have no emoji of their
     own, so there's no per-mood sorting — just one shared pool)."""
@@ -129,12 +140,14 @@ def add_gif(file_id: str) -> None:
     _save(data)
 
 
+@_safe(None)
 def get_random_gif() -> str | None:
     data = _load()
     gifs = data["gifs"]
     return random.choice(gifs) if gifs else None
 
 
+@_safe(dict)
 def counts() -> dict[str, int]:
     data = _load()
     result = {c: len(ids) for c, ids in data["categories"].items()}
