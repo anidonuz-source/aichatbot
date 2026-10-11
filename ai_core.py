@@ -50,6 +50,7 @@ from google import genai
 from google.genai import types
 
 import admin_store
+import db
 import memory_manager as mem
 import sticker_store
 
@@ -528,6 +529,69 @@ SEN HAQINGDA:
 KOD YOZGANDA:
 - Har doim to'g'ri language tag bilan fenced code block ishlat (```python)
 """
+
+
+# ---------------------------------------------------------------------------
+# Tayyor rejimlar (sayt): bir bosishda AI roli o'zgaradi. Rejim matni tizim
+# ko'rsatmasining oxiriga qo'shiladi va ko'cha uslubini bosib o'tadi.
+# ---------------------------------------------------------------------------
+MODES = {
+    "default": {"label": "Oddiy", "icon": "✨", "desc": "Odatiy Misumi AI", "clause": ""},
+    "teacher": {
+        "label": "O'qituvchi", "icon": "🎓", "desc": "Mavzuni sodda, qadam-baqadam tushuntiradi",
+        "clause": "Sen sabrli va aniq o'qituvchisan. Mavzuni oddiy tilda, qadam-baqadam tushuntir, "
+                  "hayotiy misollar keltir. Murakkab so'zni ishlatsang, ma'nosini ayt. "
+                  "Oxirida tushunganini tekshirish uchun 1 ta qisqa savol ber. Masalani darhol yechib "
+                  "tashlama: avval yo'lini ko'rsat, keyin javobni ber.",
+    },
+    "coder": {
+        "label": "Dasturchi", "icon": "💻", "desc": "Kod yozadi, xatoni topadi, sodda tushuntiradi",
+        "clause": "Sen tajribali dasturchisan. Javobni aniq ber: avval qisqa xulosa, keyin ishlaydigan kod "
+                  "(to'g'ri til belgisi bilan kod bloki), keyin nima qilganingni qisqa tushuntir. "
+                  "Xato so'ralsa: sababi, tuzatilgan kod, qanday tekshirish. Taxmin qilsang, ochiq ayt.",
+    },
+    "translator": {
+        "label": "Tarjimon", "icon": "🌐", "desc": "O'zbek, rus, ingliz tillari o'rtasida tarjima",
+        "clause": "Sen professional tarjimonsan. Foydalanuvchi matn yuborsa, uni tarjima qil: o'zbekcha bo'lsa "
+                  "inglizchaga, boshqa tilda bo'lsa o'zbekchaga (boshqa til so'ralsa, o'sha tilga). "
+                  "Faqat tarjimani yoz, ortiqcha izoh qo'shma. Ma'no ikki xil bo'lsa, qisqa izoh ber. "
+                  "Rasmiy yoki so'zlashuv uslubini matnga qarab tanla.",
+    },
+    "ielts": {
+        "label": "IELTS ustoz", "icon": "📝", "desc": "Speaking, Writing va grammatika mashqlari",
+        "clause": "Sen IELTS ustozisan. Foydalanuvchi bilan ingliz tilida mashq qil, tushuntirishni o'zbekcha ber. "
+                  "Writing yuborsa: taxminiy band baho (Task Response, Coherence, Lexical Resource, Grammar), "
+                  "xatolar ro'yxati va yaxshilangan variant. Speaking so'ralsa: bitta savol ber, javobini baholab, "
+                  "keyingisini so'ra. Baho taxminiy ekanini ayt.",
+    },
+    "writer": {
+        "label": "Yozuvchi", "icon": "✍️", "desc": "Post, xat, maqola va matnlarni chiroyli yozadi",
+        "clause": "Sen tajribali muharrir va kopiraytersan. Matnni ravon, jonli o'zbek tilida yoz. "
+                  "Foydalanuvchining maqsadi va auditoriyasiga moslab uslubni tanla. Tayyor matnni ber, "
+                  "oxirida 1-2 qisqa variant yoki yaxshilash takliflarini ayt.",
+    },
+    "business": {
+        "label": "Biznes maslahatchi", "icon": "📈", "desc": "G'oya, reja, narx va marketing bo'yicha maslahat",
+        "clause": "Sen amaliy biznes maslahatchisan. O'zbekiston bozori sharoitini hisobga ol. Javobni aniq "
+                  "qadamlar, raqamli taxminlar va xavflar bilan ber. Kafolatli daromad va'da qilma. "
+                  "Kerak bo'lsa, qaror uchun zarur 1-2 ta savol ber.",
+    },
+}
+
+
+def public_modes() -> list:
+    return [{"id": k, "label": v["label"], "icon": v["icon"], "desc": v["desc"]} for k, v in MODES.items()]
+
+
+def build_mode_clause(mode: str | None) -> str:
+    info = MODES.get((mode or "default"))
+    if not info or not info["clause"]:
+        return ""
+    return (
+        "\n\n[REJIM: " + info["label"] + "] Bu rejim yuqoridagi barcha uslub ko'rsatmalaridan ustun. "
+        "Kesatish, ko'cha uslubi, sticker va reaksiya teglarini ishlatma. Hurmatli, aniq va foydali bo'l. "
+        + info["clause"] + "\n"
+    )
 
 
 def build_system_prompt(model: str, user_id: str | None = None) -> str:
@@ -1184,6 +1248,10 @@ def get_ai_reply(
     name: str | None = None,
     source: str = "telegram",
     model: str = DEFAULT_MODEL,
+    mode: str | None = None,
+    extra_system: str | None = None,
+    use_memory: bool = True,
+    history_override: list | None = None,
 ) -> str:
     """Send a message as the given user and return Misumi AI's reply text.
 
@@ -1212,8 +1280,8 @@ def get_ai_reply(
             return repeat_reply
         # repeat_reply == None means fresh message, continue normally
 
-    memory = mem.load_memory(user_id)
-    memory_block = mem.format_memory_for_prompt(memory)
+    memory = mem.load_memory(user_id) if use_memory else {}
+    memory_block = mem.format_memory_for_prompt(memory) if use_memory else ""
 
     # Yaqinlik darajasini yangilaymiz (har xabarda)
     if not image_bytes:
@@ -1234,8 +1302,12 @@ def get_ai_reply(
         build_system_prompt(model, user_id)
         + intimacy_clause
         + ("\n\n" + memory_block if memory_block else "")
+        + (("\n\n" + extra_system.strip()) if extra_system and extra_system.strip() else "")
+        + build_mode_clause(mode)
     )
-    history = _history.get(user_id, [])
+    # Sayt har bir suhbatning o'z tarixini yuboradi (history_override), shunda
+    # suhbatlar bir-biriga aralashmaydi va server qayta ishga tushsa ham yo'qolmaydi.
+    history = list(history_override) if history_override is not None else _history.get(user_id, [])
 
     raw_reply = None
     last_error: Exception | None = None
@@ -1271,7 +1343,7 @@ def get_ai_reply(
     clean_text, tags = _extract_memory_tags(raw_reply)
     for category, key, value in tags:
         value = value.strip()
-        if key and value:
+        if use_memory and key and value:
             mem.update_memory(user_id, {category: {key: {"value": value}}})
 
     clean_text, sticker_category = _extract_sticker_tag(clean_text)
@@ -1302,9 +1374,10 @@ def get_ai_reply(
         _last_sticker.pop(user_id, None)
         _last_reaction.pop(user_id, None)
 
-    history.append({"role": "user", "content": user_text or "[rasm]"})
-    history.append({"role": "assistant", "content": reply_text})
-    _history[user_id] = history[-MAX_HISTORY_TURNS:]
+    if history_override is None:
+        history.append({"role": "user", "content": user_text or "[rasm]"})
+        history.append({"role": "assistant", "content": reply_text})
+        _history[user_id] = history[-MAX_HISTORY_TURNS:]
 
     return reply_text
 
