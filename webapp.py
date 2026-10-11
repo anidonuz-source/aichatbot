@@ -260,6 +260,34 @@ def api_admin_toggle_premium():
     return jsonify({"user_id": target_id, "premium": premium})
 
 
+@app.route("/api/admin/set-premium", methods=["POST"])
+def api_admin_set_premium():
+    """Premium berish (muddat bilan) yoki bekor qilish.
+    Body: {initData, user_id, days?, revoke?}. days yo'q yoki 0 = cheksiz."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    target_id = str(body.get("user_id", "")).strip()
+    if not target_id:
+        return jsonify({"error": "user_id required"}), 400
+    if body.get("revoke"):
+        admin_store.revoke_premium(target_id)
+        return jsonify({"user_id": target_id, "premium": False, "premium_until": None})
+    raw = body.get("days", 0)
+    try:
+        if isinstance(raw, bool) or raw in (None, ""):
+            raw = 0
+        if isinstance(raw, float) and not raw.is_integer():
+            raise ValueError
+        days = int(raw)
+        if days < 0 or days > 3650:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "days 0 dan 3650 gacha butun son bo'lsin (0 = cheksiz)."}), 400
+    until = admin_store.grant_premium(target_id, days or None)
+    return jsonify({"user_id": target_id, "premium": True, "premium_until": until})
+
+
 @app.route("/api/admin/maintenance", methods=["POST"])
 def api_admin_maintenance():
     body = request.get_json(silent=True) or {}
@@ -267,6 +295,24 @@ def api_admin_maintenance():
         return jsonify({"error": "Unauthorized"}), 403
     value = admin_store.set_maintenance(bool(body.get("value")))
     return jsonify({"maintenance": value})
+
+
+@app.route("/api/admin/daily-limit", methods=["POST"])
+def api_admin_daily_limit():
+    """Saytdagi bepul foydalanuvchilar uchun kunlik limitni o'qish yoki o'zgartirish.
+    Body: {initData, value?}. value berilsa saqlanadi (0 = cheksiz)."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    if "value" in body:
+        try:
+            raw = body.get("value")
+            if isinstance(raw, bool) or raw is None or str(raw).strip() == "":
+                raise ValueError
+            web_api.set_daily_limit(int(str(raw).strip()))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Limit 0 dan %d gacha butun son bo'lsin (0 = cheksiz)." % web_api.MAX_LIMIT}), 400
+    return jsonify({"daily_limit": web_api.get_daily_limit()})
 
 
 @app.route("/api/admin/persona", methods=["POST"])
