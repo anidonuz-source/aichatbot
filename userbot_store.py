@@ -8,39 +8,49 @@ settings (auto-reply when offline, auto-bio) and lightweight stats.
 Session strings grant full access to a Telegram account, so they are
 never stored in plaintext. Encryption uses Fernet (AES128-CBC + HMAC)
 with a key read from the USERBOT_ENC_KEY env var. If that var is not
-set, a key is generated and persisted next to the store file so local
-testing still works — but on a real deployment you MUST set
-USERBOT_ENC_KEY yourself (see .env.example) or sessions won't survive
-a redeploy without it.
+set, a key is generated and saved in Postgres (db.py), so sessions survive
+redeploys. Xavfsizroq: USERBOT_ENC_KEY ni Render env'ga o'zingiz qo'ying,
+shunda kalit va shifrlangan sessiya turli joyda turadi.
+
+Ma'lumot Postgres'da (Render diski vaqtinchalik). Eski _userbot_data.json va
+_userbot.key fayllari bo'lsa, birinchi ishga tushishda bazaga ko'chiriladi.
 """
-import json
+import functools
 import os
 from datetime import datetime
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 
 from cryptography.fernet import Fernet
 
+import db
+
 STORE_DIR = Path(os.environ.get("MEMORY_DIR", "memory"))
 STORE_DIR.mkdir(parents=True, exist_ok=True)
-STORE_FILE = STORE_DIR / "_userbot_data.json"
+LEGACY_FILE = STORE_DIR / "_userbot_data.json"
 KEY_FILE = STORE_DIR / "_userbot.key"
+_STORE, _KEY = "userbotstore", "main"
 
-_lock = Lock()
+_lock = RLock()
 
 
 def _load_key() -> bytes:
     env_key = os.environ.get("USERBOT_ENC_KEY", "").strip()
     if env_key:
         return env_key.encode("utf-8")
+    # 1) bazadagi kalit
+    stored = db.load("userbotstore", "enckey", None)
+    if isinstance(stored, str) and stored.strip():
+        return stored.strip().encode("utf-8")
+    # 2) eski fayldagi kalit (bazaga ko'chiramiz, aks holda eski sessiyalar ochilmay qoladi)
     if KEY_FILE.exists():
-        return KEY_FILE.read_text(encoding="utf-8").strip().encode("utf-8")
-    key = Fernet.generate_key()
-    KEY_FILE.write_text(key.decode("utf-8"), encoding="utf-8")
+        key = KEY_FILE.read_text(encoding="utf-8").strip().encode("utf-8")
+    else:
+        key = Fernet.generate_key()
+    db.save("userbotstore", "enckey", key.decode("utf-8"))
     print(
-        "[UserbotStore] WARNING: USERBOT_ENC_KEY not set — generated a local "
-        f"key at {KEY_FILE}. Set USERBOT_ENC_KEY in production so sessions "
-        "survive redeploys."
+        "[UserbotStore] USERBOT_ENC_KEY berilmagan: kalit bazada saqlandi. "
+        "Xavfsizroq bo'lishi uchun uni Render env'ga qo'ying."
     )
     return key
 
@@ -61,23 +71,14 @@ def _empty() -> dict:
 
 
 def _load() -> dict:
-    if not STORE_FILE.exists():
+    data = db.load_migrating(_STORE, _KEY, LEGACY_FILE, None)
+    if not isinstance(data, dict) or "accounts" not in data:
         return _empty()
-    try:
-        data = json.loads(STORE_FILE.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or "accounts" not in data:
-            return _empty()
-        return data
-    except Exception as e:
-        print(f"[UserbotStore] Load error: {e}")
-        return _empty()
+    return data
 
 
 def _save(data: dict) -> None:
-    with _lock:
-        STORE_FILE.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+    db.save(_STORE, _KEY, data)
 
 
 def _default_account(phone: str) -> dict:
@@ -290,3 +291,24 @@ def set_last_digest_at(owner_id, iso_timestamp: str) -> None:
     account["last_digest_at"] = iso_timestamp
     data["accounts"][owner_id] = account
     _save(data)
+
+
+# Har bir ommaviy funksiya qulf ostida ishlaydi (o'qish-o'zgartirish-yozish poygasiz).
+def _lock_public() -> None:
+    g = globals()
+    for name, fn in list(g.items()):
+        if name.startswith("_") or not callable(fn) or getattr(fn, "__module__", None) != __name__:
+            continue
+        if isinstance(fn, type):
+            continue
+
+        def make(f):
+            @functools.wraps(f)
+            def wrapper(*a, **k):
+                with _lock:
+                    return f(*a, **k)
+            return wrapper
+        g[name] = make(fn)
+
+
+_lock_public()
