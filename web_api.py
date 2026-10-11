@@ -123,9 +123,13 @@ def _public(u: dict) -> dict:
 # ---------------------------------------------------------------------------
 TZ_TASHKENT = timezone(timedelta(hours=5))
 try:
-    _ENV_LIMIT = max(0, int(os.environ.get("FREE_DAILY_LIMIT", "10")))
+    _ENV_LIMIT = max(0, int(os.environ.get("FREE_DAILY_LIMIT", "100")))
 except ValueError:
-    _ENV_LIMIT = 10
+    _ENV_LIMIT = 100
+try:
+    _ENV_HOURLY = max(0, int(os.environ.get("FREE_HOURLY_LIMIT", "20")))
+except ValueError:
+    _ENV_HOURLY = 20
 MAX_LIMIT = 100000
 _usage_lock = threading.Lock()
 
@@ -154,57 +158,111 @@ def set_daily_limit(n) -> int:
     return n
 
 
+def get_hourly_limit() -> int:
+    """Bepul foydalanuvchi uchun soatlik limit. 0 = o'chiq. Admin qiymati (bazada) env'dan ustun."""
+    try:
+        v = db.load("webcfg", "hourly_limit", None)
+    except Exception:
+        v = None
+    if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_LIMIT:
+        return v
+    return _ENV_HOURLY
+
+
+def set_hourly_limit(n) -> int:
+    n = int(n)
+    if n < 0 or n > MAX_LIMIT:
+        raise ValueError("Limit 0 dan %d gacha bo'lsin." % MAX_LIMIT)
+    db.save("webcfg", "hourly_limit", n)
+    return n
+
+
+def _seconds_to_next_hour() -> int:
+    now = _now_tk()
+    nxt = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return max(1, math.ceil((nxt - now).total_seconds()))
+
+
 def _seconds_to_reset() -> int:
     now = _now_tk()
     nxt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, math.ceil((nxt - now).total_seconds()))
 
 
-def _used_today(uid: str) -> int:
+def _counts(uid: str):
+    """(bugun ishlatilgan, shu soatda ishlatilgan)"""
     rec = db.load("webusage", uid, None)
-    if isinstance(rec, dict) and rec.get("d") == _now_tk().strftime("%Y-%m-%d"):
-        try:
-            return max(0, int(rec.get("n", 0)))
-        except (TypeError, ValueError):
-            return 0
-    return 0
+    if not isinstance(rec, dict):
+        return 0, 0
+    now = _now_tk()
+    n = hn = 0
+    try:
+        if rec.get("d") == now.strftime("%Y-%m-%d"):
+            n = max(0, int(rec.get("n", 0)))
+            if rec.get("h") == now.strftime("%Y-%m-%d %H"):
+                hn = max(0, int(rec.get("hn", 0)))
+    except (TypeError, ValueError):
+        return 0, 0
+    return n, hn
+
+
+def _usage_dict(n: int, hn: int, limit: int, hlimit: int, scope: str = "") -> dict:
+    d = {
+        "unlimited": False, "limit": limit, "used": n,
+        "remaining": max(0, limit - n) if limit else None,
+        "hlimit": hlimit, "hused": hn,
+        "hremaining": max(0, hlimit - hn) if hlimit else None,
+        "resets_in": _seconds_to_reset(), "hresets_in": _seconds_to_next_hour(),
+    }
+    if scope:
+        d["scope"] = scope
+        if scope == "hour":
+            d["resets_in"] = d["hresets_in"]
+    return d
+
+
+def _is_unlimited(premium: bool, limit: int, hlimit: int) -> bool:
+    return bool(premium) or (limit == 0 and hlimit == 0)
 
 
 def _usage_info(uid: str, premium: bool) -> dict:
-    """Saytga ko'rsatiladigan holat. Premium va limit=0 bo'lsa cheksiz."""
-    limit = get_daily_limit()
-    if premium or limit == 0:
-        return {"unlimited": True, "limit": 0, "used": 0, "remaining": None, "resets_in": _seconds_to_reset()}
-    used = _used_today(uid)
-    return {"unlimited": False, "limit": limit, "used": used, "remaining": max(0, limit - used), "resets_in": _seconds_to_reset()}
+    """Saytga ko'rsatiladigan holat. Premium (yoki ikkala limit 0) bo'lsa cheksiz."""
+    limit, hlimit = get_daily_limit(), get_hourly_limit()
+    if _is_unlimited(premium, limit, hlimit):
+        return {"unlimited": True, "limit": 0, "used": 0, "remaining": None, "hlimit": 0, "hused": 0, "hremaining": None,
+                "resets_in": _seconds_to_reset(), "hresets_in": _seconds_to_next_hour()}
+    n, hn = _counts(uid)
+    return _usage_dict(n, hn, limit, hlimit)
 
 
 def _take_quota(uid: str, premium: bool):
-    """So'rovni hisoblaydi. (ruxsat, usage) qaytaradi. Atomik: lock ichida
-    o'qiydi va yozadi, shuning uchun bir vaqtdagi so'rovlar limitdan oshib ketmaydi."""
-    limit = get_daily_limit()
-    if premium or limit == 0:
+    """So'rovni hisoblaydi. (ruxsat, usage) qaytaradi. Atomik (lock ichida), shuning
+    uchun bir vaqtdagi so'rovlar limitdan oshib ketmaydi. Ham kunlik, ham soatlik tekshiriladi."""
+    limit, hlimit = get_daily_limit(), get_hourly_limit()
+    if _is_unlimited(premium, limit, hlimit):
         return True, _usage_info(uid, premium)
-    day = _now_tk().strftime("%Y-%m-%d")
+    now = _now_tk()
     with _usage_lock:
-        rec = db.load("webusage", uid, None)
-        n = int(rec.get("n", 0)) if isinstance(rec, dict) and rec.get("d") == day else 0
-        if n >= limit:
-            return False, {"unlimited": False, "limit": limit, "used": n, "remaining": 0, "resets_in": _seconds_to_reset()}
-        db.save("webusage", uid, {"d": day, "n": n + 1})
-    return True, {"unlimited": False, "limit": limit, "used": n + 1, "remaining": limit - n - 1, "resets_in": _seconds_to_reset()}
+        n, hn = _counts(uid)
+        if limit and n >= limit:
+            return False, _usage_dict(n, hn, limit, hlimit, "day")
+        if hlimit and hn >= hlimit:
+            return False, _usage_dict(n, hn, limit, hlimit, "hour")
+        db.save("webusage", uid, {"d": now.strftime("%Y-%m-%d"), "n": n + 1, "h": now.strftime("%Y-%m-%d %H"), "hn": hn + 1})
+    return True, _usage_dict(n + 1, hn + 1, limit, hlimit)
 
 
 def _refund_quota(uid: str, premium: bool) -> None:
     """AI xato bergan bo'lsa, foydalanuvchi so'rovini qaytarib beradi."""
-    if premium or get_daily_limit() == 0:
+    limit, hlimit = get_daily_limit(), get_hourly_limit()
+    if _is_unlimited(premium, limit, hlimit):
         return
-    day = _now_tk().strftime("%Y-%m-%d")
+    now = _now_tk()
     try:
         with _usage_lock:
-            rec = db.load("webusage", uid, None)
-            if isinstance(rec, dict) and rec.get("d") == day and int(rec.get("n", 0)) > 0:
-                db.save("webusage", uid, {"d": day, "n": int(rec["n"]) - 1})
+            n, hn = _counts(uid)
+            if n > 0:
+                db.save("webusage", uid, {"d": now.strftime("%Y-%m-%d"), "n": n - 1, "h": now.strftime("%Y-%m-%d %H"), "hn": max(0, hn - 1)})
     except Exception:
         pass
 
@@ -586,11 +644,11 @@ def chat():
     prem = bool(admin_store.is_premium(uid))
     ok, usage = _take_quota(uid, prem)
     if not ok:
-        return jsonify({
-            "error": "Bugungi bepul so'rovlar tugadi (%d ta). Premium bilan cheksiz yozing yoki ertaga qayta urining." % usage["limit"],
-            "limit_reached": True,
-            "usage": usage,
-        }), 429
+        if usage.get("scope") == "hour":
+            msg = "Soatlik limit tugadi (%d ta). Keyingi soatda davom eting yoki Premium bilan cheksiz yozing." % usage["hlimit"]
+        else:
+            msg = "Bugungi bepul so'rovlar tugadi (%d ta). Premium bilan cheksiz yozing yoki ertaga qayta urining." % usage["limit"]
+        return jsonify({"error": msg, "limit_reached": True, "usage": usage}), 429
     prof = _profile(uid)
     history = _clean_history(b.get("history")) if isinstance(b.get("history"), list) else None
     if b.get("regenerate") and history is None:
