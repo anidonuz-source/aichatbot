@@ -610,6 +610,22 @@
         </div>
       </div>
 
+      <!-- Kunlik limit (sayt, bepul foydalanuvchilar) -->
+      <div class="panel">
+        <div class="panel-row">
+          <div class="txt">
+            <div class="txt-inner">
+              <div class="t">Kunlik limit (sayt)</div>
+              <div class="d">Bepul foydalanuvchi kuniga nechta so'rov yubora oladi. 0 = cheksiz. Premium doim cheksiz. Kun Toshkent vaqti bilan.</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="number" id="dailyLimitInput" min="0" max="100000" step="1" inputmode="numeric" style="width:84px; padding:8px 10px; border-radius:10px; border:1px solid var(--hairline); background:transparent; color:var(--paper); font-size:14px;">
+            <button class="action-btn" id="dailyLimitSave" type="button">Saqlash</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Persona -->
       <div class="panel" id="personaPanel">
         <div class="panel-row" style="align-items:flex-start;gap:12px">
@@ -1013,10 +1029,9 @@
     btn.classList.add('loading');
     try {
       if (action === 'premium') {
-        const r = await api('/api/admin/toggle-premium', { user_id: userId });
-        const u = allUsers.find(x => x.id === userId);
-        if (u) u.premium = r.premium;
-        showToast(r.premium ? "Premium berildi ⭐" : "Premium bekor qilindi");
+        btn.classList.remove('loading');
+        pickPremium(userId);
+        return;
       } else if (action === 'block') {
         const r = await api('/api/admin/toggle-block', { user_id: userId });
         const u = allUsers.find(x => x.id === userId);
@@ -1046,7 +1061,7 @@
       <div class="modal-row"><span class="k">Manba</span><span class="v">${u.source === 'miniapp' ? '📱 Mini App' : '🤖 Telegram Bot'}</span></div>
       <div class="modal-row"><span class="k">Birinchi ko'rilgan</span><span class="v">${u.first_seen || '—'}</span></div>
       <div class="modal-row"><span class="k">So'nggi faollik</span><span class="v">${relativeTime(u.last_seen)}</span></div>
-      <div class="modal-row"><span class="k">Premium</span><span class="v">${u.premium ? '⭐ Ha' : '—'}</span></div>
+      <div class="modal-row"><span class="k">Premium</span><span class="v">${u.premium ? '⭐ Ha' + (u.premium_until ? ' · ' + fmtUntil(u.premium_until) + ' gacha' : ' · cheksiz') : '—'}</span></div>
       <div class="modal-row"><span class="k">Holati</span><span class="v">${u.blocked ? '🚫 Bloklangan' : '✅ Faol'}</span></div>
     `;
     // Tugmalarni addEventListener bilan qo'shamiz — innerHTML onclick ishlamaydi
@@ -1087,17 +1102,73 @@
     if (e.target === document.getElementById('userModal')) closeUserModal();
   }
 
-  async function modalTogglePremium() {
-    if (!modalUserId) return;
-    try {
-      const r = await api('/api/admin/toggle-premium', { user_id: modalUserId });
-      const u = allUsers.find(x => x.id === modalUserId);
-      if (u) u.premium = r.premium;
-      showToast(r.premium ? "Premium berildi ⭐" : "Premium bekor qilindi");
-      openUserModal(modalUserId);
-      applyFilter();
-    } catch { showToast("Xatolik", true); }
+  function fmtUntil(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + d.getFullYear();
   }
+  // Premium muddat tanlash oynasi
+  function pickPremium(userId) {
+    const u = allUsers.find(x => x.id === userId);
+    const old = document.getElementById('premPicker'); if (old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'premPicker';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'width:100%;max-width:480px;background:var(--bg-card,#1b1b1b);border-radius:18px 18px 0 0;padding:18px;display:flex;flex-direction:column;gap:8px';
+    const until = u && u.premium_until ? ' · ' + fmtUntil(u.premium_until) + ' gacha' : ' · cheksiz';
+    const t = document.createElement('div');
+    t.style.cssText = 'font-weight:600;margin-bottom:4px';
+    t.textContent = '⭐ Premium muddati' + (u && u.premium ? ' (faol' + until + ')' : '');
+    box.appendChild(t);
+    const close = () => ov.remove();
+    const run = async (payload, msg) => {
+      close();
+      try {
+        const r = await api('/api/admin/set-premium', Object.assign({ user_id: userId }, payload));
+        if (u) { u.premium = r.premium; u.premium_until = r.premium_until || null; }
+        showToast(msg);
+        const stats = await api('/api/admin/stats', {});
+        renderStats(stats);
+        applyFilter();
+        if (modalUserId === userId) openUserModal(userId);
+      } catch { showToast('Xatolik', true); }
+    };
+    [[7,'7 kun'],[30,'30 kun'],[90,'90 kun'],[365,'1 yil'],[0,'Cheksiz']].forEach(([d,l]) => {
+      const b = document.createElement('button');
+      b.className = 'action-btn premium-on';
+      b.textContent = l;
+      b.addEventListener('click', () => run({ days: d }, 'Premium berildi ⭐ (' + l + ')'));
+      box.appendChild(b);
+    });
+    const cu = document.createElement('input');
+    cu.type = 'number'; cu.min = 1; cu.max = 3650; cu.placeholder = 'Boshqa kun soni';
+    cu.style.cssText = 'padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:transparent;color:inherit';
+    box.appendChild(cu);
+    const ok = document.createElement('button');
+    ok.className = 'action-btn'; ok.textContent = 'Berish';
+    ok.addEventListener('click', () => {
+      const d = parseInt(cu.value, 10);
+      if (!(d >= 1 && d <= 3650)) { showToast('1–3650 kun kiriting', true); return; }
+      run({ days: d }, 'Premium berildi ⭐ (' + d + ' kun)');
+    });
+    box.appendChild(ok);
+    if (u && u.premium) {
+      const rv = document.createElement('button');
+      rv.className = 'action-btn'; rv.style.color = '#e05a5a'; rv.textContent = 'Premiumni bekor qilish';
+      rv.addEventListener('click', () => run({ revoke: true }, 'Premium bekor qilindi'));
+      box.appendChild(rv);
+    }
+    const cn = document.createElement('button');
+    cn.className = 'action-btn'; cn.textContent = 'Yopish';
+    cn.addEventListener('click', close);
+    box.appendChild(cn);
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+
+  function modalTogglePremium() { if (modalUserId) pickPremium(modalUserId); }
 
   async function modalToggleBlock() {
     if (!modalUserId) return;
@@ -1142,6 +1213,24 @@
       showToast(value === 'yaxshi' ? "Yaxshi AI yoqildi 😊" : "Hard AI yoqildi 😤");
     } catch { showToast("Xatolik", true); }
   }
+
+  async function loadDailyLimit() {
+    try {
+      const r = await api('/api/admin/daily-limit', {});
+      if (typeof r.daily_limit === 'number') document.getElementById('dailyLimitInput').value = r.daily_limit;
+    } catch (_) {}
+  }
+  document.getElementById('dailyLimitSave').addEventListener('click', async () => {
+    const inp = document.getElementById('dailyLimitInput');
+    const v = inp.value.trim();
+    if (!/^\d+$/.test(v)) { showToast("Limit butun son bo'lsin (0 = cheksiz)", true); return; }
+    try {
+      const r = await api('/api/admin/daily-limit', { value: parseInt(v, 10) });
+      if (r.error || typeof r.daily_limit !== 'number') { showToast(r.error || "Saqlab bo'lmadi", true); return; }
+      inp.value = r.daily_limit;
+      showToast(r.daily_limit === 0 ? "Limit o'chirildi (cheksiz)" : "Kunlik limit: " + r.daily_limit + " ta ✓");
+    } catch (_) { showToast("Saqlab bo'lmadi", true); }
+  });
 
   async function loadPersona() {
     try {
@@ -1378,6 +1467,7 @@
       loadingEl.style.display = 'none';
       dashEl.style.display = 'block';
       loadPersona();
+      loadDailyLimit();
       updateUBroadcastCount();
       if (isRefresh) showToast("Yangilandi ✓");
     } catch {
