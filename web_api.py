@@ -354,7 +354,7 @@ STYLES = {
 }
 MEM_CATS = {"identity", "preferences", "projects", "relationships", "wishes", "notes"}
 KEY_RE = re.compile(r"^[a-zA-Z0-9_]{1,80}$")
-PROFILE_DEFAULT = {"about": "", "style": "", "custom": "", "color": "", "memory": True}
+PROFILE_DEFAULT = {"about": "", "style": "", "custom": "", "color": "", "avatar": "", "memory": True}
 
 
 def _profile(uid: str) -> dict:
@@ -404,6 +404,11 @@ def profile():
     if "color" in b:
         c = str(b.get("color") or "")
         prof["color"] = c if re.match(r"^#[0-9a-fA-F]{6}$", c) else ""
+    if "avatar" in b:
+        av = str(b.get("avatar") or "")
+        if av and not (re.match(r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$", av) and len(av) <= 120_000):
+            return jsonify({"error": "Rasm noto'g'ri yoki juda katta."}), 400
+        prof["avatar"] = av
     if "memory" in b:
         prof["memory"] = bool(b.get("memory"))
     db.save("webprofile", u["id"], prof)
