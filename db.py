@@ -142,3 +142,23 @@ def exists(store: str, key: str) -> bool:
             return cur.fetchone() is not None
     finally:
         pool.putconn(conn)
+
+
+def load_migrating(store: str, key: str, legacy_file, default):
+    """db'dan o'qiydi. Bazada yo'q bo'lsa va eski JSON fayl (legacy_file) bor bo'lsa,
+    uni bazaga ko'chiradi (bir marta). Baza o'qilmasa xato ko'taradi, shuning uchun
+    bo'sh ma'lumot bilan ustiga yozib yuborilmaydi."""
+    import json
+    value = load(store, key, None)
+    if value is not None:
+        return value
+    try:
+        if legacy_file is not None and legacy_file.exists():
+            legacy = json.loads(legacy_file.read_text(encoding="utf-8"))
+            if isinstance(legacy, dict):
+                save(store, key, legacy)
+                print(f"[db] {store}/{key}: eski fayldan bazaga ko'chirildi")
+                return legacy
+    except Exception as e:
+        print(f"[db] {store}/{key}: eski fayl ko'chirilmadi: {e}")
+    return default
