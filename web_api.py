@@ -566,8 +566,10 @@ def chat():
         return jsonify({"error": "Unauthorized"}), 401
     if (request.content_length or 0) > MAX_BODY:
         return jsonify({"error": "So'rov juda katta. Kichikroq rasm yoki fayl yuboring."}), 413
-    b = request.get_json(silent=True) or {}
-    message = (b.get("message") or "").strip()
+    b = request.get_json(silent=True)
+    if not isinstance(b, dict):
+        return jsonify({"error": "So'rov noto'g'ri."}), 400
+    message = str(b.get("message") or "").strip()
     img_bytes, img_mime = _read_image(b.get("image")) if b.get("image") else (None, None)
     if b.get("image") and not img_bytes:
         return jsonify({"error": "Rasm formati yaroqsiz yoki juda katta (6 MB gacha, JPG/PNG/WebP)."}), 400
@@ -577,10 +579,10 @@ def chat():
     uid = u["id"]
     if admin_store.is_blocked(uid):
         return jsonify({"error": "Hisobingiz bloklangan."}), 403
-    model = ai_core.resolve_model(uid, b.get("model"))
+    model = ai_core.resolve_model(uid, b.get("model") if isinstance(b.get("model"), str) else None)
     if admin_store.is_maintenance():
         return jsonify({"reply": f"🛠 {ai_core.BOT_NAME} hozir texnik ishlar tufayli vaqtincha ishlamayapti.", "model": model})
-    mode = b.get("mode") if b.get("mode") in ai_core.MODES else None
+    mode = b.get("mode") if isinstance(b.get("mode"), str) and b.get("mode") in ai_core.MODES else None
     prem = bool(admin_store.is_premium(uid))
     ok, usage = _take_quota(uid, prem)
     if not ok:
@@ -607,7 +609,8 @@ def chat():
     except Exception as e:
         _refund_quota(uid, prem)
         return jsonify({"error": str(e)}), 500
-    if reply in (ai_core.BUSY_REPLY, ai_core.FAIL_REPLY):
+    # getattr: ai_core.py eski nusxada qolgan bo'lsa ham chat qulamasin
+    if reply in (getattr(ai_core, "BUSY_REPLY", None), getattr(ai_core, "FAIL_REPLY", None)):
         # Hamma AI provayderlar ishlamadi: bu so'rov foydalanuvchi hisobiga yozilmasin.
         _refund_quota(uid, prem)
         usage = _usage_info(uid, prem)
