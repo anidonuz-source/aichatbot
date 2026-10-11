@@ -123,14 +123,22 @@ def _public(u: dict) -> dict:
 # ---------------------------------------------------------------------------
 TZ_TASHKENT = timezone(timedelta(hours=5))
 try:
-    _ENV_LIMIT = max(0, int(os.environ.get("FREE_DAILY_LIMIT", "100")))
+    _ENV_LIMIT = max(0, int(os.environ.get("FREE_DAILY_LIMIT", "250")))
 except ValueError:
-    _ENV_LIMIT = 100
+    _ENV_LIMIT = 250
 try:
-    _ENV_HOURLY = max(0, int(os.environ.get("FREE_HOURLY_LIMIT", "20")))
+    _ENV_HOURLY = max(0, int(os.environ.get("FREE_HOURLY_LIMIT", "100")))
 except ValueError:
-    _ENV_HOURLY = 20
+    _ENV_HOURLY = 100
 MAX_LIMIT = 100000
+LIMITS_V = 2  # eski saqlangan limitlar (10/20/100) e'tiborsiz; yangi default 250/100
+
+
+def _limits_ok() -> bool:
+    try:
+        return db.load("webcfg", "limits_v", None) == LIMITS_V
+    except Exception:
+        return False
 _usage_lock = threading.Lock()
 
 
@@ -142,7 +150,7 @@ def get_daily_limit() -> int:
     """Bepul foydalanuvchi uchun kunlik limit. 0 = cheksiz.
     Admin o'zgartirgan qiymat (bazada) env dagidan ustun turadi."""
     try:
-        v = db.load("webcfg", "daily_limit", None)
+        v = db.load("webcfg", "daily_limit", None) if _limits_ok() else None
     except Exception:
         v = None
     if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_LIMIT:
@@ -154,6 +162,9 @@ def set_daily_limit(n) -> int:
     n = int(n)
     if n < 0 or n > MAX_LIMIT:
         raise ValueError("Limit 0 dan %d gacha bo'lsin." % MAX_LIMIT)
+    cur = (get_daily_limit(), get_hourly_limit())
+    if not _limits_ok():
+        db.save("webcfg", "daily_limit", cur[0]); db.save("webcfg", "hourly_limit", cur[1]); db.save("webcfg", "limits_v", LIMITS_V)
     db.save("webcfg", "daily_limit", n)
     return n
 
@@ -161,7 +172,7 @@ def set_daily_limit(n) -> int:
 def get_hourly_limit() -> int:
     """Bepul foydalanuvchi uchun soatlik limit. 0 = o'chiq. Admin qiymati (bazada) env'dan ustun."""
     try:
-        v = db.load("webcfg", "hourly_limit", None)
+        v = db.load("webcfg", "hourly_limit", None) if _limits_ok() else None
     except Exception:
         v = None
     if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_LIMIT:
@@ -173,6 +184,9 @@ def set_hourly_limit(n) -> int:
     n = int(n)
     if n < 0 or n > MAX_LIMIT:
         raise ValueError("Limit 0 dan %d gacha bo'lsin." % MAX_LIMIT)
+    cur = (get_daily_limit(), get_hourly_limit())
+    if not _limits_ok():
+        db.save("webcfg", "daily_limit", cur[0]); db.save("webcfg", "hourly_limit", cur[1]); db.save("webcfg", "limits_v", LIMITS_V)
     db.save("webcfg", "hourly_limit", n)
     return n
 
