@@ -687,3 +687,70 @@ def chat():
         _refund_quota(uid, prem)
         usage = _usage_info(uid, prem)
     return jsonify({"reply": reply, "model": model, "usage": usage})
+
+
+# ---------------- Parolni tiklash (email kod) ----------------
+# Render Environment: SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASS, SMTP_FROM (ixtiyoriy)
+import smtplib, secrets, threading
+from email.message import EmailMessage
+
+
+def _send_mail(to: str, subject: str, body: str) -> None:
+    host = os.environ.get("SMTP_HOST")
+    if not host:
+        raise RuntimeError("SMTP sozlanmagan")
+    m = EmailMessage()
+    m["From"] = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER")
+    m["To"], m["Subject"] = to, subject
+    m.set_content(body)
+    with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=15) as s:
+        s.starttls()
+        s.login(os.environ.get("SMTP_USER", ""), os.environ.get("SMTP_PASS", ""))
+        s.send_message(m)
+
+
+@bp.route("/forgot", methods=["POST"])
+def forgot():
+    b = request.get_json(silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    if _too_many("fg:" + _ip() + email, limit=3, window=900):
+        return jsonify({"error": "Juda ko'p urinish. Keyinroq qayta urinib ko'ring."}), 429
+    u = db.load("webuser", email, None) if EMAIL_RE.match(email) else None
+    if u and u.get("pw"):  # Google-only hisoblarda parol yo'q
+        code = "".join(secrets.choice("0123456789") for _ in range(6))
+        db.save("webreset", email, {"code": generate_password_hash(code), "exp": int(time.time()) + 900, "tries": 0})
+        threading.Thread(target=lambda: _safe_mail(email, code), daemon=True).start()
+    return jsonify({"ok": True})  # email bor-yo'qligini oshkor qilmaymiz
+
+
+def _safe_mail(email: str, code: str) -> None:
+    try:
+        _send_mail(email, "Misumi AI: parolni tiklash kodi",
+                   f"Kodingiz: {code}\nKod 15 daqiqa amal qiladi. Siz so'ramagan bo'lsangiz, xatni e'tiborsiz qoldiring.")
+    except Exception as ex:
+        print("mail xato:", ex)
+
+
+@bp.route("/reset", methods=["POST"])
+def reset_password():
+    b = request.get_json(silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    code, pw = (b.get("code") or "").strip(), b.get("password") or ""
+    if _too_many("rs:" + _ip() + email, limit=8, window=900):
+        return jsonify({"error": "Juda ko'p urinish."}), 429
+    if len(pw) < 6 or len(pw) > 200:
+        return jsonify({"error": "Parol kamida 6 belgi bo'lsin."}), 400
+    r = db.load("webreset", email, None)
+    if not r or r.get("exp", 0) < time.time() or r.get("tries", 0) >= 5:
+        return jsonify({"error": "Kod eskirgan. Qaytadan so'rang."}), 400
+    if not check_password_hash(r["code"], code):
+        r["tries"] = r.get("tries", 0) + 1
+        db.save("webreset", email, r)
+        return jsonify({"error": "Kod noto'g'ri."}), 400
+    u = db.load("webuser", email, None)
+    if not u:
+        return jsonify({"error": "Hisob topilmadi."}), 404
+    u["pw"] = generate_password_hash(pw)
+    db.save("webuser", email, u)
+    db.save("webreset", email, {"code": "", "exp": 0, "tries": 99})
+    return jsonify({"ok": True})
