@@ -10,16 +10,21 @@ Optional env vars:
               (falls back to a value derived from TELEGRAM_BOT_TOKEN)
   GOOGLE_CLIENT_ID  OAuth Web client ID for "Google bilan kirish" (optional)
   WEB_ORIGIN  allowed site origin, e.g. https://misumi.vercel.app (default: *)
+  FREE_DAILY_LIMIT  bepul foydalanuvchiga kuniga nechta so'rov (default 10, 0 = cheksiz).
+              Admin buni /api/admin/daily-limit orqali o'zgartira oladi (bazada saqlanadi).
 """
 import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import time
+import threading
 import uuid
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -113,6 +118,97 @@ def _public(u: dict) -> dict:
     return {"name": u["name"], "email": u["email"]}
 
 
+# ---------------------------------------------------------------------------
+# Kunlik limit (faqat serverda majburlanadi). Kun chegarasi: Toshkent, UTC+5.
+# ---------------------------------------------------------------------------
+TZ_TASHKENT = timezone(timedelta(hours=5))
+try:
+    _ENV_LIMIT = max(0, int(os.environ.get("FREE_DAILY_LIMIT", "10")))
+except ValueError:
+    _ENV_LIMIT = 10
+MAX_LIMIT = 100000
+_usage_lock = threading.Lock()
+
+
+def _now_tk() -> datetime:
+    return datetime.now(TZ_TASHKENT)
+
+
+def get_daily_limit() -> int:
+    """Bepul foydalanuvchi uchun kunlik limit. 0 = cheksiz.
+    Admin o'zgartirgan qiymat (bazada) env dagidan ustun turadi."""
+    try:
+        v = db.load("webcfg", "daily_limit", None)
+    except Exception:
+        v = None
+    if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_LIMIT:
+        return v
+    return _ENV_LIMIT
+
+
+def set_daily_limit(n) -> int:
+    n = int(n)
+    if n < 0 or n > MAX_LIMIT:
+        raise ValueError("Limit 0 dan %d gacha bo'lsin." % MAX_LIMIT)
+    db.save("webcfg", "daily_limit", n)
+    return n
+
+
+def _seconds_to_reset() -> int:
+    now = _now_tk()
+    nxt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, math.ceil((nxt - now).total_seconds()))
+
+
+def _used_today(uid: str) -> int:
+    rec = db.load("webusage", uid, None)
+    if isinstance(rec, dict) and rec.get("d") == _now_tk().strftime("%Y-%m-%d"):
+        try:
+            return max(0, int(rec.get("n", 0)))
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def _usage_info(uid: str, premium: bool) -> dict:
+    """Saytga ko'rsatiladigan holat. Premium va limit=0 bo'lsa cheksiz."""
+    limit = get_daily_limit()
+    if premium or limit == 0:
+        return {"unlimited": True, "limit": 0, "used": 0, "remaining": None, "resets_in": _seconds_to_reset()}
+    used = _used_today(uid)
+    return {"unlimited": False, "limit": limit, "used": used, "remaining": max(0, limit - used), "resets_in": _seconds_to_reset()}
+
+
+def _take_quota(uid: str, premium: bool):
+    """So'rovni hisoblaydi. (ruxsat, usage) qaytaradi. Atomik: lock ichida
+    o'qiydi va yozadi, shuning uchun bir vaqtdagi so'rovlar limitdan oshib ketmaydi."""
+    limit = get_daily_limit()
+    if premium or limit == 0:
+        return True, _usage_info(uid, premium)
+    day = _now_tk().strftime("%Y-%m-%d")
+    with _usage_lock:
+        rec = db.load("webusage", uid, None)
+        n = int(rec.get("n", 0)) if isinstance(rec, dict) and rec.get("d") == day else 0
+        if n >= limit:
+            return False, {"unlimited": False, "limit": limit, "used": n, "remaining": 0, "resets_in": _seconds_to_reset()}
+        db.save("webusage", uid, {"d": day, "n": n + 1})
+    return True, {"unlimited": False, "limit": limit, "used": n + 1, "remaining": limit - n - 1, "resets_in": _seconds_to_reset()}
+
+
+def _refund_quota(uid: str, premium: bool) -> None:
+    """AI xato bergan bo'lsa, foydalanuvchi so'rovini qaytarib beradi."""
+    if premium or get_daily_limit() == 0:
+        return
+    day = _now_tk().strftime("%Y-%m-%d")
+    try:
+        with _usage_lock:
+            rec = db.load("webusage", uid, None)
+            if isinstance(rec, dict) and rec.get("d") == day and int(rec.get("n", 0)) > 0:
+                db.save("webusage", uid, {"d": day, "n": int(rec["n"]) - 1})
+    except Exception:
+        pass
+
+
 @bp.route("/health", methods=["GET"])
 def health():
     db.exists("webuser", "health@check.local")  # raises OperationalError if DB is unreachable
@@ -197,9 +293,12 @@ def me():
     prof = _profile(u["id"])
     pub = _public(u)
     pub["has_pw"] = bool(u.get("pw"))
+    prem = bool(admin_store.is_premium(u["id"]))
     return jsonify({
         "user": pub,
-        "premium": bool(admin_store.is_premium(u["id"])),
+        "premium": prem,
+        "premium_until": admin_store.premium_until(u["id"]) if prem else None,
+        "usage": _usage_info(u["id"], prem),
         "models": list(ai_core.MODEL_TIERS.values()),
         "modes": ai_core.public_modes(),
         "profile": prof,
@@ -477,6 +576,14 @@ def chat():
     if admin_store.is_maintenance():
         return jsonify({"reply": f"🛠 {ai_core.BOT_NAME} hozir texnik ishlar tufayli vaqtincha ishlamayapti.", "model": model})
     mode = b.get("mode") if b.get("mode") in ai_core.MODES else None
+    prem = bool(admin_store.is_premium(uid))
+    ok, usage = _take_quota(uid, prem)
+    if not ok:
+        return jsonify({
+            "error": "Bugungi bepul so'rovlar tugadi (%d ta). Premium bilan cheksiz yozing yoki ertaga qayta urining." % usage["limit"],
+            "limit_reached": True,
+            "usage": usage,
+        }), 429
     prof = _profile(uid)
     history = _clean_history(b.get("history")) if isinstance(b.get("history"), list) else None
     if b.get("regenerate") and history is None:
@@ -486,12 +593,17 @@ def chat():
     try:
         if not img_bytes and not has_files and ai_core.wants_image(message):
             raw, mime = ai_core.generate_image_reply(uid, message, name=u["name"], source="web")
-            return jsonify({"reply": "", "generated_image": f"data:{mime};base64,{base64.b64encode(raw).decode()}", "model": model})
+            return jsonify({"reply": "", "generated_image": f"data:{mime};base64,{base64.b64encode(raw).decode()}", "model": model, "usage": usage})
         reply = ai_core.get_ai_reply(
             uid, full_message, img_bytes, img_mime, name=u["name"], source="web", model=model,
             mode=mode, extra_system=_extra_system(prof), use_memory=prof["memory"],
             history_override=history if history is not None else None,
         )
     except Exception as e:
+        _refund_quota(uid, prem)
         return jsonify({"error": str(e)}), 500
-    return jsonify({"reply": reply, "model": model})
+    if reply in (ai_core.BUSY_REPLY, ai_core.FAIL_REPLY):
+        # Hamma AI provayderlar ishlamadi: bu so'rov foydalanuvchi hisobiga yozilmasin.
+        _refund_quota(uid, prem)
+        usage = _usage_info(uid, prem)
+    return jsonify({"reply": reply, "model": model, "usage": usage})
