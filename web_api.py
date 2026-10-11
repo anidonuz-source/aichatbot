@@ -8,6 +8,7 @@ same on every device. Data lives in Postgres through db.py (DATABASE_URL).
 Optional env vars:
   WEB_SECRET  long random string used to sign login tokens
               (falls back to a value derived from TELEGRAM_BOT_TOKEN)
+  GOOGLE_CLIENT_ID  OAuth Web client ID for "Google bilan kirish" (optional)
   WEB_ORIGIN  allowed site origin, e.g. https://misumi.vercel.app (default: *)
 """
 import base64
@@ -34,6 +35,7 @@ _SECRET = (
     or hashlib.sha256((os.environ.get("TELEGRAM_BOT_TOKEN", "") + "|misumi-web").encode()).hexdigest()
 ).encode()
 _ORIGIN = os.environ.get("WEB_ORIGIN", "*").strip() or "*"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 TOKEN_TTL = 30 * 24 * 3600
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 _attempts: dict = defaultdict(list)
@@ -148,8 +150,41 @@ def login():
     if _too_many("log:" + _ip() + email, limit=10):
         return jsonify({"error": "Juda ko'p urinish. Birozdan keyin qayta urining."}), 429
     user = db.load("webuser", email, None)
+    if user and not user.get("pw"):
+        return jsonify({"error": "Bu hisob Google orqali yaratilgan. «Google bilan davom etish» tugmasini bosing."}), 401
     if not user or not check_password_hash(user["pw"], pw):
         return jsonify({"error": "Email yoki parol noto'g'ri."}), 401
+    return jsonify({"token": _make_token(user["id"])})
+
+
+def _verify_google(credential: str) -> dict:
+    from google.auth.transport import requests as greq
+    from google.oauth2 import id_token
+    return id_token.verify_oauth2_token(credential, greq.Request(), GOOGLE_CLIENT_ID)
+
+
+@bp.route("/google", methods=["POST"])
+def google_login():
+    if not GOOGLE_CLIENT_ID:
+        return jsonify({"error": "Google bilan kirish hali sozlanmagan."}), 503
+    if _too_many("goo:" + _ip(), limit=20):
+        return jsonify({"error": "Juda ko'p urinish. Birozdan keyin qayta urining."}), 429
+    cred = (request.get_json(silent=True) or {}).get("credential") or ""
+    try:
+        info = _verify_google(cred)
+    except Exception:
+        return jsonify({"error": "Google tokeni yaroqsiz. Qayta urinib ko'ring."}), 401
+    email = (info.get("email") or "").strip().lower()
+    if not email or not info.get("email_verified"):
+        return jsonify({"error": "Google emailingiz tasdiqlanmagan."}), 401
+    user = db.load("webuser", email, None)
+    if not user:
+        name = (info.get("name") or email.split("@")[0]).strip()[:40]
+        uid = "w" + uuid.uuid4().hex[:12]
+        user = {"id": uid, "name": name, "email": email, "pw": None, "google": True, "created": int(time.time())}
+        db.save("webuser", email, user)
+        db.save("webuser_id", uid, user)
+        admin_store.record_message(uid, name, "web")
     return jsonify({"token": _make_token(user["id"])})
 
 
