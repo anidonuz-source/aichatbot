@@ -615,12 +615,12 @@
         <div class="panel-row">
           <div class="txt">
             <div class="txt-inner">
-              <div class="t">Kunlik limit (sayt)</div>
-              <div class="d">Bepul foydalanuvchi kuniga nechta so'rov yubora oladi. 0 = cheksiz. Premium doim cheksiz. Kun Toshkent vaqti bilan.</div>
+              <div class="t">Limit (sayt): kunlik va soatlik</div>
+              <div class="d">Bepul foydalanuvchi kuniga va soatiga nechta so'rov yubora oladi. 0 = o'chiq (ikkalasi 0 bo'lsa cheksiz). Premium doim cheksiz. Vaqt Toshkent bo'yicha.</div>
             </div>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <input type="number" id="dailyLimitInput" min="0" max="100000" step="1" inputmode="numeric" style="width:84px; padding:8px 10px; border-radius:10px; border:1px solid var(--hairline); background:transparent; color:var(--paper); font-size:14px;">
+            <span style="font-size:12px;opacity:.7">Kun</span><input type="number" id="dailyLimitInput" min="0" max="100000" step="1" inputmode="numeric" style="width:84px; padding:8px 10px; border-radius:10px; border:1px solid var(--hairline); background:transparent; color:var(--paper); font-size:14px;"><span style="font-size:12px;opacity:.7">Soat</span><input type="number" id="hourlyLimitInput" min="0" max="100000" step="1" inputmode="numeric" style="width:70px; padding:8px 10px; border-radius:10px; border:1px solid var(--hairline); background:transparent; color:var(--paper); font-size:14px;">
             <button class="action-btn" id="dailyLimitSave" type="button">Saqlash</button>
           </div>
         </div>
@@ -1218,17 +1218,18 @@
     try {
       const r = await api('/api/admin/daily-limit', {});
       if (typeof r.daily_limit === 'number') document.getElementById('dailyLimitInput').value = r.daily_limit;
+      if (typeof r.hourly_limit === 'number') document.getElementById('hourlyLimitInput').value = r.hourly_limit;
     } catch (_) {}
   }
   document.getElementById('dailyLimitSave').addEventListener('click', async () => {
-    const inp = document.getElementById('dailyLimitInput');
-    const v = inp.value.trim();
-    if (!/^\d+$/.test(v)) { showToast("Limit butun son bo'lsin (0 = cheksiz)", true); return; }
+    const inp = document.getElementById('dailyLimitInput'), hin = document.getElementById('hourlyLimitInput');
+    const v = inp.value.trim(), hv = hin.value.trim();
+    if (!/^\d+$/.test(v) || !/^\d+$/.test(hv)) { showToast("Limitlar butun son bo'lsin (0 = o'chiq)", true); return; }
     try {
-      const r = await api('/api/admin/daily-limit', { value: parseInt(v, 10) });
+      const r = await api('/api/admin/daily-limit', { value: parseInt(v, 10), hourly: parseInt(hv, 10) });
       if (r.error || typeof r.daily_limit !== 'number') { showToast(r.error || "Saqlab bo'lmadi", true); return; }
-      inp.value = r.daily_limit;
-      showToast(r.daily_limit === 0 ? "Limit o'chirildi (cheksiz)" : "Kunlik limit: " + r.daily_limit + " ta ✓");
+      inp.value = r.daily_limit; hin.value = r.hourly_limit;
+      showToast("Limit: kuniga " + r.daily_limit + ", soatiga " + r.hourly_limit + " ta ✓");
     } catch (_) { showToast("Saqlab bo'lmadi", true); }
   });
 
