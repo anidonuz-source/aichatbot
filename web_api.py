@@ -43,6 +43,12 @@ _attempts: dict = defaultdict(list)
 def _err(e):
     import logging
     logging.getLogger("web_api").exception("web_api error")
+    if type(e).__name__ == "OperationalError":
+        msg = str(e)
+        m = re.search(r"FATAL:\s*(.*)", msg)
+        detail = (m.group(1) if m else msg.split("\n")[0]).strip()
+        detail = re.sub(r"(?i)password=\S+", "password=***", detail)[:160]
+        return jsonify({"error": "Bazaga ulanib bo'lmadi: " + detail}), 500
     return jsonify({"error": "Serverda xatolik: " + type(e).__name__}), 500
 
 
@@ -102,6 +108,12 @@ def _ip() -> str:
 
 def _public(u: dict) -> dict:
     return {"name": u["name"], "email": u["email"]}
+
+
+@bp.route("/health", methods=["GET"])
+def health():
+    db.exists("webuser", "health@check.local")  # raises OperationalError if DB is unreachable
+    return jsonify({"db": "ok"})
 
 
 @bp.route("/register", methods=["POST"])
