@@ -115,7 +115,7 @@ def _ip() -> str:
 
 
 def _public(u: dict) -> dict:
-    return {"name": u["name"], "email": u["email"]}
+    return {"name": u["name"], "email": u["email"], "verified": bool(u.get("verified") or u.get("google"))}
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +751,76 @@ def reset_password():
     if not u:
         return jsonify({"error": "Hisob topilmadi."}), 404
     u["pw"] = generate_password_hash(pw)
-    db.save("webuser", email, u)
+    u["verified"] = True  # kod emailga kelgan, demak email haqiqiy
+    _save_user(u)
     db.save("webreset", email, {"code": "", "exp": 0, "tries": 99})
     return jsonify({"ok": True})
+
+
+# ---------------- Suhbatni havola orqali ulashish ----------------
+@bp.route("/share", methods=["POST"])
+def share_create():
+    u = _auth()
+    if not u:
+        return jsonify({"error": "Ulashish uchun avval kiring."}), 401
+    if _too_many("sh:" + u["id"], limit=20, window=3600):
+        return jsonify({"error": "Soatiga 20 tagacha havola yaratish mumkin."}), 429
+    b = request.get_json(silent=True) or {}
+    msgs = [{"role": "user" if m.get("role") == "user" else "assistant", "content": str(m.get("content") or "")[:6000]}
+            for m in (b.get("msgs") or [])[:60] if m.get("content")]
+    if not msgs:
+        return jsonify({"error": "Bo'sh suhbat."}), 400
+    sid = secrets.token_urlsafe(6)
+    db.save("webshare", sid, {"title": str(b.get("title") or "Suhbat")[:100], "msgs": msgs,
+                              "by": (u.get("name") or "")[:40], "t": int(time.time())})
+    return jsonify({"id": sid})
+
+
+@bp.route("/share/<sid>", methods=["GET"])
+def share_get(sid):
+    d = db.load("webshare", sid[:20], None)
+    if not d:
+        return jsonify({"error": "Havola topilmadi."}), 404
+    return jsonify(d)
+
+
+# ---------------- Email tasdiqlash ----------------
+@bp.route("/verify/send", methods=["POST"])
+def verify_send():
+    u = _auth()
+    if not u:
+        return jsonify({"error": "Avval kiring."}), 401
+    if u.get("verified") or u.get("google"):
+        return jsonify({"ok": True, "verified": True})
+    if _too_many("vs:" + u["id"], limit=3, window=900):
+        return jsonify({"error": "Juda ko'p urinish. 15 daqiqadan keyin qayta urinib ko'ring."}), 429
+    code = "".join(secrets.choice("0123456789") for _ in range(6))
+    db.save("webverify", u["email"], {"code": generate_password_hash(code), "exp": int(time.time()) + 900, "tries": 0})
+
+    def _go():
+        try:
+            _send_mail(u["email"], "Misumi AI: emailni tasdiqlash kodi",
+                       f"Tasdiqlash kodingiz: {code}\nKod 15 daqiqa amal qiladi.")
+        except Exception as ex:
+            print("mail xato:", ex)
+    threading.Thread(target=_go, daemon=True).start()
+    return jsonify({"ok": True})
+
+
+@bp.route("/verify/confirm", methods=["POST"])
+def verify_confirm():
+    u = _auth()
+    if not u:
+        return jsonify({"error": "Avval kiring."}), 401
+    code = ((request.get_json(silent=True) or {}).get("code") or "").strip()
+    r = db.load("webverify", u["email"], None)
+    if not r or r.get("exp", 0) < time.time() or r.get("tries", 0) >= 5:
+        return jsonify({"error": "Kod eskirgan. Qaytadan yuboring."}), 400
+    if not check_password_hash(r["code"], code):
+        r["tries"] = r.get("tries", 0) + 1
+        db.save("webverify", u["email"], r)
+        return jsonify({"error": "Kod noto'g'ri."}), 400
+    u["verified"] = True
+    _save_user(u)
+    db.save("webverify", u["email"], {"code": "", "exp": 0, "tries": 99})
+    return jsonify({"ok": True, "verified": True})
