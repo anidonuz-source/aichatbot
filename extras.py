@@ -8,6 +8,7 @@ Yangi imkoniyatlar (bot.py ga 3 ta kichik o'zgarish bilan ulanadi):
    /delemoji <emoji>               — (admin) o'chirish
    /emojis                         — (admin) o'rgatilganlar ro'yxati
    /emojiid                        — premium emojining ID sini ko'rsatadi
+   /addpack <havola>               — (admin) butun premium emoji paketini birdan o'rgatish
    Bot yuborgan hamma xabardagi oddiy emojilar avtomatik premium'ga almashadi
    (agar o'rgatilgan bo'lsa). Premium ishlamasa — oddiy emoji bilan yuboriladi.
 
@@ -90,7 +91,9 @@ def _emoji_map() -> dict:
     global _emoji_cache
     if _emoji_cache is None:
         try:
-            _emoji_cache = dict(db.load(_EMOJI_STORE, "map", {}))
+            raw = dict(db.load(_EMOJI_STORE, "map", {}))
+            # eski format (matn) -> ro'yxat
+            _emoji_cache = {k: (v if isinstance(v, list) else [v]) for k, v in raw.items() if v}
         except Exception:
             logger.exception("premium emoji xaritasini o'qib bo'lmadi")
             _emoji_cache = {}
@@ -114,7 +117,22 @@ def _save_emoji_map() -> None:
 
 
 def emoji_id(ch: str) -> str | None:
-    return _emoji_map().get(_norm(ch))
+    ids = _emoji_map().get(_norm(ch))
+    return random.choice(ids) if ids else None
+
+
+MAX_VARIANTS_PER_EMOJI = 8
+
+
+def _add_emoji_id(ch: str, eid: str) -> bool:
+    _emoji_map()
+    ids = _emoji_cache.setdefault(_norm(ch), [])
+    if eid in ids:
+        return False
+    if len(ids) >= MAX_VARIANTS_PER_EMOJI:
+        return False
+    ids.append(eid)
+    return True
 
 
 def pe(ch: str) -> str:
@@ -130,25 +148,49 @@ def strip_premium(text: str) -> str:
     return _TG_EMOJI_RE.sub(r"\1", text)
 
 
+def _sub_emojis(s: str) -> tuple[str, int]:
+    """Tayyor (HTML-xavfsiz) matndagi o'rgatilgan emojilarni <tg-emoji> ga almashtiradi."""
+    count = 0
+
+    def _sub(m: re.Match) -> str:
+        nonlocal count
+        ids = _emoji_cache.get(m.group(1))
+        if not ids or count >= MAX_PREMIUM_PER_MESSAGE:
+            return m.group(0)
+        count += 1
+        return f'<tg-emoji emoji-id="{random.choice(ids)}">{m.group(1)}</tg-emoji>'
+
+    return _emoji_re.sub(_sub, s), count
+
+
 def premiumize(text: str) -> str | None:
     """Oddiy matndagi emojilarni premium'ga almashtiradi va HTML qaytaradi.
     O'rgatilgan emoji yo'q yoki matnda uchramasa — None (oddiy yuboriladi)."""
     _emoji_map()
     if not _emoji_re or not text:
         return None
-    escaped = html.escape(text, quote=False)
-    count = 0
-
-    def _sub(m: re.Match) -> str:
-        nonlocal count
-        eid = _emoji_cache.get(m.group(1))
-        if not eid or count >= MAX_PREMIUM_PER_MESSAGE:
-            return m.group(0)
-        count += 1
-        return f'<tg-emoji emoji-id="{eid}">{m.group(1)}</tg-emoji>'
-
-    out = _emoji_re.sub(_sub, escaped)
+    out, count = _sub_emojis(html.escape(text, quote=False))
     return out if count else None
+
+
+_HTML_TAG_RE = re.compile(r"(<[^>]*>)")
+
+
+def premiumize_html(text: str) -> str | None:
+    """Allaqachon HTML bo'lgan matn uchun: teglar ichiga tegmasdan emojilarni almashtiradi."""
+    _emoji_map()
+    if not _emoji_re or not text or "<tg-emoji" in text:
+        return None
+    total = 0
+    parts = []
+    for chunk in _HTML_TAG_RE.split(text):
+        if chunk.startswith("<") and chunk.endswith(">"):
+            parts.append(chunk)
+        else:
+            c, n = _sub_emojis(chunk)
+            parts.append(c)
+            total += n
+    return "".join(parts) if total else None
 
 
 def icon_btn(label: str, ch: str, **kwargs) -> InlineKeyboardButton:
@@ -203,6 +245,8 @@ async def send_ai_reply(update: Update, text: str) -> None:
     in_private = update.effective_chat and update.effective_chat.type == "private"
     markup = _voice_markup() if in_private and 8 <= len(text) <= TTS_MAX_CHARS else None
 
+    if PLAIN_EMOJI_LIMIT:
+        text = drop_plain_emojis(text)
     rich = premiumize(text)
     if rich:
         try:
@@ -233,11 +277,11 @@ async def cmd_addemoji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for ent, ch in found.items():
         if not ent.custom_emoji_id:
             continue
-        _emoji_cache[_norm(ch)] = ent.custom_emoji_id
-        added.append(ch)
+        if _add_emoji_id(ch, ent.custom_emoji_id):
+            added.append(ch)
     _save_emoji_map()
     await msg.reply_text(
-        f"✅ {len(added)} ta premium emoji o'rgatildi: {' '.join(added)}\n"
+        f"✅ {len(added)} ta premium emoji o'rgatildi: {' '.join(added) or '(allaqachon bor edi)'}\n"
         "Endi botdagi shu oddiy emojilar o'rniga premium variant chiqadi."
     )
 
@@ -269,8 +313,14 @@ async def cmd_emojis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not m:
         await msg.reply_text("Hali premium emoji o'rgatilmagan. /addemoji dan foydalan.")
         return
-    line = " ".join(m.keys())
-    await reply_html(msg, f"Premium o'rgatilgan ({len(m)} ta):\n" + " ".join(pe(k) for k in m.keys()) + f"\n\nOddiy ko'rinishi: {_esc(line)}")
+    total_ids = sum(len(v) for v in m.values())
+    keys = list(m.keys())[:60]
+    await reply_html(
+        msg,
+        f"Premium o'rgatilgan: {len(m)} xil emoji, jami {total_ids} ta variant\n"
+        + " ".join(pe(k) for k in keys)
+        + f"\n\nOddiy ko'rinishi: {_esc(' '.join(keys))}",
+    )
 
 
 async def cmd_emojiid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1178,6 +1228,292 @@ async def anime_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 💎 PREMIUM EMOJI'NI KUCHAYTIRISH
+#    • /addpack — butun premium emoji paketini birdan o'rgatish
+#    • AI javoblarida emojilar ko'proq ishlatiladi
+#    • Botning hamma xabaridagi oddiy emoji avtomatik premium'ga almashadi
+#    • Tugmalardagi oddiy emoji ham premium ikonkaga almashadi
+#    • AI javobidagi o'rgatilmagan oddiy emojilar olib tashlanadi (premium ko'p, oddiy kam)
+#    • Stikerlar bazadan avvalgidek ishlaydi (xohlasangiz PREMIUM_INSTEAD_OF_STICKER bilan almashtirish mumkin)
+# ═══════════════════════════════════════════════════════════════════════════
+
+PREMIUM_INSTEAD_OF_STICKER = float(os.environ.get("PREMIUM_INSTEAD_OF_STICKER", "0"))  # 0..1, 0 = stikerlar avvalgidek
+PLAIN_EMOJI_LIMIT = os.environ.get("PLAIN_EMOJI_LIMIT", "1") != "0"   # AI javobida o'rgatilmagan oddiy emojilarni olib tashlash
+PREMIUM_EMOJI_GLOBAL = os.environ.get("PREMIUM_EMOJI_GLOBAL", "1") != "0"
+_STICKER_MARK = "__premium_mood__:"
+
+# stiker turkumi -> mos emojilar (shulardan o'rgatilgani tanlanadi)
+_MOOD_POOLS = {
+    "happy": ["😊", "😄", "😁", "🥰", "✨", "🎉", "😃"],
+    "laugh": ["😂", "🤣", "😹", "😆", "😅"],
+    "love": ["❤", "😍", "🥰", "💕", "😘", "💖", "💘"],
+    "sad": ["😢", "😭", "🥺", "💔", "😔"],
+    "angry": ["😡", "🤬", "😤", "😠", "👿"],
+    "surprised": ["😮", "😲", "🤯", "😱", "😳"],
+    "cool": ["😎", "🔥", "💪", "👌", "😏"],
+    "thinking": ["🤔", "🧐", "🙄"],
+    "general": ["👍", "🙂", "✨", "😉", "🙌"],
+    "win": ["🏆", "🎉", "🥇", "🔥", "💪", "😎"],
+    "lose": ["😭", "😢", "💀", "🤡", "😵"],
+    "draw": ["🤝", "😐", "🙃", "😅"],
+}
+
+
+def _mood_pick(category: str) -> str | None:
+    """Turkumga mos, o'rgatilgan premium emojilardan 1-3 tasini tanlab, HTML qaytaradi."""
+    m = _emoji_map()
+    have = [e for e in _MOOD_POOLS.get(category, []) if _norm(e) in m]
+    if not have:
+        return None
+    k = min(len(have), random.choice((1, 1, 2, 3)))
+    chosen = random.sample(have, k)
+    return "".join(pe(e) for e in chosen)
+
+
+def emoji_style_hint() -> str:
+    """AI ga: emojilarni ko'proq va faqat o'rgatilganlardan ishlat."""
+    m = _emoji_map()
+    if not m:
+        return ""
+    chars = list(m.keys())
+    random.shuffle(chars)
+    return (
+        "EMOJI USLUBI: javobingga kayfiyatga mos emojilarni tabiiy joylarda ko'proq qo'sh "
+        "(har gapda yoki har 1-2 gapda 1-3 ta). FAQAT shu ro'yxatdagi emojilardan foydalan: "
+        + " ".join(chars[:40])
+        + ". Ro'yxatda yo'q emojini hech qachon yozma, mos kelmasa emojisiz yoz. "
+        "Stiker tegi ([STIKER...]) ishlatish mumkin, lekin oddiy emojilarni kam ishlat."
+    )
+
+
+def drop_plain_emojis(text: str) -> str:
+    """AI javobidan o'rgatilmagan (oddiy) emojilarni olib tashlaydi: premium ko'p, oddiy kam."""
+    _emoji_map()
+    if not _emoji_re or not text:
+        return text
+
+    def fix(m: re.Match) -> str:
+        parts = _emoji_re.split(m.group(0))      # toq indekslar — o'rgatilgan emojilar
+        return "".join(p for i, p in enumerate(parts) if i % 2 == 1)
+
+    out = _EMOJI_CLEAN_RE.sub(fix, text)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r" +([,.!?])", r"\1", out)
+    out = out.strip()
+    return out or text
+
+
+async def cmd_addpack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    if not update.effective_user or not _is_admin(update.effective_user.id):
+        return
+    arg = (context.args[0] if context.args else "").strip()
+    m = re.search(r"(?:addemoji|addstickers)/([A-Za-z0-9_]+)", arg)
+    name = m.group(1) if m else (arg if re.fullmatch(r"[A-Za-z0-9_]{3,64}", arg) else "")
+    if not name:
+        await msg.reply_text(
+            "Premium emoji paketining havolasini yoz:\n"
+            "/addpack https://t.me/addemoji/PaketNomi\n\n"
+            "Paket havolasini premium emojini bosib, \"Paketni ko'rish\" > \"Ulashish\" orqali olasan."
+        )
+        return
+    try:
+        pack = await context.bot.get_sticker_set(name)
+    except TelegramError:
+        await msg.reply_text("paket topilmadi. havolani tekshir.")
+        return
+    stickers = [s for s in pack.stickers if getattr(s, "custom_emoji_id", None) and s.emoji]
+    if not stickers:
+        await msg.reply_text("bu premium emoji paketi emas (oddiy stiker paketi). /addemoji bilan alohida qo'sh.")
+        return
+    added = 0
+    kinds = set()
+    for st in stickers:
+        if _add_emoji_id(st.emoji, st.custom_emoji_id):
+            added += 1
+        kinds.add(_norm(st.emoji))
+    _save_emoji_map()
+    await msg.reply_text(
+        f"✅ «{pack.title}» paketidan {added} ta premium emoji qo'shildi ({len(kinds)} xil emoji).\n"
+        "Bir emojiga bir nechta variant bo'lsa, bot tasodifiy birini tanlaydi. Ro'yxat: /emojis"
+    )
+
+
+def _iconify(b: InlineKeyboardButton) -> InlineKeyboardButton | None:
+    """Tugma matni boshidagi o'rgatilgan emojini premium ikonkaga aylantiradi."""
+    if getattr(b, "icon_custom_emoji_id", None) or not _emoji_re:
+        return None
+    t = b.text or ""
+    m = _emoji_re.match(t)
+    if not m:
+        return None
+    ids = _emoji_cache.get(m.group(1))
+    rest = t[m.end():].lstrip()
+    if not ids or not rest:
+        return None
+    try:
+        d = b.to_dict()
+        d["text"] = rest
+        d["icon_custom_emoji_id"] = random.choice(ids)
+        return InlineKeyboardButton.de_json(d)
+    except Exception:
+        return None
+
+
+def _premium_markup(mk: InlineKeyboardMarkup) -> InlineKeyboardMarkup | None:
+    _emoji_map()
+    if not _emoji_re:
+        return None
+    changed = False
+    rows = []
+    for row in mk.inline_keyboard:
+        new_row = []
+        for b in row:
+            nb = _iconify(b)
+            changed = changed or nb is not None
+            new_row.append(nb or b)
+        rows.append(new_row)
+    return InlineKeyboardMarkup(rows) if changed else None
+
+
+def _premium_kwargs(kwargs: dict, key: str = "text") -> dict | None:
+    """send_message/send_photo/... argumentlarini premium variantga o'giradi. Kerak bo'lmasa None."""
+    new = dict(kwargs)
+    changed = False
+    text = kwargs.get(key)
+    ents = kwargs.get("entities") or kwargs.get("caption_entities")
+    if isinstance(text, str) and not ents:
+        pm = kwargs.get("parse_mode")
+        pm_val = getattr(pm, "value", pm)
+        rich = None
+        if pm_val is None:
+            rich = premiumize(text)
+        elif str(pm_val).upper() == "HTML":
+            rich = premiumize_html(text)
+        if rich:
+            new[key] = rich
+            new["parse_mode"] = "HTML"
+            changed = True
+    mk = kwargs.get("reply_markup")
+    if isinstance(mk, InlineKeyboardMarkup):
+        m2 = _premium_markup(mk)
+        if m2 is not None:
+            new["reply_markup"] = m2
+            changed = True
+    return new if changed else None
+
+
+_patched = False
+
+
+def _install_patches() -> None:
+    """Bir marta: PTB va boshqa modullarga kichik ulanishlar (boshqa fayllarga tegmasdan)."""
+    global _patched
+    if _patched:
+        return
+    _patched = True
+
+    from telegram.ext import ExtBot
+    import sticker_store
+
+    # 1) Hamma chiqish xabarlaridagi oddiy emoji -> premium
+    if PREMIUM_EMOJI_GLOBAL:
+        orig_send = ExtBot.send_message
+        orig_edit = ExtBot.edit_message_text
+
+        async def send_message(self, *args, **kwargs):
+            new = _premium_kwargs(kwargs)
+            if new is not None:
+                try:
+                    return await orig_send(self, *args, **new)
+                except BadRequest as e:
+                    logger.warning("premium send_message xato (%s) — oddiy yuborilyapti", e)
+            return await orig_send(self, *args, **kwargs)
+
+        async def edit_message_text(self, *args, **kwargs):
+            new = _premium_kwargs(kwargs)
+            if new is not None:
+                try:
+                    return await orig_edit(self, *args, **new)
+                except BadRequest as e:
+                    if "not modified" in str(e).lower():
+                        raise
+                    logger.warning("premium edit xato (%s) — oddiy yuborilyapti", e)
+            return await orig_edit(self, *args, **kwargs)
+
+        ExtBot.send_message = send_message
+        ExtBot.edit_message_text = edit_message_text
+
+        def _wrap_caption(name: str) -> None:
+            orig = getattr(ExtBot, name, None)
+            if orig is None:
+                return
+
+            async def wrapper(self, *args, **kwargs):
+                new = _premium_kwargs(kwargs, "caption")
+                if new is not None:
+                    try:
+                        return await orig(self, *args, **new)
+                    except BadRequest as e:
+                        if "not modified" in str(e).lower():
+                            raise
+                        logger.warning("premium %s xato (%s) — oddiy yuborilyapti", name, e)
+                return await orig(self, *args, **kwargs)
+
+            setattr(ExtBot, name, wrapper)
+
+        for _n in ("send_photo", "send_voice", "send_animation", "send_video", "send_audio",
+                   "send_document", "edit_message_caption"):
+            _wrap_caption(_n)
+
+    # 2) Stiker o'rniga premium emoji
+    orig_get_random = sticker_store.get_random
+
+    def get_random(category, *a, **k):
+        if (
+            category in _MOOD_POOLS
+            and _emoji_map()
+            and random.random() < PREMIUM_INSTEAD_OF_STICKER
+            and any(_norm(e) in _emoji_cache for e in _MOOD_POOLS[category])
+        ):
+            return _STICKER_MARK + category
+        return orig_get_random(category, *a, **k)
+
+    sticker_store.get_random = get_random
+
+    orig_send_sticker = ExtBot.send_sticker
+
+    async def send_sticker(self, chat_id, sticker, *args, **kwargs):
+        if isinstance(sticker, str) and sticker.startswith(_STICKER_MARK):
+            category = sticker[len(_STICKER_MARK):]
+            extra = {k: kwargs[k] for k in ("message_thread_id", "reply_parameters", "business_connection_id")
+                     if kwargs.get(k) is not None}
+            rich = _mood_pick(category)
+            try:
+                return await self.send_message(chat_id=chat_id, text=rich or "👍", parse_mode="HTML", **extra)
+            except BadRequest:
+                return await self.send_message(chat_id=chat_id, text=strip_premium(rich or "👍"), **extra)
+        return await orig_send_sticker(self, chat_id, sticker, *args, **kwargs)
+
+    ExtBot.send_sticker = send_sticker
+
+    # 3) AI javoblarida emojilar ko'proq
+    orig_get_ai_reply = ai_core.get_ai_reply
+
+    def get_ai_reply(*args, **kwargs):
+        extra = kwargs.get("extra_system")
+        # faqat Telegram bot suhbatlari (userbot, sayt va Mini App'ga tegmaydi);
+        # ovozli javobda emoji kerak emas
+        if kwargs.get("source") == "telegram" and not (extra and "ovozli xabar" in extra):
+            hint = emoji_style_hint()
+            if hint:
+                kwargs["extra_system"] = (extra.strip() + "\n\n" + hint) if extra and extra.strip() else hint
+        return orig_get_ai_reply(*args, **kwargs)
+
+    ai_core.get_ai_reply = get_ai_reply
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Ro'yxatdan o'tkazish
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1190,6 +1526,8 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("delemoji", cmd_delemoji), group=0)
     app.add_handler(CommandHandler("emojis", cmd_emojis), group=0)
     app.add_handler(CommandHandler("emojiid", cmd_emojiid), group=0)
+    app.add_handler(CommandHandler("addpack", cmd_addpack), group=0)
+    _install_patches()
     app.add_handler(CallbackQueryHandler(start_callback, pattern=r"^st:"), group=0)
     app.add_handler(CallbackQueryHandler(imagine_callback, pattern=r"^img:"), group=0)
     app.add_handler(CallbackQueryHandler(tts_callback, pattern=r"^tts:"), group=0)
