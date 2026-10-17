@@ -44,6 +44,7 @@ import game
 import ship
 import fun
 import games2
+import extras
 import sticker_store
 import userbot_manager
 import userbot_store
@@ -92,20 +93,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _authorized(chat_id):
         await update.message.reply_text(f"bu bot hammaga emas, uka. {ai_core.AUTHOR_HANDLE} dan ruxsat ol.")
         return
-    first_name = update.effective_user.first_name if update.effective_user else None
-    greeting = f"a, {first_name} — kelibsan." if first_name else "kelibsan."
-    text = (
-        f"{greeting} men {ai_core.BOT_NAME}man.\n\n"
-        f"gapir — javob beraman. yoki bermayman, kayfiyatga qarab.\n\n"
-        f"/reset — xotirani tozalash\n"
-        f"/duel — birovga (yoki menga) o'yin taklif qilish 🎲\n"
-        f"/ship — guruhdan tasodifiy juftlik tanlash 💘\n"
-        f"/reyting — o'yin reytingi\n"
-        f"/roast @user — haqiqiy roast\n"
-        f"/stiker — stikerga reply qilib turkumga qo'shish\n\n"
-        f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}"
-    )
-    await update.message.reply_text(text, reply_markup=_webapp_keyboard(chat_id))
+    try:
+        await extras.send_start(update, context)
+    except Exception:
+        logger.exception("yangi /start ishlamadi — eski ko'rinishga qaytildi")
+        first_name = update.effective_user.first_name if update.effective_user else None
+        greeting = f"a, {first_name} — kelibsan." if first_name else "kelibsan."
+        await update.message.reply_text(
+            f"{greeting} men {ai_core.BOT_NAME}man.\n\ngapir — javob beraman.\n\n"
+            f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}",
+            reply_markup=_webapp_keyboard(chat_id),
+        )
 
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -745,7 +743,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"[MSG] sending: {reply_text!r}")
     try:
-        await update.message.reply_text(reply_text)
+        await extras.send_ai_reply(update, reply_text)
         logger.info("[MSG] sent OK")
     except Exception as e:
         logger.error(f"[MSG] send failed: {e}")
@@ -873,6 +871,7 @@ def main():
     ship.register(app)
     fun.register(app)
     games2.register(app)
+    extras.register(app)
 
     async def _post_init(_app):
         await userbot_manager.resume_all()
