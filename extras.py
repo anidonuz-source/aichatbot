@@ -513,9 +513,9 @@ _ITEMS = {
         "/duel — вызвать на игру\n/battle — бой\n/tictactoe — крестики-нолики\n/rps — камень-ножницы-бумага\n/quiz — викторина\n/reyting — рейтинг\nВ группе веселее всего.",
         "/duel — challenge someone\n/battle — fight\n/tictactoe — X-O\n/rps — rock-paper-scissors\n/quiz — trivia\n/reyting — leaderboard\nBest in a group.")),
     "ship": ("💞", ("Ship", "Шип", "Ship"), (
-        "/ship — tasodifiy juftlik\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced",
-        "/ship — случайная пара\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced",
-        "/ship — a random couple\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced")),
+        "/ship — tasodifiy juftlik\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced\n/juftim — juft kartasi · /ajrashish — nikohni bekor qilish\n/shiptag on|off — guruh teglari (admin)",
+        "/ship — случайная пара\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced\n/juftim — карточка пары · /ajrashish — развод\n/shiptag on|off — теги в группе (админ)",
+        "/ship — a random couple\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced\n/juftim — couple card · /ajrashish — divorce\n/shiptag on|off — group tags (admin)")),
     "fun": ("🎲", ("Fun", "Фан", "Fun"), (
         "/roast · /compliment · /rate · /expose\n/8ball · /horoscope · /lucky · /quote\n/truth · /dare · /wouldyourather\n/confession · /ngl · /fakechat",
         "/roast · /compliment · /rate · /expose\n/8ball · /horoscope · /lucky · /quote\n/truth · /dare · /wouldyourather\n/confession · /ngl · /fakechat",
