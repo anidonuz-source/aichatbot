@@ -415,7 +415,7 @@ def _lang_hint(user_id) -> str:
 T = {
     "uz": {
         "hello_title": "Salom, {name}!",
-        "hello_body": "Men <b>{bot}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman va ovozda gapiraman.\n\nQuyidan bo'lim tanla yoki shunchaki yoz.",
+        "hello_body": "Men <b>{bot}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman, ovozda gapiraman, darsda yordam beraman va bugungi kurs/ob-havo kabi savollarga jonli javob beraman.\n\nQuyidan bo'lim tanla yoki shunchaki yoz.",
         "open": "{bot} ni ochish", "add_group": "Guruhga qo'shish", "back": "Orqaga", "home": "Bosh sahifa",
         "sec_ai": "AI imkoniyatlari", "sec_play": "O'yin va fun", "sec_tools": "Foydali", "sec_account": "Hisob",
         "desc_ai": "Suhbat, rasm, ovoz, YouTube, anime", "desc_play": "O'yinlar, ship va qiziqarli buyruqlar",
@@ -433,7 +433,7 @@ T = {
     },
     "ru": {
         "hello_title": "Привет, {name}!",
-        "hello_body": "Я <b>{bot}</b>: болтаю, играю, рисую и отвечаю голосом.\n\nВыбери раздел ниже или просто напиши.",
+        "hello_body": "Я <b>{bot}</b>: болтаю, играю, рисую, отвечаю голосом, помогаю с учёбой и даю живые ответы на вопросы вроде курса валют или погоды сегодня.\n\nВыбери раздел ниже или просто напиши.",
         "open": "Открыть {bot}", "add_group": "Добавить в группу", "back": "Назад", "home": "Главная",
         "sec_ai": "Возможности ИИ", "sec_play": "Игры и фан", "sec_tools": "Полезное", "sec_account": "Аккаунт",
         "desc_ai": "Чат, рисунки, голос, YouTube, аниме", "desc_play": "Игры, шип и весёлые команды",
@@ -451,7 +451,7 @@ T = {
     },
     "en": {
         "hello_title": "Hi, {name}!",
-        "hello_body": "I'm <b>{bot}</b>: I chat, play games, draw pictures and talk by voice.\n\nPick a section below or just type.",
+        "hello_body": "I'm <b>{bot}</b>: I chat, play games, draw pictures, talk by voice, help with homework, and give live answers to things like today's exchange rate or weather.\n\nPick a section below or just type.",
         "open": "Open {bot}", "add_group": "Add to group", "back": "Back", "home": "Home",
         "sec_ai": "AI features", "sec_play": "Games & fun", "sec_tools": "Tools", "sec_account": "Account",
         "desc_ai": "Chat, images, voice, YouTube, anime", "desc_play": "Games, ship and fun commands",
