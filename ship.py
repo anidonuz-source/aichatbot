@@ -57,8 +57,24 @@ _PERSONAL_FILE   = SHIP_MEMORY_DIR.parent / "ship_personal.json"    # personal s
 _state_lock = Lock()
 
 
+def _use_db() -> bool:
+    try:
+        import db
+        return bool(db.DATABASE_URL)
+    except Exception:
+        return False
+
+
 def _load_json(path: Path, default):
-    """JSON fayldan yuklaydi, mavjud bo'lmasa default qaytaradi."""
+    """Avval bazadan (Render diski vaqtinchalik!), bo'lmasa JSON fayldan yuklaydi."""
+    if _use_db():
+        try:
+            import db
+            val = db.load("shipstore", path.name, None)
+            if val is not None:
+                return val
+        except Exception as e:
+            print(f"[ship:db_load:{path.name}] {e}")
     try:
         if path.exists():
             return json.loads(path.read_text(encoding="utf-8"))
@@ -68,7 +84,14 @@ def _load_json(path: Path, default):
 
 
 def _save_json(path: Path, data) -> None:
-    """JSON faylga yozadi (atomik)."""
+    """Bazaga (bo'lsa) va JSON faylga yozadi."""
+    if _use_db():
+        try:
+            import db
+            db.save("shipstore", path.name, data)
+            return
+        except Exception as e:
+            print(f"[ship:db_save:{path.name}] {e}")
     try:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -87,7 +110,27 @@ def _load_seen_members() -> dict:
             result[chat_id][int(uid_s)] = data
     return result
 
+_seen_dirty = False
+_seen_last_save = 0.0
+
+
 def _save_seen_members() -> None:
+    """Bazada har xabarda yozmaymiz: belgilab qo'yamiz, 45 soniyada bir flush bo'ladi."""
+    global _seen_dirty, _seen_last_save
+    if _use_db():
+        _seen_dirty = True
+        return
+    _write_seen_members()
+
+
+def flush_seen_members() -> None:
+    global _seen_dirty
+    if _seen_dirty:
+        _seen_dirty = False
+        _write_seen_members()
+
+
+def _write_seen_members() -> None:
     with _state_lock:
         serializable = {
             str(cid): {str(uid): d for uid, d in members.items()}
@@ -180,6 +223,12 @@ def _member_mem_path(chat_id: int, user_id: int) -> Path:
 
 
 def load_member_facts(chat_id: int, user_id: int) -> dict:
+    if _use_db():
+        try:
+            import db
+            return db.load("shipfacts", f"{chat_id}_{user_id}", {}) or {}
+        except Exception as e:
+            print(f"[ship:facts_load] {e}")
     path = _member_mem_path(chat_id, user_id)
     if not path.exists():
         return {}
@@ -196,6 +245,13 @@ def save_member_facts(chat_id: int, user_id: int, facts: dict) -> None:
     path = _member_mem_path(chat_id, user_id)
     existing = load_member_facts(chat_id, user_id)
     existing.update(facts)
+    if _use_db():
+        try:
+            import db
+            db.save("shipfacts", f"{chat_id}_{user_id}", existing)
+            return
+        except Exception as e:
+            print(f"[ship:facts_save] {e}")
     with _ship_mem_lock:
         path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1539,6 +1595,8 @@ async def _do_marry_ceremony(context, chat_id: int, id1: int, id2: int) -> None:
         await context.bot.send_photo(chat_id=chat_id, photo=image_url, caption=text, parse_mode="HTML")
     except Exception:
         await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+    import shipplus
+    await shipplus.on_couple(context, chat_id, groom_id, bride_id, "marry")
 
 
 async def _do_dating_ceremony(context, chat_id: int, id1: int, id2: int) -> None:
@@ -1586,6 +1644,8 @@ async def _do_dating_ceremony(context, chat_id: int, id1: int, id2: int) -> None
         await context.bot.send_photo(chat_id=chat_id, photo=image_url, caption=text, parse_mode="HTML")
     except Exception:
         await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+    import shipplus
+    await shipplus.on_couple(context, chat_id, id1, id2, "dating")
 
 # ── /marry — nikoh marosimi ───────────────────────────────────────────────────
 
@@ -1753,6 +1813,13 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             tid, tname, tusername = ru.id, ru.first_name or str(ru.id), ru.username
 
     if tid and tid != proposer.id:
+        import shipplus
+        if shipplus.married_to(chat_id, proposer.id):
+            await loading.edit_text("💍 Sen allaqachon nikohdasan! Avval /ajrashish.")
+            return
+        if shipplus.married_to(chat_id, tid):
+            await loading.edit_text("💍 U allaqachon nikohda! 😅")
+            return
         ptag = _mention(proposer.id, proposer.first_name or str(proposer.id), proposer.username)
         ttag = _mention(tid, tname or str(tid), tusername)
         _pending_proposals.setdefault(chat_id, {})[(proposer.id, tid)] = {"type": "marry", "ts": time.time()}
@@ -1771,10 +1838,11 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # ── 2. Random nikoh — faqat erkak+ayol ──────────────────────────────────
-    picked = _pick_male_female(chat_id)
+    import shipplus
+    picked = shipplus.pick_single(chat_id, _pick_male_female)
     if not picked:
         await loading.edit_text(
-            "❌ Guruhda nikoh uchun erkak va ayol a'zo topilmadi!\n"
+            "❌ Guruhda nikoh uchun bo'sh (nikohsiz) erkak va ayol a'zo topilmadi!\n"
             "Har kim <code>/jins erkak</code> yoki <code>/jins ayol</code> yozsin. 👥",
             parse_mode="HTML"
         )
@@ -1816,6 +1884,8 @@ async def marry_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         print(f"[marry:photo] {e}")
         await loading.edit_text(text, parse_mode="HTML")
+    import shipplus
+    await shipplus.on_couple(context, chat_id, groom_id, bride_id, "marry")
 
 
 # ── /marriedlist — nikoh bo'lganlar ro'yxati ─────────────────────────────────
@@ -2017,6 +2087,11 @@ async def love_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await message.reply_html(full_text)
 
 
+def _days_text(date_s: str) -> str:
+    import shipplus
+    return shipplus.days_text(date_s)
+
+
 async def marriedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Guruhda /marry bilan nikohlanganlar ro'yxati."""
     chat = update.effective_chat
@@ -2041,7 +2116,7 @@ async def marriedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         lines.append(
             f"{medals[i]} <b>{c['name1']}</b> + <b>{c['name2']}</b>"
             f"  →  {ship_nm} oilasi\n"
-            f"   📅 {c['date']}"
+            f"   📅 {c['date']} · ⏳ {_days_text(c['date'])}"
         )
     lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("💡 /marry bilan yangi nikoh!")
@@ -2068,6 +2143,8 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("mywife",       mywife_cmd))
     app.add_handler(CommandHandler("myhusband",    myhusband_cmd))
     app.add_handler(CommandHandler("setup",        setup_cmd))
+    import shipplus
+    shipplus.register(app)
     app.add_handler(CallbackQueryHandler(jins_button_cb, pattern=r"^jins:"))
     app.add_handler(CallbackQueryHandler(proposal_callback, pattern=r"^proposal:"))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member), group=1)
