@@ -200,45 +200,49 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await _send_long(msg, reply)
 
-_STUDY_CARD = {
-    "uz": (
-        "📚 <b>Dars yordamchisi</b>",
+_STUDY_SECTION_T = {
+    "uz": ("📚 <b>Dars yordamchisi</b>", "Nimada yordam kerak? Tanlang:"),
+    "ru": ("📚 <b>Помощник по учёбе</b>", "С чем помочь? Выберите:"),
+    "en": ("📚 <b>Study helper</b>", "What do you need help with? Pick one:"),
+}
+
+# element -> (emoji, (uz, ru, en) nom, (uz, ru, en) matn) — extras._ITEMS bilan bir xil shakl
+_STUDY_ITEMS = {
+    "solve": ("🧮", ("Masala yechish", "Решение задач", "Solve a problem"), (
         "Istalgan fandan savol yoki masalani yuboring — to'liq, qadam-baqadam "
         "yechib beraman.\n\n"
-        "• <code>/dars 2x + 5 = 17 tenglamani yech</code>\n"
-        "• Masala yozilgan rasmga <b>reply</b> qilib <code>/dars</code> deb yozing\n"
-        "• Yoki rasmni shunchaki yuboring — chiqqan tugmalardan "
-        "<b>🧮 Masalani yech</b> ni bosing\n"
-        "• PDF, .txt yoki rasm-fayl yuboring — mazmunini qisqacha aytib "
-        "beraman yoki savolingizga javob beraman\n\n"
+        "/dars 2x + 5 = 17 tenglamani yech\n"
+        "Masala yozilgan rasmga reply qilib /dars deb yozing\n"
+        "Yoki rasmni shunchaki yuboring — tugmalardan 🧮 Masalani yech ni bosing\n\n"
         "Matematika, fizika, kimyo, biologiya, tarix, adabiyot, grammatika — "
-        "qaysi fan bo'lishidan qat'i nazar ishlaydi.",
-    ),
-    "ru": (
-        "📚 <b>Помощник по учёбе</b>",
+        "fan farqi yo'q.",
         "Отправьте вопрос или задачу по любому предмету — решу полностью, "
         "по шагам.\n\n"
-        "• <code>/dars 2x + 5 = 17 реши уравнение</code>\n"
-        "• Ответьте (<b>reply</b>) на фото с задачей командой <code>/dars</code>\n"
-        "• Или просто отправьте фото — в меню нажмите "
-        "<b>🧮 Решить задачу</b>\n"
-        "• Отправьте PDF, .txt или фото-файл — перескажу суть или отвечу "
-        "на ваш вопрос по нему\n\n"
+        "/dars 2x + 5 = 17 реши уравнение\n"
+        "Ответьте (reply) на фото с задачей командой /dars\n"
+        "Или просто отправьте фото — в меню нажмите 🧮 Решить задачу\n\n"
         "Математика, физика, химия, биология, история, литература, "
-        "грамматика — работает с любым предметом.",
-    ),
-    "en": (
-        "📚 <b>Study helper</b>",
+        "грамматика — любой предмет.",
         "Send a question or problem from any subject — I'll solve it fully, "
         "step by step.\n\n"
-        "• <code>/dars solve 2x + 5 = 17</code>\n"
-        "• Reply to a photo of the problem with <code>/dars</code>\n"
-        "• Or just send the photo — tap <b>🧮 Solve the problem</b> in the menu\n"
-        "• Send a PDF, .txt or image file — I'll summarize it or answer your "
-        "question about it\n\n"
+        "/dars solve 2x + 5 = 17\n"
+        "Reply to a photo of the problem with /dars\n"
+        "Or just send the photo and tap 🧮 Solve the problem in the menu\n\n"
         "Math, physics, chemistry, biology, history, literature, grammar — "
-        "works for any subject.",
-    ),
+        "any subject.")),
+    "doc": ("📄", ("Hujjat / PDF", "Документ / PDF", "Document / PDF"), (
+        "PDF, .txt yoki rasm-fayl yuboring — mazmunini qisqacha aytib "
+        "beraman yoki fayl tagiga savolingizni yozsangiz, shunga javob beraman.\n\n"
+        "Masalan: darslik bobini yuboring va \"asosiy fikrlarni sanab ber\" "
+        "deb yozing, yoki insho/referatingizni tekshirtiring.",
+        "Отправьте PDF, .txt или фото-файл — перескажу суть или отвечу на "
+        "ваш вопрос под файлом.\n\n"
+        "Например: отправьте главу учебника и напишите \"перечисли главные "
+        "мысли\", или дайте проверить своё эссе.",
+        "Send a PDF, .txt or image file — I'll summarize it or answer a "
+        "question you add as the caption.\n\n"
+        "Example: send a textbook chapter and ask \"list the main points\", "
+        "or have an essay checked.")),
 }
 
 _CHUNK_LIMIT = 3500
@@ -340,19 +344,46 @@ async def cmd_dars(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # 🏠 /start menyusiga "Dars" tugmasi (extras._start_kb ni kichik patch qiladi)
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _study_section_kb(lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = extras.icon_btn if premium else extras.plain_btn
+    li = extras._LI.get(lang, 0)
+    btns = [mk(_STUDY_ITEMS[k][1][li], _STUDY_ITEMS[k][0], callback_data=f"study:i:{k}") for k in _STUDY_ITEMS]
+    return InlineKeyboardMarkup([btns, [mk(extras.tr(lang, "back"), "⬅️", callback_data="st:home")]])
+
+
+def _study_item_text(key: str, lang: str) -> str:
+    emoji, names, bodies = _STUDY_ITEMS[key]
+    li = extras._LI.get(lang, 0)
+    return f"{emoji} <b>{names[li]}</b>\n\n<blockquote>{bodies[li]}</blockquote>"
+
+
+def _study_item_kb(lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = extras.icon_btn if premium else extras.plain_btn
+    return InlineKeyboardMarkup([[
+        mk(extras.tr(lang, "back"), "⬅️", callback_data="study:home"),
+        mk(extras.tr(lang, "home"), "🏠", callback_data="st:home"),
+    ]])
+
+
 async def study_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     user = query.from_user
     lang = extras._get_lang(user.id) if user else "uz"
-    title, body = _STUDY_CARD.get(lang, _STUDY_CARD["uz"])
-    text = f"{title}\n{body}"
+    title, pick = _STUDY_SECTION_T.get(lang, _STUDY_SECTION_T["uz"])
+    await extras.edit_html(query, f"{title}\n{pick}", lambda prem: _study_section_kb(lang, prem))
 
-    def _kb(premium: bool) -> InlineKeyboardMarkup:
-        mk = extras.icon_btn if premium else extras.plain_btn
-        return InlineKeyboardMarkup([[mk(extras.tr(lang, "back"), "⬅️", callback_data="st:home")]])
 
-    await extras.edit_html(query, text, _kb)
+async def study_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    parts = (query.data or "").split(":")
+    if len(parts) != 3 or parts[1] != "i" or parts[2] not in _STUDY_ITEMS:
+        return
+    user = query.from_user
+    lang = extras._get_lang(user.id) if user else "uz"
+    key = parts[2]
+    await extras.edit_html(query, _study_item_text(key, lang), lambda prem: _study_item_kb(lang, prem))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -433,7 +464,7 @@ def _install_patches() -> None:
     def _start_kb_with_study(chat_id, bot_username, premium, lang="uz") -> InlineKeyboardMarkup:
         kb = _orig_start_kb(chat_id, bot_username, premium, lang)
         mk = extras.icon_btn if premium else extras.plain_btn
-        title = {"uz": "Dars", "ru": "Учёба", "en": "Study"}.get(lang, "Dars")
+        title = {"uz": "Dars ✨", "ru": "Учёба ✨", "en": "Study ✨"}.get(lang, "Dars ✨")
         study_row = [mk(title, "📚", callback_data="study:home")]
 
         rows = list(kb.inline_keyboard)
@@ -451,6 +482,7 @@ def _install_patches() -> None:
 def register(app: Application) -> None:
     app.add_handler(CommandHandler(["dars", "study", "masala"], cmd_dars), group=0)
     app.add_handler(CallbackQueryHandler(study_home_callback, pattern=r"^study:home$"), group=0)
+    app.add_handler(CallbackQueryHandler(study_item_callback, pattern=r"^study:i:"), group=0)
     app.add_handler(CallbackQueryHandler(study_photo_callback, pattern=r"^study:ph:"), group=0)
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=0)
     _install_patches()
