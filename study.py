@@ -27,7 +27,14 @@ import logging
 
 from telegram import InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 import admin_store
 import ai_core
@@ -94,8 +101,104 @@ USAGE = (
     "• <code>/dars 2x + 5 = 17 tenglamani yech</code>\n"
     "• Masala yozilgan rasmga <b>reply</b> qilib <code>/dars</code> deb yozing\n"
     "• Yoki rasmni shunchaki yuboring — chiqqan tugmalardan "
-    "<b>🧮 Masalani yech</b> ni bosing"
+    "<b>🧮 Masalani yech</b> ni bosing\n\n"
+    "📄 PDF, .txt yoki rasm-fayl yuboring — mazmunini qisqacha aytib beraman "
+    "yoki tagiga savolingizni yozsangiz, shunga javob beraman."
 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 📄 Hujjat/PDF o'qish — fayl yoki rasm-fayl yuborilsa, mazmunini ochib beradi
+# ═══════════════════════════════════════════════════════════════════════════
+
+DOC_SYSTEM = """[REJIM: HUJJAT TAHLILI] Bu ko'rsatma yuqoridagi barcha uslub
+(ko'cha gapi, kesatish, qisqalik, STICKER/REACT va XOTIRA teglari) ko'rsatmalaridan
+USTUN. Foydalanuvchi senga fayl (hujjat) yubordi — sen uni to'liq o'qib chiqqan
+professional yordamchisan.
+
+Vazifa:
+- Foydalanuvchi savol/topshiriq yozmagan bo'lsa — hujjatning qisqacha
+  mazmunini ber: nima haqida, asosiy 3-5 fikr, xulosa.
+- Savol yoki topshiriq yozgan bo'lsa — aynan o'shaga, hujjat matniga
+  asoslanib to'liq javob ber. Hujjatda yo'q narsani o'ylab topma — agar
+  javob hujjatda topilmasa, shuni ochiq ayt.
+- Kerak bo'lsa hujjatdan qisqa parcha keltirishing mumkin, lekin asosan o'z
+  so'zlaring bilan tushuntir.
+- Javobni hech qachon qisqartirib tashlama — uzun bo'lsa ham to'liq yoz.
+- Hujjat qaysi tilda bo'lsa, foydalanuvchi boshqacha so'ramaguncha o'sha
+  tilda (yoki foydalanuvchi yozgan tilda) javob ber.
+- STICKER, REACT va ⟦MEMORY:...⟧ teglarini ishlatma. Oddiy, samimiy va
+  aniq ohangda yoz — ko'cha uslubisiz.
+"""
+
+_DOC_MAX_BYTES = 20 * 1024 * 1024  # Telegram bot API faylni shuncha yuklaydi
+_DOC_TEXT_LIMIT = 60_000            # .txt faylni shuncha belgigacha o'qiymiz
+
+_SUPPORTED_DOC_MIMES = {"application/pdf", "text/plain"}
+
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    user = update.effective_user
+    chat = update.effective_chat
+    if not msg or not msg.document or not user or not chat:
+        return
+    if not extras._should_answer(update, context.bot.username):
+        return
+    if not extras._gate(update):
+        return
+
+    doc = msg.document
+    mime = (doc.mime_type or "").lower()
+    caption = (msg.caption or "").strip()
+    is_image = mime.startswith("image/")
+
+    if not (mime in _SUPPORTED_DOC_MIMES or is_image):
+        if chat.type == "private":
+            await msg.reply_text(
+                "hozircha faqat PDF, oddiy matn (.txt) va rasm-fayllarni o'qiy olaman."
+            )
+        return
+
+    if doc.file_size and doc.file_size > _DOC_MAX_BYTES:
+        await msg.reply_text("fayl juda katta (20MB dan oshmasin).")
+        return
+
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+
+    try:
+        f = await doc.get_file()
+        data = bytes(await f.download_as_bytearray())
+    except Exception:
+        logger.exception("[dars] hujjatni yuklab bo'lmadi")
+        await msg.reply_text("faylni ocholmadim, qaytadan yubor.")
+        return
+
+    prompt = caption or "Bu hujjatning qisqacha mazmunini ber va asosiy fikrlarni sanab o't."
+
+    try:
+        if mime == "text/plain":
+            text = data.decode("utf-8", errors="ignore")[:_DOC_TEXT_LIMIT]
+            full_prompt = f"{prompt}\n\n--- HUJJAT MATNI ---\n{text}"
+            reply = await asyncio.to_thread(
+                ai_core.get_ai_reply, str(user.id), full_prompt,
+                name=user.first_name, source="telegram", extra_system=DOC_SYSTEM,
+            )
+        else:  # PDF yoki rasm-fayl — Gemini'ga to'g'ridan-to'g'ri (vision)
+            reply = await asyncio.to_thread(
+                ai_core.get_ai_reply, str(user.id), prompt,
+                image_bytes=data, image_mime=mime or "application/pdf",
+                name=user.first_name, source="telegram", extra_system=DOC_SYSTEM,
+            )
+    except Exception:
+        logger.exception("[dars] hujjatni tahlil qilib bo'lmadi")
+        await msg.reply_text("faylni o'qiy olmadim, keyinroq qayta ur.")
+        return
+
+    if not reply or reply == "...":
+        reply = "bu fayldan hech narsa chiqmadi — boshqasini yubor yoki savolingni aniqroq yoz."
+
+    await _send_long(msg, reply)
 
 _STUDY_CARD = {
     "uz": (
@@ -105,7 +208,9 @@ _STUDY_CARD = {
         "• <code>/dars 2x + 5 = 17 tenglamani yech</code>\n"
         "• Masala yozilgan rasmga <b>reply</b> qilib <code>/dars</code> deb yozing\n"
         "• Yoki rasmni shunchaki yuboring — chiqqan tugmalardan "
-        "<b>🧮 Masalani yech</b> ni bosing\n\n"
+        "<b>🧮 Masalani yech</b> ni bosing\n"
+        "• PDF, .txt yoki rasm-fayl yuboring — mazmunini qisqacha aytib "
+        "beraman yoki savolingizga javob beraman\n\n"
         "Matematika, fizika, kimyo, biologiya, tarix, adabiyot, grammatika — "
         "qaysi fan bo'lishidan qat'i nazar ishlaydi.",
     ),
@@ -116,7 +221,9 @@ _STUDY_CARD = {
         "• <code>/dars 2x + 5 = 17 реши уравнение</code>\n"
         "• Ответьте (<b>reply</b>) на фото с задачей командой <code>/dars</code>\n"
         "• Или просто отправьте фото — в меню нажмите "
-        "<b>🧮 Решить задачу</b>\n\n"
+        "<b>🧮 Решить задачу</b>\n"
+        "• Отправьте PDF, .txt или фото-файл — перескажу суть или отвечу "
+        "на ваш вопрос по нему\n\n"
         "Математика, физика, химия, биология, история, литература, "
         "грамматика — работает с любым предметом.",
     ),
@@ -126,7 +233,9 @@ _STUDY_CARD = {
         "step by step.\n\n"
         "• <code>/dars solve 2x + 5 = 17</code>\n"
         "• Reply to a photo of the problem with <code>/dars</code>\n"
-        "• Or just send the photo — tap <b>🧮 Solve the problem</b> in the menu\n\n"
+        "• Or just send the photo — tap <b>🧮 Solve the problem</b> in the menu\n"
+        "• Send a PDF, .txt or image file — I'll summarize it or answer your "
+        "question about it\n\n"
         "Math, physics, chemistry, biology, history, literature, grammar — "
         "works for any subject.",
     ),
@@ -343,4 +452,5 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler(["dars", "study", "masala"], cmd_dars), group=0)
     app.add_handler(CallbackQueryHandler(study_home_callback, pattern=r"^study:home$"), group=0)
     app.add_handler(CallbackQueryHandler(study_photo_callback, pattern=r"^study:ph:"), group=0)
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=0)
     _install_patches()
