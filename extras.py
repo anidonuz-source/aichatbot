@@ -529,9 +529,9 @@ _ITEMS = {
         "/stats · /who · /activity · /members — статистика группы и участники",
         "/stats · /who · /activity · /members — group stats and members")),
     "sticker": ("🌟", ("Stikerlar", "Стикеры", "Stickers"), (
-        "/stiker — stikerni turkumga qo'shish\n/stikerlar — turkumlar ro'yxati",
-        "/stiker — добавить стикер в категорию\n/stikerlar — список категорий",
-        "/stiker — add a sticker to a category\n/stikerlar — list categories")),
+        "/stikeryasa — rasmdan yoki tavsifdan stiker yasash (fonsiz, WEBP)\n/stikerpaket — shaxsiy paketing\n/stiker — stikerni turkumga qo'shish\n/stikerlar — turkumlar ro'yxati",
+        "/stikeryasa — стикер из фото или описания (без фона, WEBP)\n/stikerpaket — твой пак\n/stiker — добавить стикер в категорию\n/stikerlar — список категорий",
+        "/stikeryasa — make a sticker from a photo or text (no bg, WEBP)\n/stikerpaket — your pack\n/stiker — add a sticker to a category\n/stikerlar — list categories")),
 }
 _LI = {"uz": 0, "ru": 1, "en": 2}
 
@@ -1230,7 +1230,8 @@ _PHOTO_MODES = {
 def _photo_menu_kb(key: str, premium: bool) -> InlineKeyboardMarkup:
     mk = icon_btn if premium else plain_btn
     items = [mk(label, ch, callback_data=f"ph:{mode}:{key}") for mode, (ch, label, _p, _s) in _PHOTO_MODES.items()]
-    return InlineKeyboardMarkup([items[:2], items[2:]])
+    sticker_btn = mk("Stiker yasash", "🧩", callback_data=f"sk:photo:{key}")
+    return InlineKeyboardMarkup([items[:2], items[2:], [sticker_btn]])
 
 
 async def _analyze(update_or_msg_user, user, photo_bytes: bytes, prompt: str, extra: str) -> str:
@@ -2513,3 +2514,5 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(photo_callback, pattern=r"^ph:"), group=0)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice), group=0)
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo), group=0)
+    import stickermaker
+    stickermaker.register(app)
