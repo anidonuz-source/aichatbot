@@ -43,7 +43,7 @@ from telegram import (
 )
 from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters, ApplicationHandlerStop
 
 import admin_store
 import ai_core
@@ -111,9 +111,17 @@ def _rebuild_re() -> None:
     )
 
 
-def _save_emoji_map() -> None:
-    db.save(_EMOJI_STORE, "map", _emoji_cache or {})
+SAVE_WARN = "\n\n⚠️ Bazaga saqlab bo'lmadi (DATABASE_URL yo'q yoki xato) — bot qayta ishga tushsa yo'qoladi."
+
+
+def _save_emoji_map() -> bool:
     _rebuild_re()
+    try:
+        db.save(_EMOJI_STORE, "map", _emoji_cache or {})
+        return True
+    except Exception:
+        logger.exception("premium emoji xaritasini saqlab bo'lmadi")
+        return False
 
 
 def emoji_id(ch: str) -> str | None:
@@ -279,10 +287,11 @@ async def cmd_addemoji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
         if _add_emoji_id(ch, ent.custom_emoji_id):
             added.append(ch)
-    _save_emoji_map()
+    saved = _save_emoji_map()
     await msg.reply_text(
         f"✅ {len(added)} ta premium emoji o'rgatildi: {' '.join(added) or '(allaqachon bor edi)'}\n"
         "Endi botdagi shu oddiy emojilar o'rniga premium variant chiqadi."
+        + ("" if saved else SAVE_WARN)
     )
 
 
@@ -300,9 +309,10 @@ async def cmd_delemoji(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if ch in _norm(args):
             del _emoji_cache[ch]
             removed += 1
-    if removed:
-        _save_emoji_map()
-    await msg.reply_text(f"🗑 {removed} ta o'chirildi." if removed else "Bunday emoji o'rgatilmagan.")
+    saved = _save_emoji_map() if removed else True
+    await msg.reply_text(
+        (f"🗑 {removed} ta o'chirildi." if removed else "Bunday emoji o'rgatilmagan.") + ("" if saved else SAVE_WARN)
+    )
 
 
 async def cmd_emojis(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -343,14 +353,15 @@ def _start_text(first_name: str | None) -> str:
     name = _esc(first_name) if first_name else "do'st"
     return (
         f"{pe('✨')} <b>Salom, {name}!</b>\n"
-        f"Men <b>{_esc(ai_core.BOT_NAME)}</b>man.\n\n"
-        f"{pe('💬')} Gaplashaman: oddiy yoz, javob beraman\n"
+        f"Men <b>{_esc(ai_core.BOT_NAME)}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman, ovozda gapiraman.\n\n"
+        "<blockquote>"
+        f"{pe('💬')} Oddiy yoz, javob beraman\n"
         f"{pe('🎙')} Ovozli xabar yubor, ovozda javob beraman\n"
-        f"{pe('🖼')} Rasm yubor: tushuntiraman, roast qilaman\n"
-        f"{pe('🎨')} Rasm chizaman: <code>/imagine</code>\n"
-        f"{pe('🎬')} Anime qidiraman: <code>/anime Naruto</code>\n"
-        f"{pe('🎲')} Guruhda o'yinlar: duel, ship, viktorina...\n\n"
-        "<blockquote>Pastdagi tugmalardan boshla, yoki shunchaki yoz.</blockquote>"
+        f"{pe('🖼')} Rasm yubor, tushuntiraman yoki roast qilaman\n"
+        f"{pe('▶️')} YouTube havolasini yubor yoki «... videosini top» de\n"
+        f"{pe('🔗')} Akkauntingni ulasang, AI shaxsiy chatlaringda ham ishlaydi"
+        "</blockquote>\n\n"
+        "Pastdan bo'lim tanla yoki shunchaki yoz:"
     )
 
 
@@ -360,8 +371,16 @@ def _start_kb(chat_id, bot_username: str | None, premium: bool) -> InlineKeyboar
     if WEBAPP_URL:
         rows.append([mk(f"{ai_core.BOT_NAME} ni ochish", "✨", web_app=WebAppInfo(url=WEBAPP_URL))])
     rows.append([
-        mk("Buyruqlar", "📋", callback_data="st:cmds"),
-        mk("Hisob", "👤", callback_data="ub:account"),
+        mk("Akkount ulash", "🔗", callback_data="ub:account"),
+        mk("O'yinlar", "🎮", callback_data="st:p:games"),
+    ])
+    rows.append([
+        mk("Ship va fun", "💞", callback_data="st:p:fun"),
+        mk("YouTube va anime", "▶️", callback_data="st:p:media"),
+    ])
+    rows.append([
+        mk("Rasm va ovoz", "🎨", callback_data="st:p:create"),
+        mk("Foydali", "🛠", callback_data="st:p:tools"),
     ])
     if bot_username:
         rows.append([mk("Guruhga qo'shish", "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
@@ -385,33 +404,47 @@ _CMDS_PAGES = {
     "games": (
         "🎮", "O'yinlar",
         "/duel — birovga (yoki menga) o'yin taklif qilish\n"
+        "/battle — jang\n"
         "/tictactoe — X-O\n"
-        "/quiz (/viktorina) — guruh viktorinasi\n"
+        "/quiz (/viktorina) — viktorina\n"
         "/rps — tosh-qaychi-qog'oz\n"
         "/truth · /dare · /wouldyourather\n"
-        "/reyting — o'yin reytingi",
+        "/reyting — o'yin reytingi\n\n"
+        "O'yinlar guruhda eng qiziq: botni guruhingga qo'sh.",
     ),
     "fun": (
-        "🎲", "Fun",
-        "/ship · /shipleader · /shipfact — juftlik tanlash\n"
-        "/marry · /couple · /soulmate · /crush\n"
-        "/roast · /compliment · /rate\n"
+        "💞", "Ship va fun",
+        "/ship — guruhdan tasodifiy juftlik\n"
+        "/shipleader · /shipfact · /shipmemory\n"
+        "/marry · /couple · /soulmate · /crush · /dating\n"
+        "/love · /exship · /divorced\n"
+        "/roast · /compliment · /rate · /expose\n"
         "/8ball · /horoscope · /lucky · /quote\n"
         "/confession · /ngl · /fakechat",
     ),
+    "media": (
+        "▶️", "YouTube va anime",
+        "/yt nom yoki havola — video topish, havoladan ma'lumot\n"
+        "/ytber nom — YouTuber (kanal) haqida\n"
+        "/anime nom — anime ma'lumoti (nomsiz: tasodifiy)\n\n"
+        "Oddiy yozsang ham bo'ladi: YouTube havolasini tashla yoki "
+        "«MrBeast eng zo'r videolarini top» de.",
+    ),
+    "create": (
+        "🎨", "Rasm va ovoz",
+        "/imagine tavsif — rasm chizish\n"
+        "/ovoz matn — matnni ovozga aylantirish\n"
+        "/ovozsoz — ovoz turini tanlash\n\n"
+        "Ovozli xabar yubor — ovozda javob beraman.\n"
+        "Rasm yubor — tushuntiraman, roast qilaman, anime personajga o'xshatib beraman.",
+    ),
     "tools": (
         "🛠", "Foydali",
-        "/imagine — rasm chizish\n"
-        "/anime — anime qidirish (nomsiz — tasodifiy)\n"
-        "/ovoz — matnni ovozga aylantirish\n"
-        "/ovozsoz — ovoz turini tanlash\n"
-        "Ovozli xabar yubor — ovozda javob beraman\n"
-        "Rasm yubor — tushuntiraman, roast qilaman\n"
         "/translate — tarjima\n"
         "/weather — ob-havo\n"
         "/calc — kalkulyator\n"
         "/remind — eslatma\n"
-        "/stats · /who · /activity — guruh statistikasi\n"
+        "/stats · /who · /activity · /members — guruh statistikasi\n"
         "/stiker — stikerni turkumga qo'shish\n"
         "/reset — xotirani tozalash",
     ),
@@ -429,7 +462,7 @@ def _cmds_kb(page: str, premium: bool) -> InlineKeyboardMarkup:
         mk(t, c, callback_data=f"st:p:{k}") if k != page else InlineKeyboardButton(f"• {t}", callback_data=f"st:p:{k}")
         for k, (c, t, _b) in _CMDS_PAGES.items()
     ]
-    return InlineKeyboardMarkup([tabs, [mk("Orqaga", "⬅️", callback_data="st:home")]])
+    return InlineKeyboardMarkup([tabs[:3], tabs[3:], [mk("Orqaga", "⬅️", callback_data="st:home")]])
 
 
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1332,10 +1365,11 @@ async def cmd_addpack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if _add_emoji_id(st.emoji, st.custom_emoji_id):
             added += 1
         kinds.add(_norm(st.emoji))
-    _save_emoji_map()
+    saved = _save_emoji_map()
     await msg.reply_text(
         f"✅ «{pack.title}» paketidan {added} ta premium emoji qo'shildi ({len(kinds)} xil emoji).\n"
         "Bir emojiga bir nechta variant bo'lsa, bot tasodifiy birini tanlaydi. Ro'yxat: /emojis"
+        + ("\n💾 Bazaga saqlandi, bot qayta ishga tushsa ham yo'qolmaydi." if saved else SAVE_WARN)
     )
 
 
@@ -1514,6 +1548,649 @@ def _install_patches() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ▶️ YOUTUBE: havola tanish, video qidirish, YouTuber (kanal) haqida
+#    Manba tartibi: YouTube Data API (YOUTUBE_API_KEY bo'lsa) -> yt-dlp -> oEmbed (faqat havola)
+# ═══════════════════════════════════════════════════════════════════════════
+
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
+_YT_API = "https://www.googleapis.com/youtube/v3"
+_YT_TTL = 900
+_yt_cache: dict[str, tuple[float, object]] = {}
+_yt_summary: dict[str, str] = {}
+
+_YT_VIDEO_RE = re.compile(
+    r"(?:https?://)?(?:www\.|m\.|music\.)?"
+    r"(?:youtube\.com/(?:watch\?(?:[^\s&]*&)*v=|shorts/|live/|embed/|v/)|youtu\.be/)"
+    r"([A-Za-z0-9_-]{11})",
+    re.I,
+)
+_YT_CHANNEL_RE = re.compile(
+    r"(?:https?://)?(?:www\.|m\.)?youtube\.com/"
+    r"(?:(@[\w.\-]+)|channel/(UC[\w-]{22})|c/([\w.\-]+)|user/([\w.\-]+))",
+    re.I,
+)
+_YT_WORD_RE = re.compile(r"(youtube|yutub|ютуб|\bytb\b|\byt\b|video|klip|treyler|trailer)", re.I)
+_YT_ACTION_RE = re.compile(
+    r"(top\b|topib|qidir|izla|tashla|jo'?nat|yubor|kerak|bormi|\bber\b|ko'?rsat|найди|скинь|find|search|send)", re.I
+)
+_YT_BER_RE = re.compile(r"(ytber|yutuber|youtuber|yutuberni|yutubchi|bloger|blogger|kanali|kanalini)", re.I)
+
+
+def _fmt_num(n) -> str:
+    if n is None:
+        return ""
+    n = int(n)
+    for div, suf in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
+        if n >= div:
+            v = n / div
+            return (f"{v:.1f}".rstrip("0").rstrip(".")) + suf
+    return str(n)
+
+
+def _fmt_dur(sec) -> str:
+    if not sec:
+        return ""
+    sec = int(sec)
+    h, rem = divmod(sec, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def _iso_dur(s: str | None) -> int:
+    m = re.fullmatch(r"P(?:\d+D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", s or "")
+    if not m:
+        return 0
+    h, mi, se = (int(x or 0) for x in m.groups())
+    return h * 3600 + mi * 60 + se
+
+
+def _find_yt_links(text: str) -> list[tuple[str, str]]:
+    found = []
+    for m in _YT_VIDEO_RE.finditer(text):
+        found.append(("video", m.group(1)))
+    for m in _YT_CHANNEL_RE.finditer(text):
+        ref = next(g for g in m.groups() if g)
+        found.append(("channel", ref))
+    return found
+
+
+def _strip_links(text: str) -> str:
+    text = _YT_VIDEO_RE.sub(" ", text)
+    text = _YT_CHANNEL_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", re.sub(r"https?://\S+", " ", text)).strip()
+
+
+# ---------- YouTube Data API ----------
+
+def _api(path: str, **params) -> dict:
+    r = requests.get(f"{_YT_API}/{path}", params={**params, "key": YOUTUBE_API_KEY}, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def _best_thumb(sn: dict) -> str | None:
+    th = sn.get("thumbnails") or {}
+    for k in ("maxres", "standard", "high", "medium", "default"):
+        if k in th:
+            return th[k]["url"]
+    return None
+
+
+def _video_from_api(it: dict) -> dict:
+    sn, st, cd = it.get("snippet", {}), it.get("statistics", {}), it.get("contentDetails", {})
+    return {
+        "id": it["id"], "title": sn.get("title", "?"), "channel": sn.get("channelTitle", ""),
+        "channel_id": sn.get("channelId"),
+        "views": int(st["viewCount"]) if "viewCount" in st else None,
+        "likes": int(st["likeCount"]) if "likeCount" in st else None,
+        "duration": _iso_dur(cd.get("duration")), "published": (sn.get("publishedAt") or "")[:10],
+        "desc": sn.get("description", ""), "thumb": _best_thumb(sn),
+        "live": sn.get("liveBroadcastContent") == "live",
+    }
+
+
+def _api_videos(ids: list[str]) -> list[dict]:
+    if not ids:
+        return []
+    data = _api("videos", part="snippet,statistics,contentDetails", id=",".join(ids))
+    by_id = {it["id"]: _video_from_api(it) for it in data.get("items", [])}
+    return [by_id[i] for i in ids if i in by_id]
+
+
+def _api_search_videos(q: str, n: int = 5) -> list[dict]:
+    data = _api("search", part="snippet", q=q, type="video", maxResults=n, safeSearch="moderate")
+    ids = [it["id"]["videoId"] for it in data.get("items", []) if it.get("id", {}).get("videoId")]
+    return _api_videos(ids)
+
+
+def _channel_from_api(it: dict) -> dict:
+    sn, st = it.get("snippet", {}), it.get("statistics", {})
+    return {
+        "id": it["id"], "title": sn.get("title", "?"), "handle": sn.get("customUrl", ""),
+        "subs": None if st.get("hiddenSubscriberCount") else (int(st["subscriberCount"]) if "subscriberCount" in st else None),
+        "videos": int(st["videoCount"]) if "videoCount" in st else None,
+        "views": int(st["viewCount"]) if "viewCount" in st else None,
+        "since": (sn.get("publishedAt") or "")[:4], "desc": sn.get("description", ""),
+        "thumb": _best_thumb(sn),
+        "uploads": ((it.get("contentDetails") or {}).get("relatedPlaylists") or {}).get("uploads"),
+    }
+
+
+def _api_channel(ref_kind: str, ref: str) -> dict | None:
+    kw = {"part": "snippet,statistics,contentDetails"}
+    if ref_kind == "id":
+        kw["id"] = ref
+    elif ref_kind == "handle":
+        kw["forHandle"] = ref
+    elif ref_kind == "user":
+        kw["forUsername"] = ref
+    data = _api("channels", **kw)
+    items = data.get("items") or []
+    return _channel_from_api(items[0]) if items else None
+
+
+def _api_search_channel(q: str) -> dict | None:
+    data = _api("search", part="snippet", q=q, type="channel", maxResults=1)
+    items = data.get("items") or []
+    if not items:
+        return None
+    return _api_channel("id", items[0]["id"]["channelId"])
+
+
+def _api_latest(uploads: str | None, n: int = 3) -> list[dict]:
+    if not uploads:
+        return []
+    data = _api("playlistItems", part="snippet", playlistId=uploads, maxResults=n)
+    out = []
+    for it in data.get("items", []):
+        sn = it.get("snippet", {})
+        vid = (sn.get("resourceId") or {}).get("videoId")
+        if vid:
+            out.append({"id": vid, "title": sn.get("title", "?")})
+    return out
+
+
+# ---------- yt-dlp zaxira ----------
+
+def _ydl(flat: bool):
+    import yt_dlp
+
+    return yt_dlp.YoutubeDL({
+        "quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True,
+        "socket_timeout": 15, "extract_flat": "in_playlist" if flat else False,
+    })
+
+
+def _video_from_dlp(info: dict) -> dict:
+    ud = info.get("upload_date") or ""
+    thumbs = info.get("thumbnails") or []
+    return {
+        "id": info.get("id"), "title": info.get("title") or "?",
+        "channel": info.get("channel") or info.get("uploader") or "", "channel_id": info.get("channel_id"),
+        "views": info.get("view_count"), "likes": info.get("like_count"),
+        "duration": info.get("duration") or 0,
+        "published": f"{ud[:4]}-{ud[4:6]}-{ud[6:8]}" if len(ud) == 8 else "",
+        "desc": info.get("description") or "",
+        "thumb": info.get("thumbnail") or (thumbs[-1]["url"] if thumbs else None),
+        "live": bool(info.get("is_live")),
+    }
+
+
+def _dlp_video(vid: str) -> dict:
+    with _ydl(False) as y:
+        return _video_from_dlp(y.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False))
+
+
+def _dlp_search(q: str, n: int = 5) -> list[dict]:
+    with _ydl(True) as y:
+        info = y.extract_info(f"ytsearch{n}:{q}", download=False)
+    out = []
+    for e in (info.get("entries") or []):
+        if e and e.get("id"):
+            out.append(_video_from_dlp(e))
+    return out
+
+
+# ---------- oEmbed (faqat havola uchun, kalitsiz) ----------
+
+def _oembed_video(vid: str) -> dict:
+    r = requests.get(
+        "https://www.youtube.com/oembed",
+        params={"url": f"https://www.youtube.com/watch?v={vid}", "format": "json"}, timeout=10,
+    )
+    r.raise_for_status()
+    j = r.json()
+    return {
+        "id": vid, "title": j.get("title", "?"), "channel": j.get("author_name", ""), "channel_id": None,
+        "views": None, "likes": None, "duration": 0, "published": "", "desc": "",
+        "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", "live": False,
+    }
+
+
+# ---------- yuqori daraja (kesh + zaxira zanjiri) ----------
+
+def _cached(key: str):
+    hit = _yt_cache.get(key)
+    return hit[1] if hit and time.time() - hit[0] < _YT_TTL else None
+
+
+def _store(key: str, val):
+    if len(_yt_cache) > 400:
+        _yt_cache.clear()
+    _yt_cache[key] = (time.time(), val)
+    return val
+
+
+async def yt_video(vid: str) -> dict | None:
+    if (c := _cached("v:" + vid)) is not None:
+        return c
+    chain = []
+    if YOUTUBE_API_KEY:
+        chain.append(lambda: (_api_videos([vid]) or [None])[0])
+    chain += [lambda: _dlp_video(vid), lambda: _oembed_video(vid)]
+    for fn in chain:
+        try:
+            v = await asyncio.wait_for(asyncio.to_thread(fn), timeout=25)
+            if v:
+                return _store("v:" + vid, v)
+        except Exception as e:
+            logger.warning("yt_video manba xato: %s", e)
+    return None
+
+
+async def yt_search(q: str, n: int = 5) -> list[dict]:
+    key = f"s:{n}:{q.lower()}"
+    if (c := _cached(key)) is not None:
+        return c
+    chain = []
+    if YOUTUBE_API_KEY:
+        chain.append(lambda: _api_search_videos(q, n))
+    chain.append(lambda: _dlp_search(q, n))
+    for fn in chain:
+        try:
+            res = await asyncio.wait_for(asyncio.to_thread(fn), timeout=30)
+            if res:
+                return _store(key, res)
+        except Exception as e:
+            logger.warning("yt_search manba xato: %s", e)
+    return []
+
+
+async def yt_channel(kind: str, ref: str) -> dict | None:
+    """kind: id | handle | user | name"""
+    key = f"c:{kind}:{ref.lower()}"
+    if (c := _cached(key)) is not None:
+        return c
+    ch = None
+    if YOUTUBE_API_KEY:
+        try:
+            if kind == "name":
+                ch = await asyncio.to_thread(_api_search_channel, ref)
+            else:
+                ch = await asyncio.to_thread(_api_channel, kind, ref)
+            if ch:
+                ch["latest"] = await asyncio.to_thread(_api_latest, ch.get("uploads"))
+        except Exception as e:
+            logger.warning("yt_channel API xato: %s", e)
+    if not ch:
+        # kalitsiz zaxira: qidiruvdagi eng mos videoning kanali (sodda karta)
+        q = ref.lstrip("@")
+        vids = await yt_search(q, 5)
+        if vids:
+            low = q.lower()
+            pick = next((v for v in vids if low in (v["channel"] or "").lower()), vids[0])
+            mine = [v for v in vids if v["channel_id"] and v["channel_id"] == pick["channel_id"]] or [pick]
+            ch = {
+                "id": pick.get("channel_id"), "title": pick["channel"] or q, "handle": "", "subs": None,
+                "videos": None, "views": None, "since": "", "desc": "", "thumb": pick.get("thumb"),
+                "latest": [{"id": v["id"], "title": v["title"]} for v in mine[:3]], "minimal": True,
+            }
+    return _store(key, ch) if ch else None
+
+
+async def _uz_summary(key: str, text: str, what: str) -> str:
+    if key in _yt_summary:
+        return _yt_summary[key]
+    text = (text or "").strip()
+    if len(text) < 40:
+        return ""
+    out = await asyncio.to_thread(
+        _ai_oneshot,
+        f"Sen yordamchisan. Berilgan {what} tavsifidan o'zbek tilida (lotin) 1-2 gapda nima haqida ekanini yoz. "
+        "Havolalar, reklama, ijtimoiy tarmoq manzillari va hashtaglarni tashlab ket. Faqat xulosani yoz.",
+        text[:900], "",
+    )
+    _yt_summary[key] = out[:300]
+    return _yt_summary[key]
+
+
+# ---------- kartalar ----------
+
+def _video_caption(v: dict, summary: str) -> str:
+    lines = [f"{pe('▶️')} <b>{_esc(v['title'])}</b>"]
+    if v.get("channel"):
+        lines.append(f"{pe('📺')} {_esc(v['channel'])}")
+    facts = []
+    if v.get("live"):
+        facts.append("🔴 jonli efir")
+    if v.get("views") is not None:
+        facts.append(f"{pe('👁')} {_fmt_num(v['views'])}")
+    if v.get("likes") is not None:
+        facts.append(f"{pe('👍')} {_fmt_num(v['likes'])}")
+    if v.get("duration"):
+        facts.append(f"{pe('⏱')} {_fmt_dur(v['duration'])}")
+    if v.get("published"):
+        facts.append(f"{pe('📅')} {v['published']}")
+    if facts:
+        lines.append(" · ".join(facts))
+    head = "\n".join(lines)
+    if summary:
+        room = 1000 - len(head) - 40
+        if room > 60:
+            body = _esc(summary)
+            if len(body) > room:
+                body = body[: room - 1].rsplit(" ", 1)[0] + "…"
+            head += f"\n\n<blockquote>{body}</blockquote>"
+    return head[:1020]
+
+
+def _video_kb(v: dict, others: list[dict] | None, premium: bool) -> InlineKeyboardMarkup:
+    mk = icon_btn if premium else plain_btn
+    rows = [[mk("YouTube'da ochish", "▶️", url=f"https://youtu.be/{v['id']}")]]
+    if v.get("channel_id"):
+        rows[0].append(mk("Kanal", "📺", callback_data=f"yt:ch:{v['channel_id']}"))
+    for o in (others or [])[:4]:
+        label = f"{o['title'][:34]} · {_fmt_dur(o.get('duration'))}" if o.get("duration") else o["title"][:44]
+        rows.append([InlineKeyboardButton(label, callback_data=f"yt:v:{o['id']}")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_card(message, img: str | None, caption: str, kb_factory) -> None:
+    attempts = (True, False) if _emoji_map() else (False,)
+    last: Exception | None = None
+    for premium in attempts:
+        cap = caption if premium else strip_premium(caption)
+        kb = kb_factory(premium)
+        try:
+            if img:
+                try:
+                    await message.reply_photo(photo=img, caption=cap, parse_mode="HTML", reply_markup=kb)
+                    return
+                except BadRequest as e:
+                    if "emoji" in str(e).lower() or "entit" in str(e).lower() or "parse" in str(e).lower():
+                        raise
+                    logger.warning("rasm yuborilmadi (%s) — matn bilan", e)
+            await message.reply_text(cap, parse_mode="HTML", reply_markup=kb)
+            return
+        except BadRequest as e:
+            last = e
+    if last:
+        raise last
+
+
+async def send_video_card(message, v: dict, others: list[dict] | None = None) -> None:
+    summary = await _uz_summary("v:" + str(v["id"]), v.get("desc", ""), "video")
+    await _send_card(message, v.get("thumb"), _video_caption(v, summary), lambda p: _video_kb(v, others, p))
+
+
+def _channel_caption(c: dict, summary: str) -> str:
+    lines = [f"{pe('📺')} <b>{_esc(c['title'])}</b>"]
+    if c.get("handle"):
+        lines.append(_esc(c["handle"]))
+    facts = []
+    if c.get("subs") is not None:
+        facts.append(f"{pe('👥')} {_fmt_num(c['subs'])} obunachi")
+    if c.get("videos") is not None:
+        facts.append(f"{pe('🎞')} {_fmt_num(c['videos'])} video")
+    if c.get("views") is not None:
+        facts.append(f"{pe('👁')} {_fmt_num(c['views'])}")
+    if c.get("since"):
+        facts.append(f"{pe('📅')} {c['since']}-yildan")
+    if facts:
+        lines.append(" · ".join(facts))
+    head = "\n".join(lines)
+    if summary:
+        room = 1000 - len(head) - 40
+        if room > 60:
+            body = _esc(summary)
+            if len(body) > room:
+                body = body[: room - 1].rsplit(" ", 1)[0] + "…"
+            head += f"\n\n<blockquote>{body}</blockquote>"
+    if c.get("minimal"):
+        head += "\n\n<i>To'liq ma'lumot uchun admin YOUTUBE_API_KEY qo'shishi kerak.</i>"
+    return head[:1020]
+
+
+def _channel_kb(c: dict, premium: bool) -> InlineKeyboardMarkup:
+    mk = icon_btn if premium else plain_btn
+    url = f"https://www.youtube.com/channel/{c['id']}" if c.get("id") else None
+    rows = [[mk("Kanalni ochish", "📺", url=url)]] if url else []
+    for v in (c.get("latest") or [])[:3]:
+        rows.append([InlineKeyboardButton(v["title"][:44], callback_data=f"yt:v:{v['id']}")])
+    return InlineKeyboardMarkup(rows) if rows else InlineKeyboardMarkup([[]])
+
+
+async def send_channel_card(message, c: dict) -> None:
+    summary = await _uz_summary("c:" + str(c.get("id")), c.get("desc", ""), "kanal")
+    await _send_card(message, c.get("thumb"), _channel_caption(c, summary), lambda p: _channel_kb(c, p))
+
+
+# ---------- ishlovchilar ----------
+
+_YT_FAIL = (
+    "YouTube hozir javob bermayapti. Birozdan keyin ur.\n"
+    "(Admin uchun: Render'ga YOUTUBE_API_KEY qo'shilsa, bu ancha barqaror ishlaydi.)"
+)
+
+
+async def _yt_video_or_search(message, query_or_id: str, is_id: bool) -> None:
+    if is_id:
+        v = await yt_video(query_or_id)
+        if not v:
+            await message.reply_text(_YT_FAIL)
+            return
+        await send_video_card(message, v)
+        return
+    res = await yt_search(query_or_id, 5)
+    if not res:
+        await message.reply_text("bunaqa video topilmadi, boshqacha yozib ko'r.")
+        return
+    first = res[0]
+    if not first.get("desc") and first.get("id"):               # yengil (flat) natija — to'liqini olishga urinamiz
+        full = await yt_video(first["id"])
+        if full:
+            first = full
+    await send_video_card(message, first, res[1:5])
+
+
+async def _yt_channel_ref(message, kind: str, ref: str) -> None:
+    c = await yt_channel(kind, ref)
+    if not c:
+        await message.reply_text("kanal topilmadi. nomini aniqroq yoz yoki havolasini yubor.")
+        return
+    await send_channel_card(message, c)
+
+
+def _channel_ref_from_link(ref: str) -> tuple[str, str]:
+    if ref.startswith("@"):
+        return "handle", ref
+    if ref.startswith("UC") and len(ref) == 24:
+        return "id", ref
+    return "name", ref                                         # /c/nom va /user/nom — nom bo'yicha qidiramiz
+
+
+async def cmd_yt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    chat = update.effective_chat
+    if not msg or not chat or admin_store.is_blocked(chat.id):
+        return
+    arg = " ".join(context.args).strip() if context.args else ""
+    if not arg and msg.reply_to_message:
+        arg = (msg.reply_to_message.text or "").strip()
+    if not arg:
+        await msg.reply_text("Nom yoki havola yoz:\n/yt MrBeast eng zo'r videolari\n/yt https://youtu.be/...\n\nYouTuber haqida: /ytber nomi")
+        return
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    try:
+        links = _find_yt_links(arg)
+        if links:
+            kind, ref = links[0]
+            if kind == "video":
+                await _yt_video_or_search(msg, ref, True)
+            else:
+                await _yt_channel_ref(msg, *_channel_ref_from_link(ref))
+        else:
+            await _yt_video_or_search(msg, arg[:100], False)
+    except Exception:
+        logger.exception("/yt xato")
+        await msg.reply_text(_YT_FAIL)
+
+
+async def cmd_ytber(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    chat = update.effective_chat
+    if not msg or not chat or admin_store.is_blocked(chat.id):
+        return
+    arg = " ".join(context.args).strip() if context.args else ""
+    if not arg:
+        await msg.reply_text("YouTuber nomini yoz:\n/ytber MrBeast\n/ytber @handle")
+        return
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    try:
+        links = _find_yt_links(arg)
+        if links and links[0][0] == "channel":
+            await _yt_channel_ref(msg, *_channel_ref_from_link(links[0][1]))
+        elif arg.startswith("@") and " " not in arg:
+            await _yt_channel_ref(msg, "handle", arg)
+        else:
+            await _yt_channel_ref(msg, "name", arg[:80])
+    except Exception:
+        logger.exception("/ytber xato")
+        await msg.reply_text(_YT_FAIL)
+
+
+async def yt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data or ""
+    chat = query.message.chat if query.message else None
+    if not chat or admin_store.is_blocked(chat.id):
+        await query.answer()
+        return
+    await query.answer()
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    try:
+        if data.startswith("yt:v:"):
+            await _yt_video_or_search(query.message, data[5:], True)
+        elif data.startswith("yt:ch:"):
+            await _yt_channel_ref(query.message, "id", data[6:])
+    except Exception:
+        logger.exception("yt callback xato")
+        await query.message.reply_text(_YT_FAIL)
+
+
+def _addressed_text(update: Update, bot_username: str | None) -> bool:
+    chat, msg = update.effective_chat, update.effective_message
+    if not chat or not msg:
+        return False
+    if chat.type == "private":
+        return True
+    r = msg.reply_to_message
+    if r and r.from_user and r.from_user.is_bot and bot_username and r.from_user.username == bot_username:
+        return True
+    low = (msg.text or "").lower()
+    return "misumi" in low or bool(bot_username and f"@{bot_username.lower()}" in low)
+
+
+_INTENT_SYSTEM = (
+    "Foydalanuvchi xabaridan YouTube qidiruv niyatini aniqla. Faqat JSON qaytar, boshqa hech narsa yozma: "
+    '{"intent":"video|channel|none","query":"..."}. '
+    "video — biror video, klip, qo'shiq, treyler yoki darslik topib berish so'ralsa. "
+    "channel — YouTuber yoki kanalni topish yoki tanishtirish so'ralsa. "
+    "Boshqa hamma holatda none. query — YouTube'da qidiriladigan eng yaxshi qisqa so'rov (xabar tilida, "
+    "'top', 'ber', 'video' kabi ortiqcha so'zlarsiz, lekin kerak bo'lsa 'video' yoki 'trailer' qolsin)."
+)
+
+
+def _classify_sync(text: str) -> tuple[str, str]:
+    import json
+
+    raw = _ai_oneshot(_INTENT_SYSTEM, text[:400], "")
+    m = re.search(r"\{.*\}", raw, re.S)
+    if not m:
+        return "none", ""
+    try:
+        d = json.loads(m.group(0))
+    except Exception:
+        return "none", ""
+    intent = d.get("intent") if d.get("intent") in ("video", "channel") else "none"
+    return intent, str(d.get("query") or "").strip()[:100]
+
+
+async def handle_text_youtube(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """group=-1: YouTube havolasi yoki 'video top' kabi so'rov bo'lsa o'zi hal qiladi, aks holda
+    oddiy suhbatga yo'l beradi (ApplicationHandlerStop faqat hal qilganda)."""
+    msg, user, chat = update.effective_message, update.effective_user, update.effective_chat
+    text = (msg.text or "").strip() if msg else ""
+    if not text or not user or not chat:
+        return
+    links = _find_yt_links(text)
+    intent_hit = bool((_YT_WORD_RE.search(text) and _YT_ACTION_RE.search(text)) or _YT_BER_RE.search(text))
+    if not links and not intent_hit:
+        return
+    if not _addressed_text(update, context.bot.username):
+        return
+    if admin_store.is_blocked(chat.id) or (admin_store.is_maintenance() and not _is_admin(user.id)):
+        return
+
+    if links:
+        if not ai_core.check_rate_limit(chat.id, user.id):
+            return
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+        kind, ref = links[0]
+        try:
+            if kind == "video":
+                await _yt_video_or_search(msg, ref, True)
+            else:
+                await _yt_channel_ref(msg, *_channel_ref_from_link(ref))
+        except Exception:
+            logger.exception("YouTube havola xato")
+            await msg.reply_text(_YT_FAIL)
+        # havola yonida savol ham bo'lsa (shaxsiy chatda) — AI ham javob beradi
+        rest = _strip_links(text)
+        if chat.type == "private" and len(rest) >= 12 and kind == "video":
+            v = await yt_video(ref)
+            if v:
+                ctx_line = f"[YouTube video: «{v['title']}» — {v['channel']}. Tavsif: {v['desc'][:400]}] "
+                try:
+                    reply = await asyncio.to_thread(
+                        ai_core.get_ai_reply, str(user.id), ctx_line + rest,
+                        name=user.first_name, source="telegram",
+                    )
+                    if reply and reply != "...":
+                        await send_ai_reply(update, reply)
+                except Exception:
+                    logger.exception("havola bo'yicha AI javobi xato")
+        raise ApplicationHandlerStop
+
+    # So'rov turi aniq emas — AI dan so'raymiz (rate limit sarflanmaydi; none bo'lsa suhbatga o'tadi)
+    intent, q = await asyncio.to_thread(_classify_sync, text)
+    if intent == "none" or not q:
+        return
+    if not ai_core.check_rate_limit(chat.id, user.id):
+        raise ApplicationHandlerStop
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    try:
+        if intent == "channel":
+            await _yt_channel_ref(msg, "handle" if q.startswith("@") and " " not in q else "name", q)
+        else:
+            await _yt_video_or_search(msg, q, False)
+    except Exception:
+        logger.exception("YouTube qidiruv xato")
+        await msg.reply_text(_YT_FAIL)
+    raise ApplicationHandlerStop
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Ro'yxatdan o'tkazish
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1532,6 +2209,11 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(imagine_callback, pattern=r"^img:"), group=0)
     app.add_handler(CallbackQueryHandler(tts_callback, pattern=r"^tts:"), group=0)
     app.add_handler(CommandHandler("anime", cmd_anime), group=0)
+    app.add_handler(CommandHandler(["yt", "youtube"], cmd_yt), group=0)
+    app.add_handler(CommandHandler(["ytber", "kanal"], cmd_ytber), group=0)
+    app.add_handler(CallbackQueryHandler(yt_callback, pattern=r"^yt:"), group=0)
+    # group=-1: YouTube havola/so'rovlarini oddiy suhbatdan OLDIN ushlaydi (hal qilmasa — o'tkazib yuboradi)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_youtube), group=-1)
     app.add_handler(CallbackQueryHandler(anime_callback, pattern=r"^an:"), group=0)
     app.add_handler(CallbackQueryHandler(photo_callback, pattern=r"^ph:"), group=0)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice), group=0)
