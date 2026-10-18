@@ -740,8 +740,9 @@ async def account_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await edit_html(query, f"{pe('🔊')} {tr(lang, 'voice_title')}",
                         lambda prem: _voice_kb(_get_voice_key(user.id), lang, prem))
     elif len(parts) == 3 and parts[1] == "setvoice" and parts[2] in VOICES:
-        _set_voice_key(user.id, parts[2])
-        await query.answer("✅")
+        saved = _set_voice_key(user.id, parts[2])
+        await query.answer("✅" if saved else
+                           "tanlandi, lekin baza ulanmagan — qayta ishga tushsa eskisiga qaytadi", show_alert=not saved)
         await edit_html(query, f"{pe('🔊')} {tr(lang, 'voice_title')}",
                         lambda prem: _voice_kb(parts[2], lang, prem))
     elif data == "ac:clear":
@@ -925,9 +926,12 @@ async def imagine_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 VOICES = {
     "uz_f": ("uz-UZ-MadinaNeural", "🇺🇿 Madina (ayol)"),
     "uz_m": ("uz-UZ-SardorNeural", "🇺🇿 Sardor (erkak)"),
-    "ru": ("ru-RU-SvetlanaNeural", "🇷🇺 Svetlana"),
-    "en": ("en-US-AriaNeural", "🇺🇸 Aria"),
+    "ru": ("ru-RU-SvetlanaNeural", "🇷🇺 Svetlana (ayol)"),
+    "ru_m": ("ru-RU-DmitryNeural", "🇷🇺 Dmitriy (erkak)"),
+    "en": ("en-US-AriaNeural", "🇺🇸 Aria (ayol)"),
+    "en_m": ("en-US-GuyNeural", "🇺🇸 Guy (erkak)"),
 }
+_voice_mem: dict[int, str] = {}          # RAM: baza ishlamasa ham joriy sessiyada tanlov yo'qolmaydi
 _TTS_STORE = "tts_voice"
 _tts_last: dict[int, float] = {}
 TTS_COOLDOWN = 5
@@ -946,21 +950,55 @@ def _clean_for_tts(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _voice_file():
+    from pathlib import Path
+    d = Path(os.environ.get("MEMORY_DIR", "memory"))
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "_tts_voices.json"
+
+
 def _get_voice_key(user_id: int) -> str:
+    k = _voice_mem.get(user_id)
+    if k in VOICES:
+        return k
     try:
         k = db.load(_TTS_STORE, str(user_id), None)
     except Exception:
         k = None
+    if k not in VOICES:
+        try:
+            import json
+            k = json.loads(_voice_file().read_text(encoding="utf-8")).get(str(user_id))
+        except Exception:
+            k = None
     if k in VOICES:
+        _voice_mem[user_id] = k
         return k
     return {"ru": "ru", "en": "en"}.get(_get_lang(user_id), "uz_f")     # tanlanmagan bo'lsa — til bo'yicha
 
 
-def _set_voice_key(user_id: int, key: str) -> None:
+def _set_voice_key(user_id: int, key: str) -> bool:
+    """Tanlovni saqlaydi. Bazaga yozib bo'lmasa ham RAM va faylga yozadi.
+    True — bazada saqlandi (qayta ishga tushganda ham qoladi)."""
+    _voice_mem[user_id] = key
+    saved = False
     try:
         db.save(_TTS_STORE, str(user_id), key)
+        saved = True
     except Exception:
-        logger.exception("ovoz sozlamasini saqlab bo'lmadi")
+        logger.exception("ovoz sozlamasini bazaga saqlab bo'lmadi (DATABASE_URL ni tekshiring)")
+    try:
+        import json
+        path = _voice_file()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+        data[str(user_id)] = key
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
+    return saved
 
 
 async def _synthesize(text: str, voice: str) -> bytes:
@@ -1046,8 +1084,9 @@ async def tts_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if key not in VOICES:
             await query.answer()
             return
-        _set_voice_key(user.id, key)
-        await query.answer("ovoz tanlandi")
+        saved = _set_voice_key(user.id, key)
+        await query.answer("ovoz tanlandi" if saved else
+                           "tanlandi, lekin baza ulanmagan — qayta ishga tushsa eskisiga qaytadi", show_alert=not saved)
         try:
             await query.edit_message_reply_markup(reply_markup=_voice_pick_markup(key))
         except BadRequest:
@@ -1134,8 +1173,8 @@ def _transcribe_sync(audio: bytes, mime: str) -> str:
 def _pick_voice_for_text(user_id: int, text: str) -> str:
     key = _get_voice_key(user_id)
     letters = [c for c in text if c.isalpha()]
-    if letters and len(_CYR_RE.findall(text)) / len(letters) > 0.5 and key != "ru":
-        return "ru"
+    if letters and len(_CYR_RE.findall(text)) / len(letters) > 0.5 and key not in ("ru", "ru_m"):
+        return "ru_m" if key.endswith("_m") else "ru"      # tanlangan jins saqlanadi
     return key
 
 
