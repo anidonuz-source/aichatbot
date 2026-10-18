@@ -46,6 +46,7 @@ import fun
 import games2
 import extras
 import sticker_store
+import study
 import userbot_manager
 import userbot_store
 import webapp
@@ -872,6 +873,7 @@ def main():
     fun.register(app)
     games2.register(app)
     extras.register(app)
+    study.register(app)
 
     async def _post_init(_app):
         await userbot_manager.resume_all()
