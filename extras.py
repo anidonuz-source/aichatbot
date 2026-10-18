@@ -48,6 +48,8 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 import admin_store
 import ai_core
 import db
+import game_store
+import userbot_store
 
 logger = logging.getLogger("misumi-extras")
 
@@ -349,136 +351,417 @@ async def cmd_emojiid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 🚀 /start
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _start_text(first_name: str | None) -> str:
-    name = _esc(first_name) if first_name else "do'st"
-    return (
-        f"{pe('✨')} <b>Salom, {name}!</b>\n"
-        f"Men <b>{_esc(ai_core.BOT_NAME)}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman, ovozda gapiraman.\n\n"
-        "<blockquote>"
-        f"{pe('💬')} Oddiy yoz, javob beraman\n"
-        f"{pe('🎙')} Ovozli xabar yubor, ovozda javob beraman\n"
-        f"{pe('🖼')} Rasm yubor, tushuntiraman yoki roast qilaman\n"
-        f"{pe('▶️')} YouTube havolasini yubor yoki «... videosini top» de\n"
-        f"{pe('🔗')} Akkauntingni ulasang, AI shaxsiy chatlaringda ham ishlaydi"
-        "</blockquote>\n\n"
-        "Pastdan bo'lim tanla yoki shunchaki yoz:"
-    )
+# ═══════════════════════════════════════════════════════════════════════════
+# 🌐 TIL (uz / ru / en)
+# ═══════════════════════════════════════════════════════════════════════════
+
+_LANGS = {"uz": "🇺🇿 O'zbekcha", "ru": "🇷🇺 Русский", "en": "🇬🇧 English"}
+_LANG_STORE = "user_lang"
+_lang_cache: dict[str, str] = {}
 
 
-def _start_kb(chat_id, bot_username: str | None, premium: bool) -> InlineKeyboardMarkup:
-    mk = icon_btn if premium else plain_btn
+def _stored_lang(user_id) -> str | None:
+    k = str(user_id)
+    if k in _lang_cache:
+        return _lang_cache[k]
+    try:
+        v = db.load(_LANG_STORE, k, None)
+    except Exception:
+        v = None
+    if v in _LANGS:
+        _lang_cache[k] = v
+        return v
+    return None
+
+
+def _get_lang(user_id) -> str:
+    return _stored_lang(user_id) or "uz"
+
+
+def _set_lang(user_id, lang: str) -> None:
+    _lang_cache[str(user_id)] = lang
+    try:
+        db.save(_LANG_STORE, str(user_id), lang)
+    except Exception:
+        logger.exception("tilni saqlab bo'lmadi")
+
+
+def _ensure_lang(user) -> str:
+    """Birinchi /start da Telegram tilidan taxmin qilamiz (keyin o'zi o'zgartira oladi)."""
+    if not user:
+        return "uz"
+    cur = _stored_lang(user.id)
+    if cur:
+        return cur
+    code = (getattr(user, "language_code", "") or "").lower()[:2]
+    lang = code if code in ("ru", "en") else "uz"
+    _set_lang(user.id, lang)
+    return lang
+
+
+def _lang_hint(user_id) -> str:
+    lang = _get_lang(user_id) if user_id is not None else "uz"
+    if lang == "ru":
+        return "TIL: foydalanuvchi bilan RUS tilida gaplash va javoblarni ruscha yoz (foydalanuvchi boshqa tilda yozsa, o'sha tilda javob ber)."
+    if lang == "en":
+        return "TIL: foydalanuvchi bilan INGLIZ tilida gaplash va javoblarni inglizcha yoz (foydalanuvchi boshqa tilda yozsa, o'sha tilda javob ber)."
+    return ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🚀 /start — bosh sahifa -> bo'lim -> batafsil (3 daraja, uch tilda)
+# ═══════════════════════════════════════════════════════════════════════════
+
+T = {
+    "uz": {
+        "hello_title": "Salom, {name}!",
+        "hello_body": "Men <b>{bot}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman va ovozda gapiraman.\n\nQuyidan bo'lim tanla yoki shunchaki yoz.",
+        "open": "{bot} ni ochish", "add_group": "Guruhga qo'shish", "back": "Orqaga", "home": "Bosh sahifa",
+        "sec_ai": "AI imkoniyatlari", "sec_play": "O'yin va fun", "sec_tools": "Foydali", "sec_account": "Hisob",
+        "desc_ai": "Suhbat, rasm, ovoz, YouTube, anime", "desc_play": "O'yinlar, ship va qiziqarli buyruqlar",
+        "desc_tools": "Tarjima, ob-havo, eslatma va boshqalar", "pick": "Batafsil ko'rish uchun tanla:",
+        "acc_title": "Hisobim", "acc_lang": "Til", "acc_msgs": "Xabarlar", "acc_games": "O'yinlar",
+        "acc_wins": "g'alaba", "acc_losses": "mag'lubiyat", "acc_draws": "durang",
+        "acc_link_yes": "Akkount: ulangan", "acc_link_no": "Akkount: ulanmagan",
+        "acc_pro": "Holat: Misumi AI Pro", "acc_free": "Holat: oddiy",
+        "why_link": "Shaxsiy akkountingni ulasang, sen oflayn bo'lganingda AI sening o'rningga tabiiy javob yozadi va bio'ingni yangilab turadi.",
+        "btn_link": "Akkount ulash", "btn_services": "Xizmatlar", "btn_stats": "Statistika", "btn_disc": "Akkountni uzish",
+        "btn_pro": "Pro sotib olish", "btn_lang": "Til", "btn_voice": "Ovoz", "btn_clear": "Suhbatni tozalash",
+        "lang_title": "Tilni tanla. Menyular va AI javoblari shu tilda bo'ladi:", "lang_set": "Til o'zgartirildi",
+        "voice_title": "Qaysi ovozda gapiray?", "clear_ask": "Suhbat tarixini tozalaymi? Bu amalni qaytarib bo'lmaydi.",
+        "clear_yes": "Ha, tozala", "clear_no": "Bekor qilish", "clear_done": "Suhbat tozalandi",
+    },
+    "ru": {
+        "hello_title": "Привет, {name}!",
+        "hello_body": "Я <b>{bot}</b>: болтаю, играю, рисую и отвечаю голосом.\n\nВыбери раздел ниже или просто напиши.",
+        "open": "Открыть {bot}", "add_group": "Добавить в группу", "back": "Назад", "home": "Главная",
+        "sec_ai": "Возможности ИИ", "sec_play": "Игры и фан", "sec_tools": "Полезное", "sec_account": "Аккаунт",
+        "desc_ai": "Чат, рисунки, голос, YouTube, аниме", "desc_play": "Игры, шип и весёлые команды",
+        "desc_tools": "Перевод, погода, напоминания и другое", "pick": "Выбери, чтобы узнать подробнее:",
+        "acc_title": "Мой аккаунт", "acc_lang": "Язык", "acc_msgs": "Сообщений", "acc_games": "Игры",
+        "acc_wins": "побед", "acc_losses": "поражений", "acc_draws": "ничьих",
+        "acc_link_yes": "Аккаунт: подключён", "acc_link_no": "Аккаунт: не подключён",
+        "acc_pro": "Статус: Misumi AI Pro", "acc_free": "Статус: обычный",
+        "why_link": "Подключи личный аккаунт, и пока тебя нет онлайн, ИИ естественно ответит за тебя и будет обновлять твоё био.",
+        "btn_link": "Подключить аккаунт", "btn_services": "Сервисы", "btn_stats": "Статистика", "btn_disc": "Отключить аккаунт",
+        "btn_pro": "Купить Pro", "btn_lang": "Язык", "btn_voice": "Голос", "btn_clear": "Очистить диалог",
+        "lang_title": "Выбери язык. Меню и ответы ИИ будут на нём:", "lang_set": "Язык изменён",
+        "voice_title": "Каким голосом говорить?", "clear_ask": "Очистить историю диалога? Это нельзя отменить.",
+        "clear_yes": "Да, очистить", "clear_no": "Отмена", "clear_done": "Диалог очищен",
+    },
+    "en": {
+        "hello_title": "Hi, {name}!",
+        "hello_body": "I'm <b>{bot}</b>: I chat, play games, draw pictures and talk by voice.\n\nPick a section below or just type.",
+        "open": "Open {bot}", "add_group": "Add to group", "back": "Back", "home": "Home",
+        "sec_ai": "AI features", "sec_play": "Games & fun", "sec_tools": "Tools", "sec_account": "Account",
+        "desc_ai": "Chat, images, voice, YouTube, anime", "desc_play": "Games, ship and fun commands",
+        "desc_tools": "Translate, weather, reminders and more", "pick": "Pick one for details:",
+        "acc_title": "My account", "acc_lang": "Language", "acc_msgs": "Messages", "acc_games": "Games",
+        "acc_wins": "wins", "acc_losses": "losses", "acc_draws": "draws",
+        "acc_link_yes": "Account: linked", "acc_link_no": "Account: not linked",
+        "acc_pro": "Status: Misumi AI Pro", "acc_free": "Status: free",
+        "why_link": "Link your personal account and while you're offline the AI will reply for you naturally and keep your bio up to date.",
+        "btn_link": "Link account", "btn_services": "Services", "btn_stats": "Stats", "btn_disc": "Unlink account",
+        "btn_pro": "Get Pro", "btn_lang": "Language", "btn_voice": "Voice", "btn_clear": "Clear chat",
+        "lang_title": "Pick a language. Menus and AI replies will use it:", "lang_set": "Language changed",
+        "voice_title": "Which voice should I use?", "clear_ask": "Clear the chat history? This can't be undone.",
+        "clear_yes": "Yes, clear", "clear_no": "Cancel", "clear_done": "Chat cleared",
+    },
+}
+
+
+def tr(lang: str, key: str, **kw) -> str:
+    s = T.get(lang, T["uz"]).get(key) or T["uz"][key]
+    return s.format(**kw) if kw else s
+
+
+# bo'lim -> (emoji, [elementlar])
+_SECTIONS = {
+    "ai": ("🤖", ["chat", "imagine", "voice", "photo", "yt", "anime"]),
+    "play": ("🎮", ["duel", "ship", "fun"]),
+    "tools": ("🛠", ["util", "group", "sticker"]),
+}
+
+# element -> (emoji, (uz, ru, en) nom, (uz, ru, en) matn)
+_ITEMS = {
+    "chat": ("💬", ("Suhbat", "Чат", "Chat"), (
+        "Oddiy yoz, javob beraman.\nGuruhda «Misumi» deb chaqir yoki xabarimga reply qil.\n/reset — suhbatni tozalash",
+        "Просто пиши, я отвечу.\nВ группе позови «Misumi» или ответь на моё сообщение.\n/reset — очистить диалог",
+        "Just write and I'll answer.\nIn groups say «Misumi» or reply to my message.\n/reset — clear the chat")),
+    "imagine": ("🎨", ("Rasm chizish", "Рисунки", "Images"), (
+        "/imagine tavsif — rasm chizaman.\nMasalan: /imagine kechki Toshkent, anime uslubida\nKuniga 15 tagacha.",
+        "/imagine описание — нарисую картинку.\nНапример: /imagine вечерний Ташкент в стиле аниме\nДо 15 в день.",
+        "/imagine description — I'll draw it.\nExample: /imagine Tashkent at night, anime style\nUp to 15 per day.")),
+    "voice": ("🎙", ("Ovoz", "Голос", "Voice"), (
+        "Ovozli xabar yubor — ovozda javob beraman.\n/ovoz matn — matnni ovozga aylantirish\n/ovozsoz — ovoz turini tanlash (Hisob bo'limida ham bor)",
+        "Отправь голосовое — отвечу голосом.\n/ovoz текст — озвучить текст\n/ovozsoz — выбрать голос (есть и в разделе «Аккаунт»)",
+        "Send a voice message and I'll answer by voice.\n/ovoz text — read text aloud\n/ovozsoz — pick a voice (also in Account)")),
+    "photo": ("🖼", ("Rasm tahlili", "Анализ фото", "Photo analysis"), (
+        "Rasm yubor, tugmalar chiqadi:\n• Tushuntir\n• Roast\n• Qaysi anime personaj?\n• Matnni o'qi\nSarlavha yozib yuborsang, savolingga javob beraman.",
+        "Отправь фото, появятся кнопки:\n• Объяснить\n• Roast\n• На какого аниме-персонажа похож?\n• Прочитать текст\nЕсли добавишь подпись, отвечу на твой вопрос.",
+        "Send a photo and buttons appear:\n• Explain\n• Roast\n• Which anime character?\n• Read the text\nAdd a caption and I'll answer your question.")),
+    "yt": ("▶️", ("YouTube", "YouTube", "YouTube"), (
+        "/yt nom yoki havola — video topish\n/ytber nom — YouTuber haqida\nYouTube havolasini tashlasang ham bo'ladi yoki «... videosini top» de.",
+        "/yt название или ссылка — найти видео\n/ytber имя — о ютубере\nМожно просто скинуть ссылку или написать «найди видео ...».",
+        "/yt name or link — find a video\n/ytber name — about a YouTuber\nYou can also just drop a link or say «find a video of ...».")),
+    "anime": ("🎬", ("Anime", "Аниме", "Anime"), (
+        "/anime nom — reyting, janr, qismlar, mazmun\nNomsiz /anime — tasodifiy tavsiya.",
+        "/anime название — рейтинг, жанр, серии, сюжет\n/anime без названия — случайная рекомендация.",
+        "/anime name — rating, genres, episodes, synopsis\n/anime alone — a random pick.")),
+    "duel": ("⚔️", ("O'yinlar", "Игры", "Games"), (
+        "/duel — o'yin taklif qilish\n/battle — jang\n/tictactoe — X-O\n/rps — tosh-qaychi-qog'oz\n/quiz — viktorina\n/reyting — reyting\nGuruhda eng qiziq.",
+        "/duel — вызвать на игру\n/battle — бой\n/tictactoe — крестики-нолики\n/rps — камень-ножницы-бумага\n/quiz — викторина\n/reyting — рейтинг\nВ группе веселее всего.",
+        "/duel — challenge someone\n/battle — fight\n/tictactoe — X-O\n/rps — rock-paper-scissors\n/quiz — trivia\n/reyting — leaderboard\nBest in a group.")),
+    "ship": ("💞", ("Ship", "Шип", "Ship"), (
+        "/ship — tasodifiy juftlik\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced",
+        "/ship — случайная пара\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced",
+        "/ship — a random couple\n/shipleader · /shipfact · /shipmemory\n/marry · /couple · /soulmate · /crush · /dating\n/love · /exship · /divorced")),
+    "fun": ("🎲", ("Fun", "Фан", "Fun"), (
+        "/roast · /compliment · /rate · /expose\n/8ball · /horoscope · /lucky · /quote\n/truth · /dare · /wouldyourather\n/confession · /ngl · /fakechat",
+        "/roast · /compliment · /rate · /expose\n/8ball · /horoscope · /lucky · /quote\n/truth · /dare · /wouldyourather\n/confession · /ngl · /fakechat",
+        "/roast · /compliment · /rate · /expose\n/8ball · /horoscope · /lucky · /quote\n/truth · /dare · /wouldyourather\n/confession · /ngl · /fakechat")),
+    "util": ("🧰", ("Asboblar", "Инструменты", "Utilities"), (
+        "/translate — tarjima\n/weather — ob-havo\n/calc — kalkulyator\n/remind — eslatma",
+        "/translate — перевод\n/weather — погода\n/calc — калькулятор\n/remind — напоминание",
+        "/translate — translation\n/weather — weather\n/calc — calculator\n/remind — reminder")),
+    "group": ("📊", ("Guruh", "Группа", "Group"), (
+        "/stats · /who · /activity · /members — guruh statistikasi va a'zolar",
+        "/stats · /who · /activity · /members — статистика группы и участники",
+        "/stats · /who · /activity · /members — group stats and members")),
+    "sticker": ("🌟", ("Stikerlar", "Стикеры", "Stickers"), (
+        "/stiker — stikerni turkumga qo'shish\n/stikerlar — turkumlar ro'yxati",
+        "/stiker — добавить стикер в категорию\n/stikerlar — список категорий",
+        "/stiker — add a sticker to a category\n/stikerlar — list categories")),
+}
+_LI = {"uz": 0, "ru": 1, "en": 2}
+
+
+def _btn_maker(premium: bool):
+    return icon_btn if premium else plain_btn
+
+
+def _start_text(first_name: str | None, lang: str = "uz") -> str:
+    name = _esc(first_name) if first_name else ("do'st" if lang == "uz" else "друг" if lang == "ru" else "friend")
+    return f"{pe('✨')} <b>{tr(lang, 'hello_title', name=name)}</b>\n" + tr(lang, "hello_body", bot=_esc(ai_core.BOT_NAME))
+
+
+def _start_kb(chat_id, bot_username: str | None, premium: bool, lang: str = "uz") -> InlineKeyboardMarkup:
+    mk = _btn_maker(premium)
     rows = []
     if WEBAPP_URL:
-        rows.append([mk(f"{ai_core.BOT_NAME} ni ochish", "✨", web_app=WebAppInfo(url=WEBAPP_URL))])
+        rows.append([mk(tr(lang, "open", bot=ai_core.BOT_NAME), "✨", web_app=WebAppInfo(url=WEBAPP_URL))])
     rows.append([
-        mk("Akkount ulash", "🔗", callback_data="ub:account"),
-        mk("O'yinlar", "🎮", callback_data="st:p:games"),
+        mk(tr(lang, "sec_ai"), _SECTIONS["ai"][0], callback_data="st:s:ai"),
+        mk(tr(lang, "sec_play"), _SECTIONS["play"][0], callback_data="st:s:play"),
     ])
     rows.append([
-        mk("Ship va fun", "💞", callback_data="st:p:fun"),
-        mk("YouTube va anime", "▶️", callback_data="st:p:media"),
-    ])
-    rows.append([
-        mk("Rasm va ovoz", "🎨", callback_data="st:p:create"),
-        mk("Foydali", "🛠", callback_data="st:p:tools"),
+        mk(tr(lang, "sec_tools"), _SECTIONS["tools"][0], callback_data="st:s:tools"),
+        mk(tr(lang, "sec_account"), "👤", callback_data="ac:home"),
     ])
     if bot_username:
-        rows.append([mk("Guruhga qo'shish", "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
+        rows.append([mk(tr(lang, "add_group"), "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
     if WEBAPP_URL and _is_admin(chat_id):
-        rows.append([mk("Admin panel", "⚙️", web_app=WebAppInfo(url=f"{WEBAPP_URL.rstrip('/')}/admin"))])
+        rows.append([mk("Admin", "⚙️", web_app=WebAppInfo(url=f"{WEBAPP_URL.rstrip('/')}/admin"))])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     user = update.effective_user
-    text = _start_text(user.first_name if user else None)
+    lang = _ensure_lang(user)
+    text = _start_text(user.first_name if user else None, lang)
     bot_username = context.bot.username
     await reply_html(
         update.effective_message, text,
-        kb_factory=lambda prem: _start_kb(chat_id, bot_username, prem),
+        kb_factory=lambda prem: _start_kb(chat_id, bot_username, prem, lang),
     )
 
 
-_CMDS_PAGES = {
-    "games": (
-        "🎮", "O'yinlar",
-        "/duel — birovga (yoki menga) o'yin taklif qilish\n"
-        "/battle — jang\n"
-        "/tictactoe — X-O\n"
-        "/quiz (/viktorina) — viktorina\n"
-        "/rps — tosh-qaychi-qog'oz\n"
-        "/truth · /dare · /wouldyourather\n"
-        "/reyting — o'yin reytingi\n\n"
-        "O'yinlar guruhda eng qiziq: botni guruhingga qo'sh.",
-    ),
-    "fun": (
-        "💞", "Ship va fun",
-        "/ship — guruhdan tasodifiy juftlik\n"
-        "/shipleader · /shipfact · /shipmemory\n"
-        "/marry · /couple · /soulmate · /crush · /dating\n"
-        "/love · /exship · /divorced\n"
-        "/roast · /compliment · /rate · /expose\n"
-        "/8ball · /horoscope · /lucky · /quote\n"
-        "/confession · /ngl · /fakechat",
-    ),
-    "media": (
-        "▶️", "YouTube va anime",
-        "/yt nom yoki havola — video topish, havoladan ma'lumot\n"
-        "/ytber nom — YouTuber (kanal) haqida\n"
-        "/anime nom — anime ma'lumoti (nomsiz: tasodifiy)\n\n"
-        "Oddiy yozsang ham bo'ladi: YouTube havolasini tashla yoki "
-        "«MrBeast eng zo'r videolarini top» de.",
-    ),
-    "create": (
-        "🎨", "Rasm va ovoz",
-        "/imagine tavsif — rasm chizish\n"
-        "/ovoz matn — matnni ovozga aylantirish\n"
-        "/ovozsoz — ovoz turini tanlash\n\n"
-        "Ovozli xabar yubor — ovozda javob beraman.\n"
-        "Rasm yubor — tushuntiraman, roast qilaman, anime personajga o'xshatib beraman.",
-    ),
-    "tools": (
-        "🛠", "Foydali",
-        "/translate — tarjima\n"
-        "/weather — ob-havo\n"
-        "/calc — kalkulyator\n"
-        "/remind — eslatma\n"
-        "/stats · /who · /activity · /members — guruh statistikasi\n"
-        "/stiker — stikerni turkumga qo'shish\n"
-        "/reset — xotirani tozalash",
-    ),
-}
+def _section_text(sec: str, lang: str) -> str:
+    emoji = _SECTIONS[sec][0]
+    return f"{pe(emoji)} <b>{tr(lang, 'sec_' + sec)}</b>\n{tr(lang, 'desc_' + sec)}\n\n{tr(lang, 'pick')}"
 
 
-def _cmds_text(page: str) -> str:
-    ch, title, body = _CMDS_PAGES[page]
-    return f"{pe(ch)} <b>{title}</b>\n\n<blockquote>{_esc(body)}</blockquote>"
+def _section_kb(sec: str, lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = _btn_maker(premium)
+    li = _LI[lang]
+    btns = [mk(_ITEMS[k][1][li], _ITEMS[k][0], callback_data=f"st:i:{sec}:{k}") for k in _SECTIONS[sec][1]]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    rows.append([mk(tr(lang, "back"), "⬅️", callback_data="st:home")])
+    return InlineKeyboardMarkup(rows)
 
 
-def _cmds_kb(page: str, premium: bool) -> InlineKeyboardMarkup:
-    mk = icon_btn if premium else plain_btn
-    tabs = [
-        mk(t, c, callback_data=f"st:p:{k}") if k != page else InlineKeyboardButton(f"• {t}", callback_data=f"st:p:{k}")
-        for k, (c, t, _b) in _CMDS_PAGES.items()
-    ]
-    return InlineKeyboardMarkup([tabs[:3], tabs[3:], [mk("Orqaga", "⬅️", callback_data="st:home")]])
+def _item_text(item: str, lang: str) -> str:
+    emoji, names, bodies = _ITEMS[item]
+    li = _LI[lang]
+    return f"{pe(emoji)} <b>{_esc(names[li])}</b>\n\n<blockquote>{_esc(bodies[li])}</blockquote>"
+
+
+def _item_kb(sec: str, lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = _btn_maker(premium)
+    return InlineKeyboardMarkup([[
+        mk(tr(lang, "back"), "⬅️", callback_data=f"st:s:{sec}"),
+        mk(tr(lang, "home"), "🏠", callback_data="st:home"),
+    ]])
 
 
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     data = query.data or ""
+    user = query.from_user
+    lang = _get_lang(user.id) if user else "uz"
     chat_id = query.message.chat.id if query.message else update.effective_chat.id
-    if data == "st:home":
-        text = _start_text(query.from_user.first_name if query.from_user else None)
+    parts = data.split(":")
+    if data == "st:home" or data in ("st:cmds",) or data.startswith("st:p:"):
         bu = context.bot.username
-        await edit_html(query, text, lambda prem: _start_kb(chat_id, bu, prem))
-    elif data == "st:cmds" or data.startswith("st:p:"):
-        page = data.split(":")[2] if data.startswith("st:p:") else "games"
-        if page not in _CMDS_PAGES:
-            page = "games"
-        await edit_html(query, _cmds_text(page), lambda prem: _cmds_kb(page, prem))
+        text = _start_text(user.first_name if user else None, lang)
+        await edit_html(query, text, lambda prem: _start_kb(chat_id, bu, prem, lang))
+    elif len(parts) == 3 and parts[1] == "s" and parts[2] in _SECTIONS:
+        sec = parts[2]
+        await edit_html(query, _section_text(sec, lang), lambda prem: _section_kb(sec, lang, prem))
+    elif len(parts) == 4 and parts[1] == "i" and parts[2] in _SECTIONS and parts[3] in _ITEMS:
+        sec, item = parts[2], parts[3]
+        await edit_html(query, _item_text(item, lang), lambda prem: _item_kb(sec, lang, prem))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 👤 HISOB — profil, akkount ulash, til, ovoz, suhbatni tozalash
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _mask_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone or "")
+    return f"+{digits[:3]}•••{digits[-2:]}" if len(digits) > 6 else "•••"
+
+
+def _account_info(user, lang: str) -> tuple[str, bool]:
+    """(HTML matn, akkount ulanganmi)"""
+    uid = user.id
+    lines = [f"{pe('👤')} <b>{tr(lang, 'acc_title')}</b>", f"{_esc(user.first_name or '')} · <code>{uid}</code>"]
+    lines.append(f"{pe('🌐')} {tr(lang, 'acc_lang')}: {_LANGS[lang]}")
+    try:
+        entry = (admin_store._load().get("users") or {}).get(str(uid)) or {}
+    except Exception:
+        entry = {}
+    if entry.get("message_count"):
+        since = (entry.get("first_seen") or "")[:10]
+        lines.append(f"{pe('💬')} {tr(lang, 'acc_msgs')}: {entry['message_count']}" + (f" · {pe('📅')} {since}" if since else ""))
+    try:
+        g = game_store.get_stats(uid) or {}
+    except Exception:
+        g = {}
+    if any(g.get(k) for k in ("wins", "losses", "draws")):
+        lines.append(
+            f"{pe('🎮')} {tr(lang, 'acc_games')}: {g.get('wins', 0)} {tr(lang, 'acc_wins')} · "
+            f"{g.get('losses', 0)} {tr(lang, 'acc_losses')} · {g.get('draws', 0)} {tr(lang, 'acc_draws')}"
+        )
+    try:
+        connected = bool(userbot_store.is_connected(uid))
+        meta = (userbot_store.get_account_meta(uid) or {}) if connected else {}
+        pro = bool(admin_store.is_premium(uid))
+    except Exception:
+        connected, meta, pro = False, {}, False
+    if connected:
+        lines.append(f"{pe('🔗')} {tr(lang, 'acc_link_yes')} ({_esc(_mask_phone(meta.get('phone', '')))})")
+    else:
+        lines.append(f"{pe('🔗')} {tr(lang, 'acc_link_no')}")
+    lines.append(f"{pe('💎')} {tr(lang, 'acc_pro') if pro else tr(lang, 'acc_free')}")
+    text = "\n".join(lines)
+    if not connected:
+        text += f"\n\n<blockquote>{_esc(tr(lang, 'why_link'))}</blockquote>"
+    return text, connected
+
+
+def _account_kb(connected: bool, pro: bool, lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = _btn_maker(premium)
+    rows = []
+    if connected:
+        rows.append([mk(tr(lang, "btn_services"), "⚙️", callback_data="ub:services"),
+                     mk(tr(lang, "btn_stats"), "📊", callback_data="ub:stats")])
+    else:
+        rows.append([mk(tr(lang, "btn_link"), "🔗", callback_data="ub:connect")])
+    if not pro:
+        rows.append([mk(tr(lang, "btn_pro"), "💎", callback_data="ub:buy_pro")])
+    rows.append([mk(tr(lang, "btn_lang"), "🌐", callback_data="ac:lang"),
+                 mk(tr(lang, "btn_voice"), "🔊", callback_data="ac:voice")])
+    rows.append([mk(tr(lang, "btn_clear"), "🧹", callback_data="ac:clear")])
+    if connected:
+        rows.append([mk(tr(lang, "btn_disc"), "🔌", callback_data="ub:disconnect")])
+    rows.append([mk(tr(lang, "back"), "⬅️", callback_data="st:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _show_account(query, lang: str) -> None:
+    user = query.from_user
+    text, connected = _account_info(user, lang)
+    try:
+        pro = bool(admin_store.is_premium(user.id))
+    except Exception:
+        pro = False
+    await edit_html(query, text, lambda prem: _account_kb(connected, pro, lang, prem))
+
+
+def _lang_kb(current: str, lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = _btn_maker(premium)
+    rows = [[InlineKeyboardButton(("✅ " if k == current else "") + label, callback_data=f"ac:setlang:{k}")]
+            for k, label in _LANGS.items()]
+    rows.append([mk(tr(lang, "back"), "⬅️", callback_data="ac:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _voice_kb(current: str, lang: str, premium: bool) -> InlineKeyboardMarkup:
+    mk = _btn_maker(premium)
+    rows = [[InlineKeyboardButton(("✅ " if k == current else "") + label, callback_data=f"ac:setvoice:{k}")]
+            for k, (_v, label) in VOICES.items()]
+    rows.append([mk(tr(lang, "back"), "⬅️", callback_data="ac:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def account_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    data = query.data or ""
+    user = query.from_user
+    lang = _get_lang(user.id)
+    parts = data.split(":")
+
+    if data in ("ac:home", "ub:account"):
+        await query.answer()
+        await _show_account(query, lang)
+    elif data == "ac:lang":
+        await query.answer()
+        await edit_html(query, f"{pe('🌐')} {tr(lang, 'lang_title')}", lambda prem: _lang_kb(lang, lang, prem))
+    elif len(parts) == 3 and parts[1] == "setlang" and parts[2] in _LANGS:
+        _set_lang(user.id, parts[2])
+        lang = parts[2]
+        await query.answer(tr(lang, "lang_set"))
+        await _show_account(query, lang)
+    elif data == "ac:voice":
+        await query.answer()
+        await edit_html(query, f"{pe('🔊')} {tr(lang, 'voice_title')}",
+                        lambda prem: _voice_kb(_get_voice_key(user.id), lang, prem))
+    elif len(parts) == 3 and parts[1] == "setvoice" and parts[2] in VOICES:
+        _set_voice_key(user.id, parts[2])
+        await query.answer("✅")
+        await edit_html(query, f"{pe('🔊')} {tr(lang, 'voice_title')}",
+                        lambda prem: _voice_kb(parts[2], lang, prem))
+    elif data == "ac:clear":
+        await query.answer()
+        mk_rows = lambda prem: InlineKeyboardMarkup([[
+            _btn_maker(prem)(tr(lang, "clear_yes"), "🧹", callback_data="ac:clear:yes"),
+            _btn_maker(prem)(tr(lang, "clear_no"), "✖️", callback_data="ac:home"),
+        ]])
+        await edit_html(query, f"{pe('🧹')} {tr(lang, 'clear_ask')}", mk_rows)
+    elif data == "ac:clear:yes":
+        try:
+            ai_core.reset_user(query.message.chat.id)
+        except Exception:
+            logger.exception("suhbatni tozalab bo'lmadi")
+        await query.answer(tr(lang, "clear_done"), show_alert=False)
+        await _show_account(query, lang)
+    else:
+        await query.answer()
+    if data == "ub:account":
+        raise ApplicationHandlerStop         # eski oddiy menyu o'rniga yangi Hisob bo'limi
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -665,10 +948,12 @@ def _clean_for_tts(text: str) -> str:
 
 def _get_voice_key(user_id: int) -> str:
     try:
-        k = db.load(_TTS_STORE, str(user_id), "uz_f")
+        k = db.load(_TTS_STORE, str(user_id), None)
     except Exception:
-        k = "uz_f"
-    return k if k in VOICES else "uz_f"
+        k = None
+    if k in VOICES:
+        return k
+    return {"ru": "ru", "en": "en"}.get(_get_lang(user_id), "uz_f")     # tanlanmagan bo'lsa — til bo'yicha
 
 
 def _set_voice_key(user_id: int, key: str) -> None:
@@ -1535,13 +1820,20 @@ def _install_patches() -> None:
     orig_get_ai_reply = ai_core.get_ai_reply
 
     def get_ai_reply(*args, **kwargs):
-        extra = kwargs.get("extra_system")
-        # faqat Telegram bot suhbatlari (userbot, sayt va Mini App'ga tegmaydi);
-        # ovozli javobda emoji kerak emas
-        if kwargs.get("source") == "telegram" and not (extra and "ovozli xabar" in extra):
-            hint = emoji_style_hint()
-            if hint:
-                kwargs["extra_system"] = (extra.strip() + "\n\n" + hint) if extra and extra.strip() else hint
+        # faqat Telegram bot suhbatlari (userbot, sayt va Mini App'ga tegmaydi)
+        if kwargs.get("source") == "telegram":
+            extra = kwargs.get("extra_system")
+            parts = [extra.strip()] if extra and extra.strip() else []
+            uid = args[0] if args else kwargs.get("user_id")
+            lh = _lang_hint(uid)
+            if lh:
+                parts.append(lh)
+            if not (extra and "ovozli xabar" in extra):          # ovozli javobda emoji kerak emas
+                hint = emoji_style_hint()
+                if hint:
+                    parts.append(hint)
+            if parts:
+                kwargs["extra_system"] = "\n\n".join(parts)
         return orig_get_ai_reply(*args, **kwargs)
 
     ai_core.get_ai_reply = get_ai_reply
@@ -2206,6 +2498,9 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("addpack", cmd_addpack), group=0)
     _install_patches()
     app.add_handler(CallbackQueryHandler(start_callback, pattern=r"^st:"), group=0)
+    app.add_handler(CallbackQueryHandler(account_callback, pattern=r"^ac:"), group=0)
+    # eski oddiy "Hisob" menyusi o'rniga yangi Hisob bo'limi (orqaga tugmalari ham shunga qaytadi)
+    app.add_handler(CallbackQueryHandler(account_callback, pattern=r"^ub:account$"), group=-1)
     app.add_handler(CallbackQueryHandler(imagine_callback, pattern=r"^img:"), group=0)
     app.add_handler(CallbackQueryHandler(tts_callback, pattern=r"^tts:"), group=0)
     app.add_handler(CommandHandler("anime", cmd_anime), group=0)
