@@ -443,6 +443,39 @@ async def caption_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raise ApplicationHandlerStop
 
 
+# Oddiy gap bilan so'rash: "stiker qil", "stikerga aylantir", "sticker yasab ber", "сделай стикер" ...
+_NL_STICKER = re.compile(
+    r"(?:st[iy]c?k[ei]r|стикер)\w*.*?(?:qil|yasa|ayla|ber|chiz|make|creat|convert|сдела|преврат)"
+    r"|(?:qil|yasa|ayla|chiz|make|creat|convert|сдела|преврат)\w*.*?(?:st[iy]c?k[ei]r|стикер)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _has_image(m) -> bool:
+    if not m:
+        return False
+    if m.photo:
+        return True
+    if m.document and (m.document.mime_type or "").startswith("image/"):
+        return True
+    return bool(m.sticker and not m.sticker.is_animated and not m.sticker.is_video)
+
+
+async def nl_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Rasm yuborib (sarlavhada) yoki rasmga reply qilib "stiker qil" deyilsa — stiker yasaydi.
+    Rasm yo'q bo'lsa yoki gap stiker so'ramasa — hech narsa qilmaydi (oddiy chat davom etadi)."""
+    msg = update.effective_message
+    if not msg:
+        return
+    txt = msg.text or msg.caption or ""
+    if not _NL_STICKER.search(txt):
+        return
+    if not (_has_image(msg) or _has_image(msg.reply_to_message)):
+        return
+    await cmd_stikeryasa(update, context)
+    raise ApplicationHandlerStop
+
+
 def register(app: Application) -> None:
     app.add_handler(CommandHandler(["stikeryasa", "stikerqil", "makesticker"], cmd_stikeryasa), group=0)
     app.add_handler(CommandHandler(["stikerpaket", "mypack"], cmd_stikerpaket), group=0)
@@ -453,5 +486,13 @@ def register(app: Application) -> None:
             caption_cmd,
         ),
         group=-1,
+    )
+    # oddiy gap bilan: rasm + "stiker qil" yoki rasmga reply "stiker qil"
+    app.add_handler(
+        MessageHandler(
+            (filters.PHOTO | filters.Document.IMAGE | filters.TEXT) & ~filters.COMMAND,
+            nl_sticker,
+        ),
+        group=-2,   # -1 da extras.handle_text_youtube har bir matnni ushlab, bu handlerni to'sib qo'yardi
     )
     app.add_handler(CallbackQueryHandler(sk_callback, pattern=r"^sk:"), group=0)
