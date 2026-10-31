@@ -2231,6 +2231,11 @@ def _video_kb(v: dict, others: list[dict] | None, premium: bool) -> InlineKeyboa
     rows = [[mk("YouTube'da ochish", "▶️", url=f"https://youtu.be/{v['id']}")]]
     if v.get("channel_id"):
         rows[0].append(mk("Kanal", "📺", callback_data=f"yt:ch:{v['channel_id']}"))
+    if v.get("id"):
+        rows.append([
+            InlineKeyboardButton("🎬 Video yuklash", callback_data=f"dl:v:y{v['id']}"),
+            InlineKeyboardButton("🎵 MP3 yuklash", callback_data=f"dl:a:y{v['id']}"),
+        ])
     for o in (others or [])[:4]:
         label = f"{o['title'][:34]} · {_fmt_dur(o.get('duration'))}" if o.get("duration") else o["title"][:44]
         rows.append([InlineKeyboardButton(label, callback_data=f"yt:v:{o['id']}")])
@@ -2555,3 +2560,5 @@ def register(app: Application) -> None:
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo), group=0)
     import stickermaker
     stickermaker.register(app)
+    import downloader
+    downloader.register(app)
