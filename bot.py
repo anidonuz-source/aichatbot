@@ -63,6 +63,8 @@ ALLOWED_CHAT_IDS = {
 }
 WEBAPP_URL = os.environ.get("WEBAPP_URL") or os.environ.get("RENDER_EXTERNAL_URL")
 ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
+# Majburiy obuna kanali (env orqali o'zgartirsa bo'ladi)
+REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@misumiai").strip()
 
 
 def _authorized(chat_id) -> bool:
@@ -89,10 +91,68 @@ def _webapp_keyboard(chat_id=None) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(rows)
 
 
+async def _is_subscribed(bot, user_id: int) -> bool:
+    """Foydalanuvchi REQUIRED_CHANNEL ga a'zomi? Bot kanalda admin bo'lishi shart.
+    Tekshirib bo'lmasa (bot admin emas, kanal topilmadi va h.k.) — foydalanuvchini
+    bloklamaymiz (fail-open), faqat logga yozamiz."""
+    if not REQUIRED_CHANNEL:
+        return True
+    try:
+        member = await bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return member.status in (
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER,
+        )
+    except Exception:
+        logger.exception(
+            f"Obunani tekshirib bo'lmadi ({REQUIRED_CHANNEL}) — bot kanalda admin ekanini tekshiring"
+        )
+        return True
+
+
+def _subscribe_keyboard() -> InlineKeyboardMarkup:
+    url = f"https://t.me/{REQUIRED_CHANNEL.lstrip('@')}"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Kanalga obuna bo'lish", url=url)],
+        [InlineKeyboardButton("✅ Obuna bo'ldim", callback_data="sub:check")],
+    ])
+
+
+async def _send_subscribe_prompt(message) -> None:
+    await message.reply_text(
+        f"Botdan foydalanish uchun avval {REQUIRED_CHANNEL} kanaliga obuna bo'l, "
+        f"keyin \"✅ Obuna bo'ldim\" tugmasini bos.",
+        reply_markup=_subscribe_keyboard(),
+    )
+
+
+async def subscribe_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    if await _is_subscribed(context.bot, user_id) or _is_admin(user_id):
+        await query.answer("✅ Rahmat!")
+        await extras.send_start(update, context)
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    else:
+        await query.answer("❌ Hali obuna bo'lmagansan!", show_alert=True)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not _authorized(chat_id):
         await update.message.reply_text(f"bu bot hammaga emas, uka. {ai_core.AUTHOR_HANDLE} dan ruxsat ol.")
+        return
+    # Majburiy obuna (faqat shaxsiy chatda; admin istisno)
+    if (
+        update.effective_chat.type == "private"
+        and not _is_admin(chat_id)
+        and not await _is_subscribed(context.bot, update.effective_user.id)
+    ):
+        await _send_subscribe_prompt(update.message)
         return
     try:
         await extras.send_start(update, context)
@@ -849,6 +909,7 @@ def main():
     app.add_handler(CommandHandler("start", start), group=0)
     app.add_handler(CommandHandler("reset", reset), group=0)
     app.add_handler(CommandHandler("broadcast", broadcast_cmd), group=0)
+    app.add_handler(CallbackQueryHandler(subscribe_check_callback, pattern="^sub:check$"), group=0)
 
     ub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(ub_connect_entry, pattern="^ub:connect$")],
