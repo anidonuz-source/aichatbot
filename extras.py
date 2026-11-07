@@ -479,7 +479,7 @@ def tr(lang: str, key: str, **kw) -> str:
 _SECTIONS = {
     "ai": ("🤖", ["chat", "imagine", "voice", "photo", "yt", "anime"]),
     "play": ("🎮", ["duel", "ship", "fun"]),
-    "tools": ("🛠", ["util", "group", "sticker"]),
+    "tools": ("🛠", ["util", "group", "mod", "sticker"]),
 }
 
 # element -> (emoji, (uz, ru, en) nom, (uz, ru, en) matn)
@@ -528,6 +528,10 @@ _ITEMS = {
         "/stats · /who · /activity · /members — guruh statistikasi va a'zolar",
         "/stats · /who · /activity · /members — статистика группы и участники",
         "/stats · /who · /activity · /members — group stats and members")),
+    "mod": ("🛡", ("Moderatsiya", "Модерация", "Moderation"), (
+        "Guruh adminlari uchun (reply yoki @username / ID bilan):\n/warn · /unwarn · /warns — ogohlantirishlar\n/mute 10m · /mute 2h · /unmute\n/ban · /unban · /kick\n/selfdefense on|off · /warnlimit N\n\nMisumi'ga so'ksang, u adminligini aytib, o'zi qisqa muddatga mute beradi.\nBotga guruhda admin huquqi (a'zolarni cheklash) kerak.",
+        "Для админов группы (ответом, @username или ID):\n/warn · /unwarn · /warns — предупреждения\n/mute 10m · /mute 2h · /unmute\n/ban · /unban · /kick\n/selfdefense on|off · /warnlimit N\n\nЕсли оскорбить Misumi, она напомнит, что она админ, и сама даст короткий мут.\nБоту нужны права админа в группе (ограничение участников).",
+        "For group admins (reply, @username or ID):\n/warn · /unwarn · /warns — warnings\n/mute 10m · /mute 2h · /unmute\n/ban · /unban · /kick\n/selfdefense on|off · /warnlimit N\n\nIf someone insults Misumi, she reminds them she's the admin and gives a short mute herself.\nThe bot needs admin rights in the group (restrict members).")),
     "sticker": ("🌟", ("Stikerlar", "Стикеры", "Stickers"), (
         "/stikeryasa — rasmdan yoki tavsifdan stiker yasash (fonsiz, WEBP)\n/stikerpaket — shaxsiy paketing\n/stiker — stikerni turkumga qo'shish\n/stikerlar — turkumlar ro'yxati",
         "/stikeryasa — стикер из фото или описания (без фона, WEBP)\n/stikerpaket — твой пак\n/stiker — добавить стикер в категорию\n/stikerlar — список категорий",
