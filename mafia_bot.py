@@ -259,24 +259,6 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 
-START_CARD = os.environ.get("MAFIA_START_CARD", "0") == "1"   # 0 = oddiy /start da kartani ko'rsatma
-MENU_CB = os.environ.get("MAFIA_MENU_CB", r"^(mafia|menu_mafia|menu:mafia|mafia_menu)$")  # asosiy menyudagi Mafia tugmasi callback_data si
-
-
-async def start_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Oddiy /start dan keyin mafia hisobi kartasini ham yuboradi."""
-    if START_CARD and not (context.args or []):
-        await send_menu(update, context)
-
-
-async def cb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Asosiy menyudagi «Mafia» tugmasi bosilganda statistika kartasi."""
-    q = update.callback_query
-    await q.answer()
-    t, kb = await asyncio.to_thread(_menu, q.from_user.id, q.from_user.first_name or "")
-    await q.message.reply_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
-
-
 async def cb_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """mfs:<ekran>[:arg] — Mafia hisob markazi tugmalari."""
     q = update.callback_query
@@ -642,7 +624,5 @@ def register(app) -> None:
     app.add_handler(CommandHandler(["qaytish", "mafiaqaytish"], cmd_rejoin, filters=_PRIVATE), group=0)
     app.add_handler(CallbackQueryHandler(cb_lobby, pattern=r"^mf:"), group=0)
     app.add_handler(CallbackQueryHandler(cb_shop, pattern=r"^mfs:"), group=0)
-    app.add_handler(CommandHandler("start", start_card, filters=_PRIVATE), group=1)
-    app.add_handler(CallbackQueryHandler(cb_menu, pattern=MENU_CB), group=0)
     app.add_handler(CommandHandler(["mafiamenu", "mafiyamenu"], send_menu, filters=_PRIVATE), group=0)
     app.job_queue.run_repeating(mafia_job, interval=1.0, first=3)
