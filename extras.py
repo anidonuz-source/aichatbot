@@ -417,9 +417,9 @@ T = {
         "hello_title": "Salom, {name}!",
         "hello_body": "Men <b>{bot}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman, ovozda gapiraman, darsda yordam beraman va bugungi kurs/ob-havo kabi savollarga jonli javob beraman.\n\nQuyidan bo'lim tanla yoki shunchaki yoz.",
         "open": "{bot} ni ochish", "add_group": "Guruhga qo'shish", "back": "Orqaga", "home": "Bosh sahifa",
-        "sec_ai": "AI imkoniyatlari", "sec_play": "O'yin va fun", "sec_mafia": "Mafia", "sec_tools": "Foydali", "sec_account": "Hisob",
+        "sec_ai": "AI imkoniyatlari", "sec_play": "O'yin va fun", "sec_tools": "Foydali", "sec_account": "Hisob",
         "desc_ai": "Suhbat, rasm, ovoz, YouTube, anime", "desc_play": "O'yinlar, ship va qiziqarli buyruqlar",
-        "desc_mafia": "Guruhda yashirin rollar o'yini: qoidalar, rollar, boshlash", "desc_tools": "Tarjima, ob-havo, eslatma va boshqalar", "pick": "Batafsil ko'rish uchun tanla:",
+        "desc_tools": "Tarjima, ob-havo, eslatma va boshqalar", "pick": "Batafsil ko'rish uchun tanla:",
         "acc_title": "Hisobim", "acc_lang": "Til", "acc_msgs": "Xabarlar", "acc_games": "O'yinlar",
         "acc_wins": "g'alaba", "acc_losses": "mag'lubiyat", "acc_draws": "durang",
         "acc_link_yes": "Akkount: ulangan", "acc_link_no": "Akkount: ulanmagan",
@@ -435,9 +435,9 @@ T = {
         "hello_title": "Привет, {name}!",
         "hello_body": "Я <b>{bot}</b>: болтаю, играю, рисую, отвечаю голосом, помогаю с учёбой и даю живые ответы на вопросы вроде курса валют или погоды сегодня.\n\nВыбери раздел ниже или просто напиши.",
         "open": "Открыть {bot}", "add_group": "Добавить в группу", "back": "Назад", "home": "Главная",
-        "sec_ai": "Возможности ИИ", "sec_play": "Игры и фан", "sec_mafia": "Мафия", "sec_tools": "Полезное", "sec_account": "Аккаунт",
+        "sec_ai": "Возможности ИИ", "sec_play": "Игры и фан", "sec_tools": "Полезное", "sec_account": "Аккаунт",
         "desc_ai": "Чат, рисунки, голос, YouTube, аниме", "desc_play": "Игры, шип и весёлые команды",
-        "desc_mafia": "Игра со скрытыми ролями в группе: правила, роли, запуск", "desc_tools": "Перевод, погода, напоминания и другое", "pick": "Выбери, чтобы узнать подробнее:",
+        "desc_tools": "Перевод, погода, напоминания и другое", "pick": "Выбери, чтобы узнать подробнее:",
         "acc_title": "Мой аккаунт", "acc_lang": "Язык", "acc_msgs": "Сообщений", "acc_games": "Игры",
         "acc_wins": "побед", "acc_losses": "поражений", "acc_draws": "ничьих",
         "acc_link_yes": "Аккаунт: подключён", "acc_link_no": "Аккаунт: не подключён",
@@ -453,9 +453,9 @@ T = {
         "hello_title": "Hi, {name}!",
         "hello_body": "I'm <b>{bot}</b>: I chat, play games, draw pictures, talk by voice, help with homework, and give live answers to things like today's exchange rate or weather.\n\nPick a section below or just type.",
         "open": "Open {bot}", "add_group": "Add to group", "back": "Back", "home": "Home",
-        "sec_ai": "AI features", "sec_play": "Games & fun", "sec_mafia": "Mafia", "sec_tools": "Tools", "sec_account": "Account",
+        "sec_ai": "AI features", "sec_play": "Games & fun", "sec_tools": "Tools", "sec_account": "Account",
         "desc_ai": "Chat, images, voice, YouTube, anime", "desc_play": "Games, ship and fun commands",
-        "desc_mafia": "Hidden-role group game: rules, roles, how to start", "desc_tools": "Translate, weather, reminders and more", "pick": "Pick one for details:",
+        "desc_tools": "Translate, weather, reminders and more", "pick": "Pick one for details:",
         "acc_title": "My account", "acc_lang": "Language", "acc_msgs": "Messages", "acc_games": "Games",
         "acc_wins": "wins", "acc_losses": "losses", "acc_draws": "draws",
         "acc_link_yes": "Account: linked", "acc_link_no": "Account: not linked",
@@ -479,7 +479,6 @@ def tr(lang: str, key: str, **kw) -> str:
 _SECTIONS = {
     "ai": ("🤖", ["chat", "imagine", "voice", "photo", "yt", "anime"]),
     "play": ("🎮", ["duel", "ship", "fun"]),
-    "mafia": ("🎭", ["mafia_how", "mafia_roles", "mafia_start", "mafia_tips"]),
     "tools": ("🛠", ["util", "group", "mod", "sticker"]),
 }
 
@@ -509,139 +508,6 @@ _ITEMS = {
         "/anime nom — reyting, janr, qismlar, mazmun\nNomsiz /anime — tasodifiy tavsiya.",
         "/anime название — рейтинг, жанр, серии, сюжет\n/anime без названия — случайная рекомендация.",
         "/anime name — rating, genres, episodes, synopsis\n/anime alone — a random pick.")),
-    "mafia_how": ("📖", ("Qanday o'ynaladi", "Как играть", "How it works"), (
-        "Mafia — guruhda o'ynaladigan yashirin rollar o'yini. 4 dan 16 tagacha o'yinchi.\n"
-        "Har kimga bot lichkada yashirin rol beradi: Shahar, Mafiya yoki yakka Maniak.\n\n"
-        "🌙 Tun — rollar yashirin harakat qiladi: mafiya qurbon tanlaydi, Doktor davolaydi, Komissar tekshiradi.\n"
-        "☀️ Kun — nima bo'lganini muhokama qilasiz, gumondorni aytasiz.\n"
-        "🗳 Ovoz — eng ko'p ovoz olgan osiladi va roli ochiladi.\n\n"
-        "Kecha va kunduz navbatma-navbat almashadi, g'olib chiqquncha.\n\n"
-        "🏆 G'alaba:\n"
-        "• Shahar — mafiya va maniak yo'q qilinsa\n"
-        "• Mafiya — soni qolganlarga teng yoki ko'p bo'lsa\n"
-        "• Maniak — oxirgi tirik qolsa",
-        "Мафия — игра со скрытыми ролями для группы, от 4 до 16 игроков.\n"
-        "Каждому бот в личке тайно выдаёт роль: Город, Мафия или одиночка Маньяк.\n\n"
-        "🌙 Ночь — роли действуют тайно: мафия выбирает жертву, Доктор лечит, Комиссар проверяет.\n"
-        "☀️ День — обсуждаете, что случилось, называете подозреваемых.\n"
-        "🗳 Голосование — кто набрал больше всех голосов, того вешают, и его роль открывается.\n\n"
-        "Ночь и день сменяют друг друга до победителя.\n\n"
-        "🏆 Победа:\n"
-        "• Город — если уничтожены мафия и маньяк\n"
-        "• Мафия — если её не меньше, чем остальных\n"
-        "• Маньяк — если остался последним",
-        "Mafia is a hidden-role game for groups, 4 to 16 players.\n"
-        "The bot secretly DMs everyone a role: Town, Mafia or the lone Maniac.\n\n"
-        "🌙 Night — roles act in secret: the mafia picks a victim, the Doctor heals, the Commissar investigates.\n"
-        "☀️ Day — you discuss what happened and name suspects.\n"
-        "🗳 Vote — whoever gets the most votes is hanged and their role is revealed.\n\n"
-        "Night and day alternate until someone wins.\n\n"
-        "🏆 Winning:\n"
-        "• Town — when the mafia and the maniac are gone\n"
-        "• Mafia — when they equal or outnumber everyone else\n"
-        "• Maniac — when last one standing")),
-    "mafia_roles": ("🎩", ("Rollar", "Роли", "Roles"), (
-        "🏙 SHAHAR\n"
-        "👤 Fuqaro — ovozing kuchi bilan o'ynaysan\n"
-        "🕵️ Komissar — har tun bitta odamni tekshiradi\n"
-        "🩺 Doktor — har tun bittasini davolaydi\n"
-        "🛡 Qo'riqchi — himoyalangan odam o'rniga o'ladi\n"
-        "💃 Kelin — bir odamni tunda band qiladi\n"
-        "📰 Jurnalist — ikki kishi bir jamoami, biladi\n"
-        "🎯 Snayper — butun o'yinda 1 ta o'q\n"
-        "🍀 Omadli — birinchi hujumdan omon qoladi\n\n"
-        "🔫 MAFIYA\n"
-        "🔫 Mafiya — tunda qurbon tanlaydi\n"
-        "🎩 Don — boshliq, teng ovozda qaror uniki\n"
-        "⚖️ Advokat — mafiyachini Komissardan himoya qiladi\n\n"
-        "🔪 YAKKA\n"
-        "🔪 Maniak — hamma unga qarshi, o'zi uchun o'ynaydi\n\n"
-        "Rollar soni o'yinchilar soniga qarab o'zi tanlanadi: kam odamda faqat asosiylar, ko'payganda yangilari qo'shiladi.",
-        "🏙 ГОРОД\n"
-        "👤 Мирный — сила в голосе\n"
-        "🕵️ Комиссар — проверяет одного каждую ночь\n"
-        "🩺 Доктор — лечит одного каждую ночь\n"
-        "🛡 Телохранитель — гибнет вместо защищаемого\n"
-        "💃 Путана — блокирует игрока на ночь\n"
-        "📰 Журналист — узнаёт, в одной ли команде двое\n"
-        "🎯 Снайпер — один выстрел на всю игру\n"
-        "🍀 Везунчик — переживает первое нападение\n\n"
-        "🔫 МАФИЯ\n"
-        "🔫 Мафия — ночью выбирает жертву\n"
-        "🎩 Дон — глава, при равенстве голосов решает он\n"
-        "⚖️ Адвокат — прикрывает мафиози от Комиссара\n\n"
-        "🔪 ОДИНОЧКА\n"
-        "🔪 Маньяк — все против него, играет сам за себя\n\n"
-        "Набор ролей зависит от числа игроков: в малой игре только основные, чем больше людей, тем больше ролей.",
-        "🏙 TOWN\n"
-        "👤 Citizen — your power is your vote\n"
-        "🕵️ Commissar — investigates one player each night\n"
-        "🩺 Doctor — heals one player each night\n"
-        "🛡 Bodyguard — dies in place of the protected player\n"
-        "💃 Escort — blocks one player for the night\n"
-        "📰 Journalist — learns if two players are on the same team\n"
-        "🎯 Sniper — one bullet for the whole game\n"
-        "🍀 Lucky — survives the first attack\n\n"
-        "🔫 MAFIA\n"
-        "🔫 Mafia — picks a victim at night\n"
-        "🎩 Don — the boss, breaks voting ties\n"
-        "⚖️ Lawyer — shields a mafioso from the Commissar\n\n"
-        "🔪 SOLO\n"
-        "🔪 Maniac — everyone is an enemy, plays alone\n\n"
-        "The role set depends on player count: small games get only the core roles, bigger ones add more.")),
-    "mafia_start": ("🚀", ("Boshlash", "Запуск", "Getting started"), (
-        "1. Botni guruhga qo'shing (agar hali qo'shilmagan bo'lsa).\n"
-        "2. Guruhda /mafia yozing — lobbi xabari chiqadi.\n"
-        "3. Har bir o'yinchi «🎮 Qo'shilish» ni bosadi, bot lichkada ochiladi va Mini App tugmasi chiqadi.\n"
-        "4. Odam yetmasa lobbidagi «🤖 Bot +» orqali bot o'yinchi qo'shish mumkin. Misumi AI ham o'ynaydi va gapiradi.\n"
-        "5. Kamida 4 kishi bo'lgach ega «Boshlash» ni bosadi.\n\n"
-        "Lichkada /start yozmagan o'yinchiga rol yuborib bo'lmaydi, shuning uchun avval botga bir marta /start bosing.\n\n"
-        "Buyruqlar:\n"
-        "/mafia — yangi o'yin lobbisi (guruhda)\n"
-        "/mafiastop — o'yinni to'xtatish (ega yoki admin)\n"
-        "/mafiarules — qoidalar va rollar",
-        "1. Добавь бота в группу (если его там ещё нет).\n"
-        "2. Напиши в группе /mafia — появится лобби.\n"
-        "3. Каждый игрок жмёт «🎮 Присоединиться», бот открывается в личке и появляется кнопка Mini App.\n"
-        "4. Если людей мало, можно добавить ботов кнопкой «🤖 Бот +». Misumi AI тоже играет и разговаривает.\n"
-        "5. Когда соберётся минимум 4 человека, хозяин жмёт «Начать».\n\n"
-        "Тому, кто ни разу не нажал /start у бота, роль в личку не придёт — пусть нажмёт заранее.\n\n"
-        "Команды:\n"
-        "/mafia — новое лобби (в группе)\n"
-        "/mafiastop — остановить игру (хозяин или админ)\n"
-        "/mafiarules — правила и роли",
-        "1. Add the bot to your group (if it isn't there yet).\n"
-        "2. Type /mafia in the group — a lobby message appears.\n"
-        "3. Everyone taps «🎮 Join», the bot opens in DM and shows the Mini App button.\n"
-        "4. If you're short on people, add bot players with «🤖 Bot +». Misumi AI plays and talks too.\n"
-        "5. With at least 4 players, the host taps «Start».\n\n"
-        "Anyone who never pressed /start in the bot can't get a DM role, so do it beforehand.\n\n"
-        "Commands:\n"
-        "/mafia — new lobby (in a group)\n"
-        "/mafiastop — stop the game (host or admin)\n"
-        "/mafiarules — rules and roles")),
-    "mafia_tips": ("💡", ("Maslahatlar", "Советы", "Tips"), (
-        "• Birinchi kunda ko'p gapirma, lekin jim ham o'tirma — ikkalasi ham shubha uyg'otadi.\n"
-        "• Komissar bo'lsang, rolingni erta ochma: o'sha tunning o'zida o'ldiriladi.\n"
-        "• Mafiya bo'lsang, shaharchalik gapir va sheriklaringni ochiq himoya qilma.\n"
-        "• Ovoz berishdan oldin kim kimni ayblaganini eslab qol — ziddiyat shundan topiladi.\n"
-        "• Doktor o'zini faqat bir marta davolay oladi, ehtiyot bo'l.\n"
-        "• Tun qisqa: harakatni tez tanla, aks holda o'tkazib yuborasan.\n\n"
-        "Eng muhimi — hazil bilan o'yna, o'yin tugagach hamma rollarini ochadi.",
-        "• В первый день не молчи и не болтай лишнего — и то и другое вызывает подозрения.\n"
-        "• Если ты Комиссар, не раскрывайся рано: ночью тебя уберут.\n"
-        "• Если ты мафия, говори как мирный и не защищай напарников в открытую.\n"
-        "• Перед голосованием запоминай, кто кого обвинял — на противоречиях и ловят.\n"
-        "• Доктор может вылечить себя только один раз.\n"
-        "• Ночь короткая: выбирай действие быстро, иначе пропустишь.\n\n"
-        "И главное — играй с юмором, в конце все роли раскроются.",
-        "• Don't stay silent on day one, but don't over-talk either — both look suspicious.\n"
-        "• As Commissar, don't reveal yourself early: you'll be killed that very night.\n"
-        "• As mafia, talk like a townie and don't openly defend your partners.\n"
-        "• Remember who accused whom before voting — contradictions give people away.\n"
-        "• The Doctor can only heal themselves once.\n"
-        "• Nights are short: pick your action quickly or you'll miss it.\n\n"
-        "Most of all, have fun — all roles are revealed at the end.")),
     "duel": ("⚔️", ("O'yinlar", "Игры", "Games"), (
         "/duel — o'yin taklif qilish\n/battle — jang\n/tictactoe — X-O\n/rps — tosh-qaychi-qog'oz\n/quiz — viktorina\n/reyting — reyting\nGuruhda eng qiziq.",
         "/duel — вызвать на игру\n/battle — бой\n/tictactoe — крестики-нолики\n/rps — камень-ножницы-бумага\n/quiz — викторина\n/reyting — рейтинг\nВ группе веселее всего.",
@@ -693,10 +559,9 @@ def _start_kb(chat_id, bot_username: str | None, premium: bool, lang: str = "uz"
         mk(tr(lang, "sec_play"), _SECTIONS["play"][0], callback_data="st:s:play"),
     ])
     rows.append([
-        mk(tr(lang, "sec_mafia"), _SECTIONS["mafia"][0], callback_data="st:s:mafia"),
         mk(tr(lang, "sec_tools"), _SECTIONS["tools"][0], callback_data="st:s:tools"),
+        mk(tr(lang, "sec_account"), "👤", callback_data="ac:home"),
     ])
-    rows.append([mk(tr(lang, "sec_account"), "👤", callback_data="ac:home")])
     if bot_username:
         rows.append([mk(tr(lang, "add_group"), "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
     if WEBAPP_URL and _is_admin(chat_id):
@@ -773,6 +638,55 @@ def _mask_phone(phone: str) -> str:
     return f"+{digits[:3]}•••{digits[-2:]}" if len(digits) > 6 else "•••"
 
 
+# ── Tariflar (narx va funksiyalar) ─────────────────────────────────────
+# Eslatma: premium bayrog'i bitta (admin_store.is_premium), shuning uchun Pro va Max
+# funksiyalari hozircha bir xil ochiladi; Max qo'shimcha AI sifati sifatida sotiladi.
+PLANS = {
+    "pro": {
+        "name": "Misumi AI Pro", "emoji": "💎", "price": 30000, "intro": "",
+        "features": [
+            "To'liq, cheklovsiz kod yozish va chuqurroq tahlil",
+            "Akkount ulash: avtomatik bio yangilanishi",
+            "Ichki AI yordamchisi: Saqlangan xabarlarda <code>.ai savol</code>",
+            "Ovozli xabarlarni tinglab, o'rningga javob yozish",
+            "Kalit so'zga tayyor javob (masalan «narx»)",
+            "Qora ro'yxat: tanlangan odamlarga avto-javob yo'q",
+            "Kunlik/haftalik statistika hisoboti",
+            "Oflayn vaqtini sozlash va oflayn imzoni o'chirish",
+        ],
+    },
+    "max": {
+        "name": "Misumi AI Max", "emoji": "⭐", "price": 70000, "intro": "Pro'dagi hammasi, plyus:",
+        "features": [
+            "Eng kuchli AI rejimi",
+            "Murakkab loyihalar uchun optimallashtirilgan",
+            "Ustuvor va tezroq javob berish",
+            "Eng chuqur tahlil darajasi",
+        ],
+    },
+}
+
+
+def _som(n: int) -> str:
+    return f"{n:,}".replace(",", " ") + " so'm"
+
+
+def _plans_text(owned: bool) -> str:
+    parts = []
+    for p in PLANS.values():
+        block = [f"{p['emoji']} <b>{p['name']}</b> — <b>{_som(p['price'])}</b> / oy"]
+        if p["intro"]:
+            block.append(f"<i>{p['intro']}</i>")
+        block += [f"• {f}" for f in p["features"]]
+        parts.append("\n".join(block))
+    text = "\n\n".join(parts)
+    if owned:
+        text += "\n\n✅ Sizda premium faol."
+    else:
+        text += "\n\nSotib olish uchun tugmani bosing: so'rov adminga yuboriladi."
+    return text
+
+
 def _account_info(user, lang: str) -> tuple[str, bool]:
     """(HTML matn, akkount ulanganmi)"""
     uid = user.id
@@ -805,6 +719,7 @@ def _account_info(user, lang: str) -> tuple[str, bool]:
     else:
         lines.append(f"{pe('🔗')} {tr(lang, 'acc_link_no')}")
     lines.append(f"{pe('💎')} {tr(lang, 'acc_pro') if pro else tr(lang, 'acc_free')}")
+    lines.append(f"\n💎 <b>Tariflar</b>\n<blockquote>{_plans_text(pro)}</blockquote>")
     text = "\n".join(lines)
     if not connected:
         text += f"\n\n<blockquote>{_esc(tr(lang, 'why_link'))}</blockquote>"
@@ -820,7 +735,8 @@ def _account_kb(connected: bool, pro: bool, lang: str, premium: bool) -> InlineK
     else:
         rows.append([mk(tr(lang, "btn_link"), "🔗", callback_data="ub:connect")])
     if not pro:
-        rows.append([mk(tr(lang, "btn_pro"), "💎", callback_data="ub:buy_pro")])
+        rows.append([mk("Pro olish", "💎", callback_data="ub:buy_pro"),
+                     mk("Max olish", "⭐", callback_data="ub:buy_max")])
     rows.append([mk(tr(lang, "btn_lang"), "🌐", callback_data="ac:lang"),
                  mk(tr(lang, "btn_voice"), "🔊", callback_data="ac:voice")])
     rows.append([mk(tr(lang, "btn_clear"), "🧹", callback_data="ac:clear")])
@@ -866,6 +782,23 @@ async def account_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if data in ("ac:home", "ub:account"):
         await query.answer()
         await _show_account(query, lang)
+    elif data == "ac:plans":
+        await query.answer()
+        try:
+            owned = bool(admin_store.is_premium(user.id))
+        except Exception:
+            owned = False
+
+        def _plans_kb(prem):
+            mk = _btn_maker(prem)
+            rows = []
+            if not owned:
+                rows.append([mk("Pro olish", "💎", callback_data="ub:buy_pro"),
+                             mk("Max olish", "⭐", callback_data="ub:buy_max")])
+            rows.append([mk(tr(lang, "back"), "⬅️", callback_data="ac:home")])
+            return InlineKeyboardMarkup(rows)
+
+        await edit_html(query, _plans_text(owned), _plans_kb)
     elif data == "ac:lang":
         await query.answer()
         await edit_html(query, f"{pe('🌐')} {tr(lang, 'lang_title')}", lambda prem: _lang_kb(lang, lang, prem))
