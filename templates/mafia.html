@@ -7,12 +7,12 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 {% raw %}
 <style>
-:root{--town:#3ddcb0;--mafia:#ff4d5a;--maniac:#ffb02e;--ink:#f3f1ff;--mut:#a29fc2;--card:rgba(14,12,32,.74);--line:rgba(255,255,255,.12);--acc:#7c5cff;--ser:Georgia,'Times New Roman',serif;--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
+:root{--town:#3ddcb0;--mafia:#ff4d5a;--maniac:#ffb02e;--vamp:#b66bff;--ink:#f3f1ff;--mut:#a29fc2;--card:rgba(14,12,32,.74);--line:rgba(255,255,255,.12);--acc:#7c5cff;--ser:Georgia,'Times New Roman',serif;--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:#0a0818;color:var(--ink);font:14px/1.38 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 button{font:inherit;color:inherit;border:0;cursor:pointer;background:none}
 button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2px}
-#app{position:fixed;inset:0;display:flex;flex-direction:column;padding-top:var(--sat)}
+#app{position:fixed;left:0;right:0;top:0;height:var(--tvh,100%);display:flex;flex-direction:column;padding-top:var(--sat)}
 /* osmon */
 .sky{position:fixed;inset:0;opacity:0;transition:opacity 1.2s}
 .s-lobby{background:linear-gradient(#17112f,#2c2152 70%,#3b2a63)}.s-night{background:linear-gradient(#04061a,#0d1636 55%,#1b2552)}
@@ -94,7 +94,7 @@ h3{margin:0 0 4px;font:700 17px var(--ser)}.mut{color:var(--mut);font-size:12.5p
 .tl div:before{content:'';position:absolute;left:-18px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--mut)}
 .tl .death:before,.tl .lynch:before{background:var(--mafia)}.tl .night:before{background:#6b7cff}.tl .vote:before{background:var(--maniac)}
 .rl{display:grid;grid-template-columns:1fr 1fr;gap:8px}.rc{background:rgba(255,255,255,.07);border-radius:12px;padding:8px 10px;border-top:3px solid var(--town)}
-.rc.mafia{border-color:var(--mafia)}.rc.maniac{border-color:var(--maniac)}.rc.mine{outline:2px solid #fff}.rc b{display:block}.rc span{font-size:11.5px;color:var(--mut)}
+.rc.mafia{border-color:var(--mafia)}.rc.maniac{border-color:var(--maniac)}.rc.vampire{border-color:var(--vamp)}.rc.mine{outline:2px solid #fff}.rc b{display:block}.rc span{font-size:11.5px;color:var(--mut)}
 /* overlay */
 .ov{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(5,3,16,.84);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:20px}.ov.on{display:flex}
 #card{width:min(78vw,300px);aspect-ratio:3/4.2;perspective:900px;cursor:pointer}
@@ -121,9 +121,29 @@ h3{margin:0 0 4px;font:700 17px var(--ser)}.mut{color:var(--mut);font-size:12.5p
 #splash.off{opacity:0;visibility:hidden}#splash .lg{font-size:76px;animation:fl 2s ease-in-out infinite}@keyframes fl{50%{transform:translateY(-10px) rotate(-6deg)}}
 #splash h1{margin:6px 0;font:700 40px var(--ser);letter-spacing:10px}
 .full{position:fixed;inset:0;z-index:60;display:grid;place-items:center;text-align:center;padding:30px;background:#0a0818}.full h2{font:700 24px var(--ser);margin:8px 0}
+#tabs button{font-size:12px}
+#rx{position:relative;z-index:6;display:none;gap:6px;justify-content:center;padding:4px 8px;flex-wrap:wrap}#rx.on{display:flex}
+#rx button{font-size:20px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:2px 9px;line-height:1.5}#rx button:active{transform:scale(.88)}
+.fl{position:absolute;font-size:28px;pointer-events:none;z-index:8;animation:flt 2.4s ease-out forwards}
+@keyframes flt{from{transform:translate(-50%,-30%) scale(.6);opacity:0}15%{opacity:1}to{transform:translate(-50%,-190%) scale(1.25);opacity:0}}
+.afk{position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);font-size:11px}
+.set{background:rgba(255,255,255,.07);border-radius:12px;padding:8px 10px;margin:8px 0}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0}.srow>div{display:flex;align-items:center;gap:10px}
+.sb{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.14);font-weight:700;font-size:16px}
+.sws{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.sw,.sws span{background:rgba(255,255,255,.1);border:1px solid var(--line);border-radius:99px;padding:5px 10px;font-size:12.5px}
+.sw.on{background:rgba(61,220,176,.2);border-color:var(--town)}
+.lr{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.lr.me{color:var(--town);font-weight:700}
+.ach{display:inline-block;background:rgba(255,255,255,.1);border-radius:99px;padding:3px 10px;margin:3px 4px 0 0;font-size:12.5px}.ach.lock{opacity:.35}
+.m.last .b{border:1px solid var(--maniac)}
+.seat{padding:0}.av img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}
+.mk{position:absolute;right:-6px;bottom:-4px;font-size:13px;z-index:1}
+.mkrow{display:flex;gap:6px;justify-content:center;margin:8px 0}
+.mkin{width:100%;background:rgba(255,255,255,.1);border:1px solid var(--line);border-radius:12px;padding:8px 10px;color:var(--ink);font:inherit;outline:0}
+html.kb #stage,html.kb #rx{display:none}html.kb #dock{height:auto;max-height:none;flex:1}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition-duration:.01s!important}}
 </style>
 {% endraw %}
+<script>window.BOTU={{ (bot_username or '')|tojson }};</script>
 </head>
 <body class="lobby">
 <div class="sky s-lobby"></div><div class="sky s-night"></div><div class="sky s-day"></div><div class="sky s-vote"></div><div class="sky s-end"></div>
@@ -131,16 +151,17 @@ h3{margin:0 0 4px;font:700 17px var(--ser)}.mut{color:var(--mut);font-size:12.5p
 <div class="fog"></div><div class="fog" style="bottom:36vh;animation-duration:21s;animation-direction:alternate-reverse"></div>
 <svg id="city" viewBox="0 0 400 120" preserveAspectRatio="xMidYMax slice" aria-hidden="true"></svg>
 <div id="app">
-  <div id="top"><div class="chip" id="ph">🎭 Mafia</div><div id="bar"><i></i></div><button class="chip" id="snd" aria-label="Ovoz">🔊</button><button class="chip" id="me">…</button></div>
+  <div id="top"><div class="chip" id="ph">🎭 Mafia</div><div id="bar"><i></i></div><button class="chip" id="lg" aria-label="Til">UZ</button><button class="chip" id="snd" aria-label="Ovoz">🔊</button><button class="chip" id="me">…</button></div>
   <div id="stage"><div id="table"><div id="felt"></div><svg id="lines" viewBox="0 0 100 100"></svg>
     <div id="center"><svg id="ring" viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="47"/><circle class="fg" cx="50" cy="50" r="47" stroke-dasharray="295.3" stroke-dashoffset="0"/></svg><div id="tnum"></div><div id="tlab"></div></div>
   </div></div>
+  <div id="rx"></div>
   <div id="dock">
     <button id="grip" aria-label="Panelni yig'ish"></button>
-    <div id="tabs"><button data-t="act" class="on">🎯 Harakat</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button></div>
+    <div id="tabs"><button data-t="act" class="on">🎯 Harakat</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button><button data-t="stats">🏆 Reyting</button></div>
     <div class="pane on" id="p-act"></div>
     <div class="pane" id="p-chat"><div id="chs"></div><div id="msgs"></div><div id="qp"></div><form id="cf" autocomplete="off"><input id="ci" maxlength="220" placeholder="Xabar yoz…" enterkeyhint="send"><button type="submit" aria-label="Yuborish">➤</button></form></div>
-    <div class="pane" id="p-log"></div><div class="pane" id="p-roles"></div>
+    <div class="pane" id="p-log"></div><div class="pane" id="p-roles"></div><div class="pane" id="p-stats"></div>
   </div>
 </div>
 <div class="ov" id="ovr"><div id="card"><div id="cin"><div class="face f1">🎭<div style="font:14px system-ui;margin-top:10px;color:#cbb9ff">Rolingni ochish uchun bos</div></div><div class="face f2" id="cback"></div></div></div></div>
@@ -157,8 +178,8 @@ const tg = window.Telegram && Telegram.WebApp;
 if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#0a0818'); tg.setBackgroundColor('#0a0818'); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {} }
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const gid = new URLSearchParams(location.search).get('g') || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
-const TC = {town: 'var(--town)', mafia: 'var(--mafia)', maniac: 'var(--maniac)'};
+let gid = new URLSearchParams(location.search).get('g') || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+const TC = {town: 'var(--town)', mafia: 'var(--mafia)', maniac: 'var(--maniac)', vampire: 'var(--vamp)'};
 const PH = {lobby: '🎭 Lobbi', reveal: '🃏 Rollar', ended: '🏁 Tugadi'};
 const HINT = {
   kill: "Mafiya jamoasi bilan kelishib bitta o'yinchini tanla. Ovozlar teng bo'lsa Don hal qiladi.",
@@ -168,7 +189,9 @@ const HINT = {
   block: "Kimni band qilasan? U tunda harakat qila olmaydi. Ketma-ket bir odamni emas.",
   compare: "Ikki o'yinchini tanla: ular bir jamoadami yoki yo'qmi, bilasan.",
   snipe: "Kimni otasan? Begunohni otsang, o'zing ham o'lasan.",
-  defend: "Qaysi mafiyachini himoya qilasan? Komissar unga «tinch» deb ko'radi."
+  defend: "Qaysi mafiyachini himoya qilasan? Komissar unga «tinch» deb ko'radi.",
+  vow: "Kimga qasam ichasan? Kunduzi seni osishsa, oxirgi qasam ichgan odaming sen bilan ketadi.",
+  bite: "Kimni tishlaysan? Birinchi tishlash belgi qoldiradi, ikkinchisi o'ldiradi."
 };
 const TIP = {
   citizen: "Ovozing — kuching. Kim kimga ovoz berayotganini kuzat, jim o'tirganlarga e'tibor ber.",
@@ -182,14 +205,18 @@ const TIP = {
   journalist: "Ikki gumonli odamni solishtirib, jamoalarini bil.",
   sniper: "Bitta o'q bor. Ishonchsiz bo'lsang, otma («O'q uzmaslik» tugmasi bor).",
   lucky: "Birinchi hujumdan omon qolasan, lekin buni oshkor qilma.",
-  lawyer: "Mafiya sherigini himoya qil: Komissar uni «tinch» deb ko'radi."
+  lawyer: "Mafiya sherigini himoya qil: Komissar uni «tinch» deb ko'radi.",
+  avenger: "Eng xavfli gumondorga qasam ich: seni osishsa, u ham ketadi. Shuning uchun seni osishga hech kim jur'at etmasin.",
+  judge: "Veto bitta: noto'g'ri odam osilayotganda ishlat. Sudya ekaningni hamma biladi, ehtiyot bo'l.",
+  vampire: "Bir odamni ikki marta tishlash kerak. Navbatma-navbat tishlab, shubhani tarqat."
 };
 const QP = ["🤨 Shubhali", "😇 Men begunohman", "🗳 Ovozga o'taylik", "❓ Kim jim?", "👆 Unga ovoz beraman", "🤝 Menga ishoning"];
-const ICON = {start: '🎭', night: '🌙', death: '☠️', lynch: '⚖️', vote: '🗳', end: '🏁', info: '•'};
+const ICON = {start: '🎭', night: '🌙', death: '☠️', lynch: '⚖️', vote: '🗳', veto: '👨‍⚖️', end: '🏁', info: '•'};
 
 let V = null, off = 0, tab = 'act', lastVer = -1, prev = null, pend = [], seenFeed = 0, seenPriv = 0, seenChat = 0;
 let busy = false, boot = true, dead = false, fails = 0, lastErrToast = 0, lastTick = 0, bubSig = '', chatSig = '', qpDone = false;
 let sOn = true, ac;
+let seenRx = 0, lwMode = false, setOpen = false, statsData = null, statsAt = 0, retried = false;
 try { sOn = localStorage.getItem('mf_snd') !== '0'; } catch (e) {}
 
 const hue = u => `hsl(${Math.abs(Number(u) * 67 + 13) % 360},52%,42%)`;
@@ -198,6 +225,40 @@ const byUid = u => V && V.players.find(p => p.uid === u);
 const nowSrv = () => Date.now() / 1000 + off;
 const maxId = a => (a || []).reduce((x, f) => Math.max(x, f.id || 0), 0);
 const hap = (t, k) => { try { if (!tg || !tg.HapticFeedback) return; t === 'n' ? tg.HapticFeedback.notificationOccurred(k || 'success') : tg.HapticFeedback.impactOccurred(t || 'light'); } catch (e) {} };
+
+/* til (uz/ru), belgilar, ulashish, klaviatura */
+const BOTU = window.BOTU || '';
+let LANG = 'uz';
+try { LANG = localStorage.getItem('mf_lang') || ((tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code) === 'ru' ? 'ru' : 'uz'); } catch (e) {}
+const RU = Object.entries({"🎮 Qo'shilish":"🎮 Войти","Chiqish":"Выйти","▶ O'yinni boshlash":"▶ Начать игру","🃏 Rolimni ko'rish":"🃏 Моя роль","🏆 Natijalar":"🏆 Итоги","🗳 Ovozga tayyorman":"🗳 Готов голосовать","✓ Tayyorsan":"✓ Готов","⏭ O'tkazib yuborish":"⏭ Пропустить","Bekor":"Отмена","🛑 Bekor qilindi":"🛑 Отменено","🗳 Osish:":"🗳 Повесить:","Hali ovoz bermadingiz":"Ты ещё не голосовал","Ovoz berding: ":"Ты проголосовал: ","🗳 Kimni osamiz?":"🗳 Кого повесим?","☀️ Muhokama":"☀️ Обсуждение","Muhokama":"Обсуждение","😴 Shahar uxlaydi":"😴 Город спит","Shahar uxlaydi…":"Город спит…","💀 Kuzatuvchisan":"💀 Ты наблюдатель","O'yin tugadi":"Игра окончена","Rollar tarqatildi":"Роли розданы","Tomoshabin":"Зритель","Lobbi":"Лобби","Rollar":"Роли","Harakat":"Действие","Jurnal":"Журнал","Reyting":"Рейтинг","Xabar yoz…":"Напиши сообщение…","Hozir yozib bo'lmaydi":"Сейчас писать нельзя","☀️ Umumiy chat":"☀️ Общий чат","G'OLIB":"ПОБЕДИТЕЛЬ","🏆 Sen yutding!":"🏆 Ты победил!","Bu safar omad kelmadi":"В этот раз не повезло","Natijalarni yopish":"Закрыть итоги","SEN O'LDING":"ТЫ УМЕР","Davom etish":"Продолжить","Aloqa uzildi, qayta urinilmoqda…":"Связь потеряна, пробуем снова…","Telegram ichida oching":"Откройте в Telegram","O'yin topilmadi":"Игра не найдена","Faol o'yin topilmadi":"Активная игра не найдена","-TUN":"-Я НОЧЬ","-KUN":"-Й ДЕНЬ","OVOZ BERISH":"ГОЛОСОВАНИЕ","-tun":"-я ночь","-kun":"-й день","Rolingni ko'r":"Посмотри роль","📨 Do'stlarni chaqirish":"📨 Позвать друзей","🔁 Yana o'ynash":"🔁 Сыграть ещё","🎭 Mafia o'yiniga qo'shil!":"🎭 Заходи в игру Мафия!","Yozuv (faqat senga ko'rinadi)":"Заметка (видна только тебе)"}).sort((a, b) => b[0].length - a[0].length);
+const L = x => LANG === 'ru' ? RU.reduce((a, [u, r]) => a.split(u).join(r), String(x)) : x;
+$('#lg').textContent = LANG.toUpperCase();
+$('#lg').onclick = () => { try { localStorage.setItem('mf_lang', LANG === 'ru' ? 'uz' : 'ru'); } catch (e) {} location.reload(); };
+if (LANG === 'ru') { $$('#tabs button').forEach(b => b.innerHTML = L(b.innerHTML)); $('#ci').placeholder = L($('#ci').placeholder); $('#splash .mut').textContent = L($('#splash .mut').textContent); }
+
+let marks = {}; const MK = {g: '🟢', r: '🔴', q: '❓'};
+const loadMarks = () => { try { marks = JSON.parse(localStorage.getItem('mf_mk_' + gid) || '{}') || {}; } catch (e) { marks = {}; } };
+const saveMarks = () => { try { localStorage.setItem('mf_mk_' + gid, JSON.stringify(marks)); } catch (e) {} };
+function markUI(u) {
+  if (!V || !V.me || u === V.me.uid) return '';
+  const c = marks[u] || {};
+  return `<div class="mkrow">${['g', 'r', 'q'].map(k => `<button type="button" class="sw${c.m === k ? ' on' : ''}" data-mk="${k}" data-u="${u}">${MK[k]}</button>`).join('')}<button type="button" class="sw" data-mk="x" data-u="${u}">✖</button></div><input class="mkin" data-u="${u}" maxlength="40" value="${esc(c.n || '')}" placeholder="${esc(L("Yozuv (faqat senga ko'rinadi)"))}">`;
+}
+function share(kind) {
+  if (!BOTU || !tg) return;
+  const link = `https://t.me/${BOTU}?start=mafia_${gid}`;
+  tg.openTelegramLink(kind === 'again' ? `https://t.me/share/url?url=${encodeURIComponent('/mafia@' + BOTU)}`
+    : `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(L("🎭 Mafia o'yiniga qo'shil!"))}`);
+}
+const avc = p => p.is_bot ? '🤖' : esc([...(p.name || '?').trim()][0] || '?').toUpperCase() + (p.photo ? `<img src="${esc(p.photo)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">` : '');
+let maxH = 0, queued = null;
+function vp() {
+  const h = (tg && tg.viewportHeight) || (window.visualViewport && visualViewport.height) || innerHeight;
+  maxH = Math.max(maxH, h); document.documentElement.style.setProperty('--tvh', h + 'px');
+  const kb = h < maxH * .78; document.documentElement.classList.toggle('kb', kb);
+  if (kb) { const l = $('#msgs'); l.scrollTop = l.scrollHeight; }
+}
+tg && tg.onEvent && tg.onEvent('viewportChanged', vp); window.visualViewport && visualViewport.addEventListener('resize', vp); vp();
 
 /* ovoz effektlari */
 function snd(k) {
@@ -231,11 +292,11 @@ $('#snd').onclick = () => { sOn = !sOn; $('#snd').textContent = sOn ? '🔊' : '
   $('#city').innerHTML = s;
 })();
 
-function toast(t, bad, ms) { const d = document.createElement('div'); d.className = 't' + (bad ? ' bad' : ''); d.textContent = t; $('#toasts').appendChild(d); setTimeout(() => d.remove(), ms || 4300); }
-function announce(t, c) { const a = $('#ann'); a.firstElementChild.textContent = t; a.firstElementChild.style.color = c || '#fff'; a.classList.remove('on'); void a.offsetWidth; a.classList.add('on'); }
+function toast(t, bad, ms) { const d = document.createElement('div'); d.className = 't' + (bad ? ' bad' : ''); d.textContent = L(t); $('#toasts').appendChild(d); setTimeout(() => d.remove(), ms || 4300); }
+function announce(t, c) { const a = $('#ann'); a.firstElementChild.textContent = L(t); a.firstElementChild.style.color = c || '#fff'; a.classList.remove('on'); void a.offsetWidth; a.classList.add('on'); }
 function fatal(icon, title, text) {
   dead = true; $('#splash').classList.add('off');
-  document.body.insertAdjacentHTML('beforeend', `<div class="full"><div><div style="font-size:60px">${icon}</div><h2>${esc(title)}</h2><p class="mut">${esc(text)}</p></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="full"><div><div style="font-size:60px">${icon}</div><h2>${L(esc(title))}</h2><p class="mut">${L(esc(text))}</p></div></div>`);
 }
 
 /* tarmoq */
@@ -252,17 +313,27 @@ function netErr(e) {
   const n = Date.now(); if (n - lastErrToast > 8000) { lastErrToast = n; toast("Aloqa uzildi, qayta urinilmoqda…", true); }
 }
 async function act(p, ex) {
-  if (busy || dead) return; busy = true;
+  if (dead) return;
+  if (busy) { queued = [p, ex]; return; }
+  busy = true;
   try {
     const v = await api(p, ex);
     if (v.result && !v.result.ok) { toast(v.result.msg, true); hap('n', 'error'); } else { hap('light'); snd('tap'); }
     apply(v, true);
   } catch (e) { netErr(e); }
   busy = false; if (V) render();
+  if (queued) { const q = queued; queued = null; act(q[0], q[1]); }
 }
 async function poll() {
   if (dead) return;
-  try { apply(await api('state')); fails = 0; } catch (e) { fails++; netErr(e); }
+  try { apply(await api('state')); fails = 0; }
+  catch (e) {
+    if (e.status === 404 && !retried) {
+      retried = true;
+      try { const r = await api('mine'); if (r.gid && r.gid !== gid) { gid = r.gid; boot = true; fails = 0; return setTimeout(poll, 300); } } catch (_) {}
+    }
+    fails++; netErr(e);
+  }
   if (!dead) setTimeout(poll, fails > 2 ? 3000 : 1000);
 }
 
@@ -270,7 +341,7 @@ async function poll() {
 function apply(v, force) {
   const old = V; V = v; off = v.now - Date.now() / 1000;
   if (boot) {
-    boot = false; seenFeed = maxId(v.feed); seenPriv = maxId(v.private); seenChat = maxId(v.chat);
+    boot = false; loadMarks(); seenFeed = maxId(v.feed); seenPriv = maxId(v.private); seenChat = maxId(v.chat); seenRx = maxId(v.reactions);
     prev = {phase: v.phase, day: v.day, alive: v.me ? v.me.alive : true};
     lastVer = v.version;
     if (v.phase === 'reveal') openCard();
@@ -282,8 +353,9 @@ function apply(v, force) {
   if (prev.phase !== v.phase || prev.day !== v.day) { pend = []; onPhase(v); }
   if (v.me && prev.alive && !v.me.alive && v.phase !== 'ended') { setTimeout(showDead, 700); snd('death'); hap('n', 'error'); }
   prev = {phase: v.phase, day: v.day, alive: v.me ? v.me.alive : true};
-  for (const f of v.feed) if (f.id > seenFeed) { seenFeed = f.id; if (f.kind === 'death' || f.kind === 'lynch') toast('☠ ' + f.text, true); else if (f.kind === 'info' && /hech kim/i.test(f.text)) toast(f.text); }
+  for (const f of v.feed) if (f.id > seenFeed) { seenFeed = f.id; if (f.kind === 'death' || f.kind === 'lynch') toast('☠ ' + f.text, true); else if (f.kind === 'veto') toast(f.text); else if (f.kind === 'info' && /hech kim/i.test(f.text)) toast(f.text); }
   for (const f of v.private) if (f.id > seenPriv) { seenPriv = f.id; toast(f.text); hap('n', f.kind === 'death' ? 'error' : 'success'); }
+  floatRx(v);
   render();
 }
 function onPhase(v) {
@@ -303,13 +375,13 @@ function render() {
   const v = V, m = v.me;
   document.body.className = v.phase;
   $('#ph').textContent = v.phase === 'night' ? `🌙 ${v.day}-tun` : v.phase === 'day' ? `☀️ ${v.day}-kun` : v.phase === 'vote' ? `🗳 ${v.day}-kun` : PH[v.phase];
-  $('#me').innerHTML = m && m.role ? `${m.role_emoji} ${esc(m.role_name)}` : `👥 ${v.players.length}/${v.max_players}`;
+  $('#me').innerHTML = m && m.role ? `${m.role_emoji} ${esc(m.role_name)}` : (v.spectator && v.phase !== 'lobby' ? `👁 ${v.watching || 1}` : `👥 ${v.players.length}/${v.max_players}`);
   $('#dock').style.borderTopColor = m && m.team ? TC[m.team] : '';
-  table(); panelAct(); panelChat(); panelQ(); panelLog(); panelRoles(); tick();
+  table(); panelAct(); panelChat(); panelQ(); panelLog(); panelRoles(); rxBar(); tick(); $('#ph').textContent = L($('#ph').textContent);
 }
 function bubbles() {
   const b = {};
-  if (V && ['day', 'vote'].includes(V.phase)) V.chat.forEach(c => { if (c.ch === 'day' && nowSrv() - c.t < 9) b[c.uid] = c.text.length > 56 ? c.text.slice(0, 54) + '…' : c.text; });
+  if (V && ['day', 'vote'].includes(V.phase)) V.chat.forEach(c => { if ((c.ch === 'day' || c.ch === 'last') && nowSrv() - c.t < 9) b[c.uid] = c.text.length > 56 ? c.text.slice(0, 54) + '…' : c.text; });
   return b;
 }
 function table() {
@@ -329,7 +401,7 @@ function table() {
   ps.forEach((p, k) => {
     const a = Math.PI / 2 + k * 2 * Math.PI / n, x = 50 + R * Math.cos(a), y = 50 + R * Math.sin(a); pos[p.uid] = [x, y];
     const cls = ['seat']; if (!p.alive) cls.push('dead'); if (ok.has(p.uid)) cls.push('ok'); if (pend.includes(p.uid)) cls.push('pend'); if (mine.has(p.uid)) cls.push('sel'); if (m && p.uid === m.uid) cls.push('me');
-    h += `<div class="${cls.join(' ')}" data-u="${p.uid}" style="left:${x}%;top:${y}%">${bub[p.uid] ? `<div class="bub">${esc(bub[p.uid])}</div>` : ''}<div class="av" style="background:${hue(p.uid)}">${ini(p)}${p.role_emoji ? `<span class="rb">${p.role_emoji}</span>` : ''}${cnt[p.uid] ? `<span class="vb">${cnt[p.uid]}</span>` : ''}</div><div class="nm">${esc(p.name)}</div></div>`;
+    h += `<button type="button" aria-label="${esc(p.name)}" class="${cls.join(' ')}" data-u="${p.uid}" style="left:${x}%;top:${y}%">${bub[p.uid] ? `<div class="bub">${esc(bub[p.uid])}</div>` : ''}<div class="av" style="background:${hue(p.uid)}">${avc(p)}${marks[p.uid] && marks[p.uid].m ? `<span class="mk">${MK[marks[p.uid].m]}</span>` : ''}${p.role_emoji ? `<span class="rb">${p.role_emoji}</span>` : ''}${cnt[p.uid] ? `<span class="vb">${cnt[p.uid]}</span>` : ''}</div><div class="nm">${esc(p.name)}${p.afk ? ' 💤' : ''}</div></button>`;
   });
   let ln = '<defs><marker id="ar" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L8 4L0 8z" fill="#ffb02e"/></marker></defs>';
   const tw = $('#table').offsetWidth || 300, f = (sz / 2 + 3) / tw * 100;
@@ -355,6 +427,7 @@ function choose(u) {
 function setTab(t) {
   tab = t; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + t));
+  if (t === 'stats') loadStats();
   if (t === 'chat') { $('#cd').style.display = 'none'; if (V) seenChat = maxId(V.chat); const l = $('#msgs'); l.scrollTop = l.scrollHeight; }
 }
 $$('#tabs button').forEach(b => b.onclick = () => { $('#dock').classList.remove('min'); setTab(b.dataset.t); hap('light'); });
@@ -370,16 +443,17 @@ function panelAct() {
   const notes = m ? v.private.slice(-3).reverse().map(f => `<div class="note">${esc(f.text)}</div>`).join('') : '';
   const nm = u => esc((byUid(u) || {}).name || '');
   if (!m && v.phase === 'lobby') h = `<h3>Lobbi (${v.players.length}/${v.max_players})</h3><div class="pl">${v.players.map(p => `<span>${p.is_bot ? '🤖 ' : ''}${esc(p.name)}${p.host ? ' 👑' : ''}</span>`).join('')}</div><button class="btn good" data-a="join">🎮 Qo'shilish</button>`;
-  else if (!m) h = `<h3>Tomoshabin</h3><div class="mut">Sen bu o'yinda emassan. Hamma rollar yashirin, faqat umumiy chatni o'qiysan.</div>`;
+  else if (!m) h = `<h3>Tomoshabin</h3><div class="mut">👁 Tomosha rejimi (${v.watching || 1} kishi). Rollar yashirin, faqat umumiy chatni o'qiysan va reaksiya bera olmaysan.</div>`;
   else if (v.phase === 'lobby') {
     h = `<h3>Lobbi (${v.players.length}/${v.max_players})</h3><div class="pl">${v.players.map(p => `<span>${p.is_bot ? '🤖 ' : ''}${esc(p.name)}${p.host ? ' 👑' : ''}</span>`).join('')}</div>`;
     h += v.players.length < v.min_players ? `<div class="mut">Boshlash uchun yana kamida ${v.min_players - v.players.length} ta o'yinchi kerak.</div>` : `<div class="mut">Hammasi tayyor, host boshlashi mumkin.</div>`;
+    h += settingsHTML(v, v.is_host);
     if (v.is_host) h += `<div class="row"><button class="btn alt" data-a="addbot" ${v.bot_count >= v.max_bots ? 'disabled' : ''}>🤖 Bot + (${v.bot_count})</button><button class="btn alt" data-a="removebot" ${v.bot_count ? '' : 'disabled'}>🤖 Bot −</button></div><button class="btn" data-a="start" ${v.players.length >= v.min_players ? '' : 'disabled'}>▶ O'yinni boshlash</button>`;
     else h += `<button class="btn alt" data-a="leave">Chiqish</button>`;
   }
   else if (v.phase === 'reveal') h = `<h3>Rollar tarqatildi</h3><div class="mut">Rolingni hech kimga ko'rsatma. Birozdan so'ng tun tushadi.</div><button class="btn" data-a="card">🃏 Rolimni ko'rish</button>`;
   else if (v.phase === 'ended') h = `<h3>O'yin tugadi</h3><div class="mut">G'olib: ${esc(v.winner_name || '—')}</div><button class="btn" data-a="end">🏆 Natijalar</button><div class="mut" style="margin-top:8px">Yangi o'yin: guruhda /mafia deb yozing.</div>`;
-  else if (!m.alive) h = `<h3>💀 Kuzatuvchisan</h3><div class="mut">Hamma rolni ko'rasan. O'liklar chatida gaplash.</div>`;
+  else if (!m.alive) h = `<h3>💀 Kuzatuvchisan</h3><div class="mut">Hamma rolni ko'rasan. O'liklar chatida gaplash.</div>` + (m.can_last_word ? `<button class="btn" data-a="lw">💬 Oxirgi so'zni yozish</button>` : '');
   else if (v.phase === 'night') {
     if (m.action) {
       let st;
@@ -389,7 +463,7 @@ function panelAct() {
       const need = m.pick === 2 ? 2 : 1, ready = pend.length === need;
       h = `<h3>${m.role_emoji} ${esc(m.action_label)}</h3><div class="mut">${HINT[m.action] || ''}</div>${m.team === 'mafia' ? matesHTML() : ''}<div class="note${m.my_target != null || m.my_pass ? ' ok' : ''}">${st}</div>`;
       if (m.action === 'snipe') h += `<div class="mut">Qolgan o'q: ${m.shots}</div>`;
-      if (pend.length) h += `<div class="row"><button class="btn alt" data-a="cancel">Bekor</button><button class="btn ${['kill', 'slay', 'snipe'].includes(m.action) ? 'red' : ''}" data-a="confirm" ${ready ? '' : 'disabled'}>✓ ${esc(m.action_label)}: ${pend.map(nm).join(' + ')}</button></div>`;
+      if (pend.length) h += `<div class="row"><button class="btn alt" data-a="cancel">Bekor</button><button class="btn ${['kill', 'slay', 'snipe', 'bite'].includes(m.action) ? 'red' : ''}" data-a="confirm" ${ready ? '' : 'disabled'}>✓ ${esc(m.action_label)}: ${pend.map(nm).join(' + ')}</button></div>`;
       if (m.can_skip && !m.my_pass) h += `<button class="btn alt" data-a="nofire">🚫 O'q uzmaslik</button>`;
     } else h = `<h3>😴 Shahar uxlaydi</h3><div class="mut">${m.role_emoji} ${esc(m.role_name)}: tunda harakating yo'q. Tong otishini kut.</div>`;
   }
@@ -403,7 +477,11 @@ function panelAct() {
     if (pend.length) h += `<div class="row"><button class="btn alt" data-a="cancel">Bekor</button><button class="btn red" data-a="vote">🗳 Osish: ${nm(pend[0])}</button></div>`;
     else h += `<button class="btn alt" data-a="skip">⏭ O'tkazib yuborish</button>`;
   }
-  e.innerHTML = notes + h + (m && m.alive && ['night', 'day'].includes(v.phase) && TIP[m.role] ? `<div class="mut" style="margin-top:12px">💡 ${TIP[m.role]}</div>` : '');
+  if (v.phase === 'lobby' && BOTU) h += `<button class="btn alt" data-a="invite">📨 Do'stlarni chaqirish</button>`;
+  if (v.phase === 'ended' && BOTU) h += `<button class="btn" data-a="again">🔁 Yana o'ynash</button>`;
+  if (m && m.can_veto) h += `<button class="btn red" data-a="veto">👨‍⚖️ Hukmni bekor qilish (veto)</button>`;
+  const lov = m && m.lover ? `<div class="note ok">💘 Sevishganing: <b>${esc(m.lover.name)}</b>. Biringiz o'lsa, ikkinchingiz ham o'ladi.</div>` : '';
+  e.innerHTML = L(notes + lov + h + (m && m.alive && ['night', 'day'].includes(v.phase) && TIP[m.role] ? `<div class="mut" style="margin-top:12px">💡 ${TIP[m.role]}</div>` : ''));
 }
 $('#p-act').addEventListener('click', ev => {
   const b = ev.target.closest('[data-a]'); if (!b || b.disabled || !V) return;
@@ -416,6 +494,13 @@ $('#p-act').addEventListener('click', ev => {
   else if (a === 'confirm') { const p = pend.slice(); pend = []; act('action', m.pick === 2 ? {target: p[0], target2: p[1]} : {target: p[0]}); }
   else if (a === 'vote') { const p = pend.slice(); pend = []; act('vote', {target: p[0]}); }
   else if (a === 'card') openCard(); else if (a === 'end') showEnd();
+  else if (a === 'veto') act('veto');
+  else if (a === 'invite' || a === 'again') share(a);
+  else if (a === 'lw') { lwMode = true; setTab('chat'); panelChat(); setTimeout(() => $('#ci').focus(), 50); }
+  else if (a === 'settoggle') { setOpen = !setOpen; panelAct(); }
+  else if (a === 'set') act('settings', {settings: {[b.dataset.k]: (V.settings[b.dataset.k] || 0) + Number(b.dataset.d)}});
+  else if (a === 'tog') act('settings', {settings: {[b.dataset.k]: !V.settings[b.dataset.k]}});
+  else if (a === 'role') { const d = new Set(V.settings.disabled || []); const r = b.dataset.r; d.has(r) ? d.delete(r) : d.add(r); act('settings', {settings: {disabled: [...d]}}); }
 });
 
 /* chat */
@@ -426,11 +511,14 @@ function panelChat() {
   const ok = !!(m && m.can_chat);
   $('#cf').classList.toggle('off', !ok); $('#ci').disabled = !ok;
   $('#ci').placeholder = ok ? 'Xabar yoz…' : "Hozir yozib bo'lmaydi";
+  if (lwMode && !(m && m.can_last_word)) lwMode = false;
+  if (lwMode) { $('#ci').placeholder = "💬 Oxirgi so'zing (bitta xabar)"; $('#chs').textContent = "💬 Oxirgi so'z: hammaga ko'rinadi, faqat bitta xabar"; }
+  $('#chs').textContent = L($('#chs').textContent); $('#ci').placeholder = L($('#ci').placeholder);
   const sig = v.chat.length + ':' + maxId(v.chat);
   if (sig !== chatSig) {
     chatSig = sig;
     const near = e.scrollHeight - e.scrollTop - e.clientHeight < 70;
-    e.innerHTML = v.chat.length ? v.chat.map(c => `<div class="m${m && c.uid === m.uid ? ' me' : ''} ${esc(c.ch)}"><div class="a" style="background:${hue(c.uid)}">${esc([...(c.name || '?')][0] || '?').toUpperCase()}</div><div class="b"><small>${c.ch === 'mafia' ? '🔫 ' : c.ch === 'dead' ? '💀 ' : ''}${esc(c.name)}</small>${esc(c.text)}</div></div>`).join('') : `<div class="mut" style="text-align:center;margin-top:20px">Hali xabar yo'q. Birinchi bo'l 👋</div>`;
+    e.innerHTML = v.chat.length ? v.chat.map(c => `<div class="m${m && c.uid === m.uid ? ' me' : ''} ${esc(c.ch)}"><div class="a" style="background:${hue(c.uid)}">${esc([...(c.name || '?')][0] || '?').toUpperCase()}</div><div class="b"><small>${c.ch === 'mafia' ? '🔫 ' : c.ch === 'dead' ? '💀 ' : c.ch === 'last' ? '💬 Oxirgi so‘z · ' : ''}${esc(c.name)}</small>${esc(c.text)}</div></div>`).join('') : `<div class="mut" style="text-align:center;margin-top:20px">Hali xabar yo'q. Birinchi bo'l 👋</div>`;
     if (near || tab === 'chat') e.scrollTop = e.scrollHeight;
   }
   if (tab !== 'chat' && v.chat.some(c => c.id > seenChat && !(m && c.uid === m.uid))) $('#cd').style.display = 'block';
@@ -442,7 +530,7 @@ function panelQ() {
 }
 async function send(text) {
   const i = $('#ci'), t = (text || i.value).trim(); if (!t || dead) return; if (!text) i.value = '';
-  try { const v = await api('chat', {text: t}); if (v.result && !v.result.ok) toast(v.result.msg, true); apply(v, true); } catch (e) { netErr(e); }
+  try { const lw = lwMode && V && V.me && V.me.can_last_word; const v = await api(lw ? 'lastword' : 'chat', {text: t}); if (lw && v.result && v.result.ok) lwMode = false; if (v.result && !v.result.ok) toast(v.result.msg, true); apply(v, true); } catch (e) { netErr(e); }
 }
 $('#cf').addEventListener('submit', e => { e.preventDefault(); send(); });
 
@@ -450,6 +538,76 @@ function panelLog() { $('#p-log').innerHTML = `<div class="tl">${V.feed.slice().
 function panelRoles() {
   const mine = V.me && V.me.role;
   $('#p-roles').innerHTML = `<div class="rl">${Object.entries(V.roles_info).map(([k, r]) => `<div class="rc ${esc(r.team)}${k === mine ? ' mine' : ''}"><b>${r.emoji} ${esc(r.name)}</b><span>${esc(r.desc)}</span></div>`).join('')}</div>`;
+}
+
+/* sozlamalar (lobbi) */
+function settingsHTML(v, host) {
+  const s = v.settings; if (!s) return '';
+  const stp = (k, lab) => host
+    ? `<div class="srow"><span>${lab}</span><div><button class="sb" data-a="set" data-k="${k}" data-d="-5">−</button><b>${s[k]}s</b><button class="sb" data-a="set" data-k="${k}" data-d="5">+</button></div></div>`
+    : `<div class="srow"><span>${lab}</span><b>${s[k]}s</b></div>`;
+  const tog = (k, lab) => host ? `<button class="sw${s[k] ? ' on' : ''}" data-a="tog" data-k="${k}">${s[k] ? '✅' : '⬜'} ${lab}</button>` : `<span>${s[k] ? '✅' : '⬜'} ${lab}</span>`;
+  const roles = (v.optional_roles || []).map(r => host
+    ? `<button class="sw${r.disabled ? '' : ' on'}" data-a="role" data-r="${esc(r.role)}">${r.disabled ? '🚫' : r.emoji} ${esc(r.name)}</button>`
+    : (r.disabled ? `<span>🚫 ${esc(r.name)}</span>` : '')).join('');
+  const head = `<button class="btn alt" style="margin-top:6px" data-a="settoggle">⚙️ O'yin sozlamalari ${setOpen ? '▲' : '▼'}</button>`;
+  if (!setOpen) return head;
+  return head + `<div class="set">${stp('night_sec', '🌙 Tun')}${stp('day_sec', '☀️ Muhokama')}${stp('vote_sec', '🗳 Ovoz')}
+    <div class="sws">${tog('safe_first_night', 'Birinchi tun xavfsiz')}${tog('last_words', "Oxirgi so'z")}${tog('lovers', 'Sevishganlar (8+)')}</div>
+    <div class="mut" style="margin-top:8px">Rollar${host ? ' (bosib yoq/o\'chir)' : ''}: o'yinchilar soniga qarab tanlanadi</div><div class="sws">${roles || '<span>Hammasi yoqilgan</span>'}</div></div>`;
+}
+
+/* reaksiyalar */
+function rxBar() {
+  const e = $('#rx'), v = V, m = v && v.me;
+  const show = !!(m && v.phase !== 'lobby' && v.phase !== 'ended' && v.emojis);
+  e.classList.toggle('on', show);
+  if (show && !e.childElementCount) e.innerHTML = v.emojis.map(x => `<button type="button" data-e="${x}">${x}</button>`).join('');
+}
+$('#rx').addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-e]'); if (!b || dead) return; hap('light');
+  try { const v = await api('react', {emoji: b.dataset.e}); if (v.result && !v.result.ok) toast(v.result.msg, true); apply(v, true); } catch (e) { netErr(e); }
+});
+function floatRx(v) {
+  const fresh = (v.reactions || []).filter(r => r.id > seenRx); if (!fresh.length) return;
+  seenRx = maxId(v.reactions);
+  for (const r of fresh.slice(-4)) {
+    const s = $(`.seat[data-u="${r.uid}"]`); if (!s) continue;
+    const f = document.createElement('div'); f.className = 'fl'; f.textContent = r.emoji;
+    f.style.left = s.style.left; f.style.top = s.style.top; $('#table').appendChild(f); setTimeout(() => f.remove(), 2500);
+  }
+}
+
+/* reyting va profil */
+async function loadStats() {
+  if (statsData && Date.now() - statsAt < 30000) return renderStats();
+  $('#p-stats').innerHTML = '<div class="mut">Yuklanmoqda…</div>';
+  try { statsData = await api('stats'); statsAt = Date.now(); renderStats(); }
+  catch (e) { $('#p-stats').innerHTML = `<div class="mut">Reytingni yuklab bo'lmadi</div>`; }
+}
+function renderStats() {
+  const d = statsData; if (!d) return;
+  const lb = rows => rows.length ? rows.map((r, i) => `<div class="lr${d.me && r.uid === d.me.uid ? ' me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || (i + 1) + '.'} ${esc(r.name)}</span><span>${r.wins} g'alaba / ${r.games} · ${r.winrate}%</span></div>`).join('') : `<div class="mut">Hali o'yin yo'q</div>`;
+  const me = d.me || {};
+  const mine = new Set((me.achievements || []).map(a => a.key));
+  const roles = (me.roles || []).filter(r => d.roles[r.role]).map(r => `<div class="lr"><span>${d.roles[r.role].emoji} ${esc(d.roles[r.role].name)}</span><span>${r.wins}/${r.games} · ${r.winrate}%</span></div>`).join('');
+  const ach = Object.entries(d.achievements).map(([k, a]) => `<span class="ach${mine.has(k) ? '' : ' lock'}" title="${esc(a.desc)}">${a.emoji} ${esc(a.name)}</span>`).join('');
+  $('#p-stats').innerHTML = `<h3>🪪 Mening profilim</h3>${me.games ? `<div class="st"><span>🎮 ${me.games} o'yin</span><span>🏆 ${me.wins} g'alaba</span><span>📈 ${me.winrate}%</span><span>🔥 seriya ${me.best_streak}</span>${me.rank ? `<span>#${me.rank}</span>` : ''}</div>${roles ? `<div class="mut">Rollar bo'yicha</div>${roles}` : ''}` : `<div class="mut">Hali o'ynamagansan. Birinchi g'alabangni qozon!</div>`}
+    <div class="mut" style="margin-top:8px">Yutuqlar (xira — hali olinmagan)</div><div>${ach}</div>
+    <h3 style="margin-top:14px">📅 Haftalik top-10 <span class="mut">${esc(d.week_key || '')}</span></h3>${lb(d.week)}
+    <h3 style="margin-top:14px">🌍 Umumiy top-10</h3>${lb(d.all)}`;
+}
+
+/* yakuniy jadval */
+function recapHTML(v) {
+  const rc = v.recap; if (!rc) return '';
+  const roster = rc.roster.map(p => `<div><span>${p.alive ? '✅' : '💀'} ${p.is_bot ? '🤖 ' : ''}${esc(p.name)}${p.lover ? ' 💘' : ''}${p.won ? ' 🏆' : ''}</span><span style="color:${TC[p.team] || '#fff'}">${p.role_emoji} ${esc(p.role_name)}${p.death ? ' · ' + esc(p.death) : ''}</span></div>`).join('');
+  let day = -1, log = '';
+  for (const l of rc.log) {
+    if (l.day !== day) { day = l.day; log += `<div class="mut" style="display:block;border:0;padding-top:8px"><b>${day}-tun/kun</b></div>`; }
+    log += `<div style="display:block;border:0;padding:2px 0;font-size:12px">${esc(l.text)}</div>`;
+  }
+  return `<div class="mut" style="margin-top:8px">🎭 Kim kim edi</div><div class="sum">${roster}</div><div class="mut" style="margin-top:8px">📋 Kim kimga nima qildi</div><div class="sum">${log || '<div class="mut">Yozuv yo\'q</div>'}</div>`;
 }
 
 /* overlaylar */
@@ -465,6 +623,7 @@ $('#me').onclick = openCard;
 function showDead() {
   const m = V && V.me; if (!m) return;
   $('#deadbox').innerHTML = `<div style="font-size:90px">💀</div><div class="big" style="color:var(--mafia)">SEN O'LDING</div><div class="mut" style="margin:0 10px 14px">${m.role_emoji} ${esc(m.role_name)} · endi kuzatuvchisan: hamma rolni ko'rasan va o'liklar chatida gaplashasan.</div><button class="btn alt" id="okd">Davom etish</button>`;
+  $('#deadbox').innerHTML = L($('#deadbox').innerHTML);
   $('#ovd').classList.add('on'); $('#okd').onclick = () => $('#ovd').classList.remove('on');
 }
 function showEnd() {
@@ -472,19 +631,25 @@ function showEnd() {
   const w = v.winner, col = TC[w] || '#fff', mine = v.me && v.me.team === w;
   const rows = v.players.map(p => `<div><span>${p.alive ? '' : '💀 '}${p.is_bot ? '🤖 ' : ''}${esc(p.name)}</span><span style="color:${TC[p.team] || '#fff'}">${p.role_emoji || ''} ${esc(p.role_name || '')}</span></div>`).join('');
   $('#endbox').innerHTML = v.cancelled ? `<div class="big">🛑 Bekor qilindi</div><button class="btn alt" data-x="1">Yopish</button>`
-    : `<div class="mut">G'OLIB</div><div class="big" style="color:${col}">${esc(v.winner_name)}</div><div>${v.me ? (mine ? '🏆 Sen yutding!' : 'Bu safar omad kelmadi') : ''}</div><div class="sum">${rows}</div><div class="mut" style="margin-top:8px">Yangi o'yin: guruhda /mafia</div><div class="row"><button class="btn alt" data-x="1">Natijalarni yopish</button>${tg ? '<button class="btn" data-x="2">Chiqish</button>' : ''}</div>`;
+    : `<div class="mut">G'OLIB</div><div class="big" style="color:${col}">${esc(v.winner_name)}</div><div>${v.me ? (mine ? '🏆 Sen yutding!' : 'Bu safar omad kelmadi') : ''}</div>${recapHTML(v) || '<div class="sum">' + rows + '</div>'}<div class="mut" style="margin-top:8px">Yangi o'yin: guruhda /mafia</div><div class="row"><button class="btn alt" data-x="1">Natijalarni yopish</button>${BOTU ? '<button class="btn" data-x="3">🔁 Yana o\'ynash</button>' : ''}${tg ? '<button class="btn" data-x="2">Chiqish</button>' : ''}</div>`;
+  $('#endbox').innerHTML = L($('#endbox').innerHTML);
   $('#ove').classList.add('on');
   if (!v.cancelled && mine) for (let i = 0; i < 40; i++) { const s = document.createElement('span'); s.className = 'cf'; s.textContent = ['🎉', '✨', '🎊', '⭐'][i % 4]; s.style.left = Math.random() * 100 + 'vw'; s.style.fontSize = 14 + Math.random() * 16 + 'px'; s.style.animationDuration = 2.5 + Math.random() * 2.5 + 's'; s.style.animationDelay = Math.random() * 1.2 + 's'; document.body.appendChild(s); setTimeout(() => s.remove(), 7000); }
 }
-$('#endbox').addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (!b) return; if (b.dataset.x === '2' && tg) tg.close(); else $('#ove').classList.remove('on'); });
+$('#endbox').addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (!b) return; if (b.dataset.x === '3') share('again'); else if (b.dataset.x === '2' && tg) tg.close(); else $('#ove').classList.remove('on'); });
 function profile(u) {
   const v = V, p = byUid(u); if (!p) return;
   const vc = v.votes ? Object.values(v.votes).filter(t => t === u).length : 0;
   const ms = v.chat.filter(c => c.uid === u && c.ch === 'day').slice(-2);
-  $('#pbox').innerHTML = `<div class="av" style="background:${hue(u)}">${ini(p)}</div><h3>${esc(p.name)}${p.host ? ' 👑' : ''}</h3><div class="st"><span>${p.alive ? '🟢 Tirik' : "💀 O'lgan"}</span>${p.role ? `<span>${p.role_emoji} ${esc(p.role_name)}</span>` : ''}${v.phase === 'vote' ? `<span>🗳 ${vc} ovoz</span>` : ''}</div>${ms.map(c => `<div class="pm">${esc(c.text)}</div>`).join('')}`;
+  $('#pbox').innerHTML = `<div class="av" style="background:${hue(u)}">${avc(p)}</div><h3>${esc(p.name)}${p.host ? ' 👑' : ''}</h3><div class="st"><span>${p.alive ? '🟢 Tirik' : "💀 O'lgan"}</span>${p.role ? `<span>${p.role_emoji} ${esc(p.role_name)}</span>` : ''}${v.phase === 'vote' ? `<span>🗳 ${vc} ovoz</span>` : ''}</div>${ms.map(c => `<div class="pm">${esc(c.text)}</div>`).join('')}${markUI(u)}`;
   $('#ovp').classList.add('on'); hap('light');
 }
-$('#ovp').onclick = e => { if (e.target === $('#ovp')) $('#ovp').classList.remove('on'); };
+$('#ovp').onclick = e => {
+  const b = e.target.closest('[data-mk]');
+  if (b) { const u = Number(b.dataset.u), k = b.dataset.mk; marks[u] = marks[u] || {}; if (k === 'x') delete marks[u]; else marks[u].m = marks[u].m === k ? '' : k; saveMarks(); table(); return profile(u); }
+  if (e.target === $('#ovp')) $('#ovp').classList.remove('on');
+};
+$('#ovp').addEventListener('change', e => { const i = e.target.closest('.mkin'); if (!i) return; const u = Number(i.dataset.u); marks[u] = marks[u] || {}; marks[u].n = i.value.trim().slice(0, 40); saveMarks(); });
 
 /* taymer */
 function tick() {
@@ -492,6 +657,7 @@ function tick() {
   const left = Math.max(0, v.deadline - nowSrv()), run = ['reveal', 'night', 'day', 'vote'].includes(v.phase);
   $('#tnum').textContent = run ? Math.ceil(left) : v.phase === 'ended' ? '🏁' : '👥';
   $('#tlab').textContent = ({lobby: `${v.players.length} o'yinchi`, reveal: "Rolingni ko'r", night: 'Tun', day: 'Muhokama', vote: `Ovoz: ${Object.keys(v.votes || {}).length}/${v.alive_count}`, ended: v.winner_name ? v.winner_name + ' yutdi' : ''})[v.phase] || '';
+  $('#tlab').textContent = L($('#tlab').textContent);
   const f = run && v.duration ? Math.min(1, left / v.duration) : 1;
   $('#ring .fg').style.strokeDashoffset = 295.3 * (1 - f);
   $('#bar i').style.transform = `scaleX(${f})`;
@@ -503,8 +669,14 @@ function tick() {
 }
 setInterval(() => V && tick(), 250);
 
-if (!gid) fatal('🔗', "Havola noto'g'ri", "Guruhdagi «Qo'shilish» tugmasi orqali kiring.");
-else { poll(); setTimeout(() => $('#splash').classList.add('off'), 1400); }
+(async () => {
+  if (!gid) {
+    try { const r = await api('mine'); if (r.gid) gid = r.gid; }
+    catch (e) { if (e.status === 401) return netErr(e); }
+  }
+  if (!gid) return fatal('🔗', "Faol o'yin topilmadi", "Guruhdagi «Qo'shilish» tugmasi orqali kiring yoki guruhda /mafia deb yangi o'yin oching.");
+  poll(); setTimeout(() => $('#splash').classList.add('off'), 1400);
+})();
 })();
 </script>
 {% endraw %}
