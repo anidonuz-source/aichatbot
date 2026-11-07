@@ -152,6 +152,17 @@ nav .dot.on{display:grid}
 @keyframes float{50%{transform:translateY(-6px)}}
 .sleep{padding:34px 16px}
 .sleep .big{font-size:64px}
+
+/* rollar bo'limi */
+.ph3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ph3>div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 6px;text-align:center;font-size:11px;color:var(--mut);line-height:1.35}
+.ph3 b{display:block;font-size:13px;color:var(--txt);margin:3px 0}.ph3 i{font-style:normal;font-size:22px}
+.wn{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:12px;padding:9px 12px;margin-bottom:8px;font-size:13px;color:var(--mut)}
+.wn.mafia{border-left-color:var(--bad)}.wn.maniac{border-left-color:var(--warn)}.wn b{color:var(--txt)}
+.rolebox{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--good);border-radius:14px;padding:10px 12px;margin-bottom:8px}
+.rolebox.mafia{border-top-color:var(--bad)}.rolebox.maniac{border-top-color:var(--warn)}.rolebox.mine{outline:2px solid var(--accent2)}
+.rolebox b{display:block;font-size:14px}.rolebox span{font-size:12.5px;color:var(--mut);line-height:1.45}
+.rolebox em{font-style:normal;font-size:10px;font-weight:800;color:var(--warn);margin-left:6px}
 </style>
 </head>
 <body data-phase="lobby">
@@ -174,12 +185,14 @@ nav .dot.on{display:grid}
       <form class="chform" id="chform" autocomplete="off"><input id="chinput" maxlength="220" placeholder="Xabar yoz…" enterkeyhint="send"><button type="submit">➤</button></form>
     </section>
     <section class="view" id="view-log"></section>
+    <section class="view" id="view-roles"></section>
   </main>
   <div id="bar"></div>
   <nav>
     <button data-tab="game" class="on"><i>🎮</i>O'yin</button>
     <button data-tab="chat"><i>💬</i>Chat<span class="dot" id="cdot">0</span></button>
     <button data-tab="log"><i>📜</i>Jurnal</button>
+    <button data-tab="roles"><i>🎭</i>Rollar</button>
   </nav>
 </div>
 <div id="overlay"></div>
@@ -199,7 +212,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp
 const gid = new URLSearchParams(location.search).get('g') || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
 const hap = (t, k) => { try { if (!tg || !tg.HapticFeedback) return; t === 'n' ? tg.HapticFeedback.notificationOccurred(k || 'success') : tg.HapticFeedback.impactOccurred(k || 'light'); } catch (e) {} };
 
-let S = null, offset = 0, tab = 'game', pending = null, unread = 0, firstLoad = true;
+let S = null, offset = 0, tab = 'game', pending = null, pending2 = null, unread = 0, firstLoad = true;
 let seenPriv = new Set(), lastChatSig = '', revealDismissed = '', endDismissed = false, lastPhaseKey = '', wasAlive = null, busy = false;
 
 const hue = uid => (Math.abs(Number(uid) * 47) + 20) % 360;
@@ -261,9 +274,9 @@ function apply(j) {
 // ── render ─────────────────────────────────────────────────────────────
 function render() {
   const key = S.phase + ':' + S.day;
-  if (key !== lastPhaseKey) { pending = null; lastPhaseKey = key; if (!firstLoad) hap('n', 'warning'); }
+  if (key !== lastPhaseKey) { pending = null; pending2 = null; lastPhaseKey = key; if (!firstLoad) hap('n', 'warning'); }
   document.body.dataset.phase = S.phase;
-  renderHeader(); renderGame(); renderChat(); renderLog(); renderBar(); renderOverlay(); notify();
+  renderHeader(); renderGame(); renderChat(); renderLog(); renderRoles(); renderBar(); renderOverlay(); notify();
 }
 
 function renderHeader() {
@@ -321,13 +334,14 @@ function renderGame() {
     if (!me) h += `<div class="card hero"><div class="big moon">🌙</div><h2>Kuzatuvchi</h2><p>Sen bu o'yinda o'yinchi emassan.</p></div>`;
     else if (!me.alive) h += `<div class="card hero"><div class="big">👻</div><h2>Sen o'ldingiz</h2><p>Kuzatuvchisan: hamma rollarni ko'rasan, faqat o'liklar chatida gaplasha olasan.</p></div><div class="grid">${S.players.map(p => pcard(p)).join('')}</div>`;
     else if (me.action) {
-      const hints = {kill: "Mafiya jamoasi bilan kelishib, bitta o'yinchini tanla (ovozlar teng bo'lsa Don hal qiladi).", slay: "Bu tun kimni o'ldirasan?", check: "Kimni tekshiramiz? Natija ertalab sirli xabar bo'lib keladi.", heal: "Kimni davolaysan? Ketma-ket bir odamni emas, o'zingni — 1 marta.", guard: "Kimni qo'riqlaysan? Unga hujum bo'lsa, o'rniga sen o'lasan.", block: "Kimni band qilasan? U bu tun harakat qila olmaydi."};
+      const hints = {kill: "Mafiya jamoasi bilan kelishib, bitta o'yinchini tanla (ovozlar teng bo'lsa Don hal qiladi).", slay: "Bu tun kimni o'ldirasan?", check: "Kimni tekshiramiz? Natija ertalab sirli xabar bo'lib keladi.", heal: "Kimni davolaysan? Ketma-ket bir odamni emas, o'zingni — 1 marta.", guard: "Kimni qo'riqlaysan? Unga hujum bo'lsa, o'rniga sen o'lasan.", block: "Kimni band qilasan? U bu tun harakat qila olmaydi.", compare: "Ikki o'yinchini tanla: ular bir jamoadami yoki yo'qmi, bilasan.", snipe: "Kimni otasan? Begunohni otsang, o'zing ham o'lasan. Ishonching komil bo'lmasa, pastdagi «O'q uzmaslik» ni bos.", defend: "Qaysi mafiyachini himoya qilasan? Komissar unga «tinch» deb ko'radi."};
       h += `<div class="card"><h3>${me.role_emoji} ${esc(me.action_label)}</h3><p>${hints[me.action] || ''}</p>${me.team === 'mafia' ? mafiaMates() : ''}</div>`;
       h += `<div class="grid">${S.players.filter(p => p.alive).map(p => {
         const ok = me.targets.includes(p.uid);
-        return pcard(p, {selectable: ok, off: !ok, picked: pending === p.uid, done: me.my_target === p.uid});
+        return pcard(p, {selectable: ok, off: !ok, picked: pending === p.uid || pending2 === p.uid, done: me.my_target === p.uid || me.my_target2 === p.uid});
       }).join('')}</div>`;
-      if (me.my_target != null) h += `<div class="card" style="border-color:var(--good)"><p>✓ Tanlov qabul qilindi: <b>${esc((byUid(me.my_target) || {}).name || '')}</b>. Vaqt tugaguncha o'zgartirishing mumkin.</p></div>`;
+      if (me.action === 'snipe') h += `<div class="card"><p>Qolgan o'q: <b>${me.shots}</b>${me.my_pass ? ' · ✓ bu tun o\'q uzmaslik tanlandi' : ''}</p></div>`;
+      if (me.my_target != null) h += `<div class="card" style="border-color:var(--good)"><p>✓ Tanlov qabul qilindi: <b>${esc((byUid(me.my_target) || {}).name || '')}${me.my_target2 != null ? ' va ' + esc((byUid(me.my_target2) || {}).name || '') : ''}</b>. Vaqt tugaguncha o'zgartirishing mumkin.</p></div>`;
       h += '<div style="height:90px"></div>';
     } else {
       h += `<div class="card hero sleep"><div class="big moon">😴</div><h2>Shahar uxlaydi</h2><p>Sening rolingda tungi harakat yo'q. Ko'zingni yum va tong otishini kut.</p></div>`;
@@ -360,7 +374,17 @@ function renderGame() {
     h += `<div class="card"><p>Yana o'ynash uchun guruhda /mafia yozing.</p></div>`;
   }
   v.innerHTML = h;
-  v.querySelectorAll('.pc.sel').forEach(el => el.onclick = () => { pending = Number(el.dataset.uid); hap('l'); renderGame(); renderBar(); });
+  v.querySelectorAll('.pc.sel').forEach(el => el.onclick = () => {
+    const u = Number(el.dataset.uid), two = S.phase === 'night' && S.me && S.me.pick === 2;
+    if (two) {
+      if (pending === u) { pending = pending2; pending2 = null; }
+      else if (pending2 === u) pending2 = null;
+      else if (pending == null) pending = u;
+      else if (pending2 == null) pending2 = u;
+      else { pending = u; pending2 = null; }
+    } else { pending = u; pending2 = null; }
+    hap('l'); renderGame(); renderBar();
+  });
 }
 function mafiaMates() {
   const m = S.players.filter(p => p.team === 'mafia' && p.uid !== S.me.uid);
@@ -372,11 +396,13 @@ function renderBar() {
   if (S.phase === 'lobby') {
     if (!me) h = `<div class="row"><button class="btn good" data-a="join">🎮 Qo'shilish</button></div>`;
     else if (S.is_host) {
-      h = `<div class="row">${S.has_bot ? '' : `<button class="btn ghost" data-a="addbot">🤖 Misumi'ni qo'shish</button>`}<button class="btn good" data-a="start" ${S.players.length >= S.min_players ? '' : 'disabled'}>▶️ Boshlash (${S.players.length})</button></div>`;
+      h = `<div class="row">${S.bot_count < S.max_bots ? `<button class="btn ghost" data-a="addbot">🤖 Bot + (${S.bot_count})</button>` : ''}${S.bot_count ? `<button class="btn ghost" data-a="removebot">🤖 Bot −</button>` : ''}<button class="btn good" data-a="start" ${S.players.length >= S.min_players ? '' : 'disabled'}>▶️ Boshlash (${S.players.length})</button></div>`;
     } else h = `<div class="row"><button class="btn ghost" data-a="leave">Chiqish</button></div>`;
-  } else if (S.phase === 'night' && me && me.alive && me.action && pending != null && pending !== me.my_target) {
-    const t = byUid(pending);
-    h = `<div class="row"><button class="btn ghost" data-a="cancelpick">Bekor</button><button class="btn ${['kill', 'slay'].includes(me.action) ? 'bad' : ''}" data-a="confirm">${esc(me.action_label)}: ${esc(t ? t.name : '')}</button></div>`;
+  } else if (S.phase === 'night' && me && me.alive && me.action && pending != null && (me.pick !== 2 || pending2 != null)) {
+    const t = byUid(pending), t2 = pending2 != null ? byUid(pending2) : null;
+    h = `<div class="row"><button class="btn ghost" data-a="cancelpick">Bekor</button><button class="btn ${['kill', 'slay'].includes(me.action) ? 'bad' : ''}" data-a="confirm">${esc(me.action_label)}: ${esc(t ? t.name : '')}${t2 ? ' + ' + esc(t2.name) : ''}</button></div>`;
+  } else if (S.phase === 'night' && me && me.alive && me.can_skip && !me.my_pass) {
+    h = `<div class="row"><button class="btn ghost" data-a="nofire">🚫 O'q uzmaslik</button></div>`;
   } else if (S.phase === 'day' && me && me.alive && !me.ready) {
     h = `<div class="row"><button class="btn" data-a="ready">✋ Ovozga tayyorman</button></div>`;
   } else if (S.phase === 'vote' && me && me.alive) {
@@ -393,11 +419,13 @@ function barAction(a) {
   else if (a === 'leave') act('leave', {}, 'Chiqding');
   else if (a === 'addbot') act('addbot', {}, "Misumi qo'shildi 🤖");
   else if (a === 'start') act('start', {});
-  else if (a === 'confirm') { const t = pending; act('action', {target: t}, 'Tanlov qabul qilindi'); pending = null; }
+  else if (a === 'confirm') { const t = pending, t2 = pending2; act('action', S.me.pick === 2 ? {target: t, target2: t2} : {target: t}, 'Tanlov qabul qilindi'); pending = null; pending2 = null; }
+  else if (a === 'removebot') act('removebot', {}, 'Bot olib tashlandi')
+  else if (a === 'nofire') { pending = null; pending2 = null; act('action', {target: -1}, "O'q uzilmaydi"); }
   else if (a === 'votego') { const t = pending; act('vote', {target: t}, 'Ovoz berildi'); pending = null; }
   else if (a === 'skip') { pending = null; act('vote', {target: 'skip'}, "O'tkazib yubording"); }
   else if (a === 'ready') act('ready', {}, 'Tayyor ✓');
-  else if (a === 'cancelpick') { pending = null; renderGame(); renderBar(); }
+  else if (a === 'cancelpick') { pending = null; pending2 = null; renderGame(); renderBar(); }
   else if (a === 'close') { if (tg) tg.close(); }
 }
 
@@ -437,6 +465,18 @@ $('#chform').addEventListener('submit', async e => {
 function renderLog() {
   const icons = {start: '🎭', night: '🌙', death: '☠️', lynch: '⚖️', vote: '🗳', end: '🏁', info: '•'};
   $('#view-log').innerHTML = `<div class="sec">O'yin jurnali</div><div class="feed">${S.feed.slice().reverse().map(f => `<div class="fi"><i>${icons[f.kind] || '•'}</i><div>${esc(f.text)}<small>${f.day ? f.day + '-davr' : ''}</small></div></div>`).join('') || '<p class="hint">Hali hech narsa bo‘lmadi.</p>'}</div>`;
+}
+
+
+// ── rollar ─────────────────────────────────────────────────────────────
+function renderRoles() {
+  const mine = S.me && S.me.role, info = Object.entries(S.roles_info || {});
+  const grp = team => info.filter(([k, r]) => r.team === team).map(([k, r]) =>
+    `<div class="rolebox ${esc(r.team)} ${k === mine ? 'mine' : ''}"><b>${r.emoji} ${esc(r.name)}${k === mine ? '<em>SENING ROLING</em>' : ''}</b><span>${esc(r.desc)}</span></div>`).join('');
+  $('#view-roles').innerHTML =
+    `<div class="sec">Qanday o'ynaladi</div><div class="ph3"><div><i>🌙</i><b>Tun</b>Rollar yashirin harakat qiladi</div><div><i>☀️</i><b>Kun</b>Muhokama, gumondorni aytish</div><div><i>🗳</i><b>Ovoz</b>Ko'p ovoz olgan osiladi</div></div>` +
+    `<div class="sec">Kim yutadi</div><div class="wn"><b>🏙 Shahar</b> — barcha mafiya va maniak yo'q qilinsa</div><div class="wn mafia"><b>🔫 Mafiya</b> — soni qolganlarga teng yoki ko'p bo'lsa</div><div class="wn maniac"><b>🔪 Maniak</b> — oxirgi tirik qolsa</div>` +
+    `<div class="sec">🏙 Shahar rollari</div>${grp('town')}<div class="sec">🔫 Mafiya rollari</div>${grp('mafia')}<div class="sec">🔪 Yakka</div>${grp('maniac')}<div style="height:20px"></div>`;
 }
 
 // ── overlay: rol kartasi, yakun ────────────────────────────────────────
