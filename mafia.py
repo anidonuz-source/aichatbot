@@ -170,6 +170,7 @@ class P:
         self.username = username
         self.photo: str | None = None
         self.shield = False
+        self.boost = False
         self.vote_shield = False
         self.is_bot = is_bot
         self.alive = True
@@ -385,16 +386,22 @@ class Game:
                 if inv.get("vote_shield") and mafia_stats.use(p.uid, "vote_shield"):
                     p.vote_shield = True
                     self._notify(p.uid, "🗳 Ovozdan himoya faol: bir marta osilmaysan.", "info")
-                if inv.get("role_sniper") and p.team == "town":
-                    holder = next((q for q in self.players.values() if q.role == "sniper" and q is not p), None)
-                    if p.role == "sniper" or holder or p.role == "citizen":
-                        if p.role != "sniper" and mafia_stats.use(p.uid, "role_sniper"):
+                if inv.get("coin_boost") and mafia_stats.use(p.uid, "coin_boost"):
+                    p.boost = True
+                    self._notify(p.uid, "🚀 Mukofot ×2 faol: bu o'yindagi pul ikki baravar.", "info")
+                if p.team == "town":
+                    for rk in ("sniper", "commissar", "doctor"):
+                        if not inv.get(f"role_{rk}") or p.role == rk:
+                            continue
+                        holder = next((q for q in self.players.values() if q.role == rk and q is not p), None)
+                        if (holder or p.role == "citizen") and mafia_stats.use(p.uid, f"role_{rk}"):
                             if holder:
-                                holder.role, p.role = p.role, "sniper"
+                                holder.role, p.role = p.role, rk
                             else:
-                                p.role = "sniper"
+                                p.role = rk
                             p.shots = 1
-                            self._notify(p.uid, "🔫 Sotib olgan pistoletingiz ishladi: sen Snaypersan!", "info")
+                            self._notify(p.uid, f"{ROLES[rk]['emoji']} Sotib olgan rolingiz ishladi: sen {ROLES[rk]['name']}san!", "info")
+                            break
             except Exception as e:
                 print(f"[mafia] mahsulot qo'llanmadi: {e}")
 
@@ -1257,7 +1264,7 @@ _SCALARS = ("gid", "chat_id", "chat_title", "host_id", "created", "last_activity
             "lobby_msg_id", "_eid", "settings", "phase_no", "veto_by", "log", "stats_recorded")
 _PFIELDS = ("uid", "name", "username", "is_bot", "alive", "role", "last_heal", "self_healed",
             "last_block", "death", "shots", "lucky_used", "lover", "bitten", "vow", "judge_used", "vetoed",
-            "sniper_hit_mafia", "lw_until", "last_word_used", "photo", "shield", "vote_shield")
+            "sniper_hit_mafia", "lw_until", "last_word_used", "photo", "shield", "vote_shield", "boost")
 _saved: dict[str, int] = {}
 _last_save = 0.0
 
