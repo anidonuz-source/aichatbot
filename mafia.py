@@ -169,6 +169,8 @@ class P:
         self.name = (name or str(uid)).strip()[:24] or str(uid)
         self.username = username
         self.photo: str | None = None
+        self.shield = False
+        self.vote_shield = False
         self.is_bot = is_bot
         self.alive = True
         self.role: str | None = None
@@ -359,11 +361,42 @@ class Game:
             if self.settings.get("lovers", True) and n >= 8:
                 a, b = random.sample(list(self.players.values()), 2)
                 a.lover, b.lover = b.uid, a.uid
+            self._apply_items()
             self.day = 0
             self._feed("O'yin boshlandi. Rollar tarqatildi.", "start")
             self._set_phase("reveal", REVEAL_SEC)
             self._out("start")
             return True, "Boshlandi"
+
+    def _apply_items(self) -> None:
+        """Do'kondan olingan mahsulotlarni o'yin boshida sarflaydi."""
+        try:
+            import mafia_stats
+        except Exception:
+            return
+        for p in self.players.values():
+            if p.is_bot or p.uid <= 0:
+                continue
+            try:
+                inv = mafia_stats.inventory(p.uid)
+                if inv.get("shield") and mafia_stats.use(p.uid, "shield"):
+                    p.shield = True
+                    self._notify(p.uid, "🛡 Tun himoyasi faol: birinchi hujumdan omon qolasan.", "info")
+                if inv.get("vote_shield") and mafia_stats.use(p.uid, "vote_shield"):
+                    p.vote_shield = True
+                    self._notify(p.uid, "🗳 Ovozdan himoya faol: bir marta osilmaysan.", "info")
+                if inv.get("role_sniper") and p.team == "town":
+                    holder = next((q for q in self.players.values() if q.role == "sniper" and q is not p), None)
+                    if p.role == "sniper" or holder or p.role == "citizen":
+                        if p.role != "sniper" and mafia_stats.use(p.uid, "role_sniper"):
+                            if holder:
+                                holder.role, p.role = p.role, "sniper"
+                            else:
+                                p.role = "sniper"
+                            p.shots = 1
+                            self._notify(p.uid, "🔫 Sotib olgan pistoletingiz ishladi: sen Snaypersan!", "info")
+            except Exception as e:
+                print(f"[mafia] mahsulot qo'llanmadi: {e}")
 
     def cancel(self, reason: str = "O'yin bekor qilindi") -> None:
         with LOCK:
@@ -768,6 +801,10 @@ class Game:
             if t_uid in dead_now:
                 continue
             tp = self.players[t_uid]
+            if getattr(tp, "shield", False):
+                tp.shield = False
+                self._notify(t_uid, "🛡 Bu tun senga hujum bo'ldi, lekin sotib olgan himoyang seni qutqardi.", "saved")
+                continue
             if guard and not guard_used and guard_target == t_uid and guard.uid not in dead_now and guard.uid != t_uid:
                 guard_used = True
                 dead_now.add(guard.uid)
@@ -822,6 +859,15 @@ class Game:
                         for v, t in self.votes.items() if v in self.players)
         if who:
             self._log(f"🗳 Ovozlar: {who}")
+        shielded = False
+        if lynched is not None and self.veto_by is None and getattr(self.players[lynched], "vote_shield", False):
+            sp = self.players[lynched]
+            sp.vote_shield = False
+            shielded = True
+            self._feed(f"Ovozlar: {summary}. {sp.name} 🗳 ovozdan himoyaga ega edi, hech kim osilmadi.", "info")
+            self._log(f"🗳 {sp.name} ovozdan himoyasi ishladi")
+            self._out("no_lynch", day=self.day, summary=summary)
+            lynched = None
         if lynched is not None and self.veto_by is not None:
             vname = self._name(self.veto_by)
             self._feed(f"Ovozlar: {summary}. Sudya {vname} hukmni bekor qildi, hech kim osilmadi.", "info")
@@ -836,7 +882,7 @@ class Game:
             for d in extra:
                 self._feed(f"{d['name']} ham ketdi{NOTES.get(d['cause'], '')} — {ROLES[d['role']]['emoji']} {ROLES[d['role']]['name']}.", "death")
             self._out("lynch", day=self.day, **info)
-        else:
+        elif not shielded:
             self._feed(f"Ovozlar: {summary}. Hech kim osilmadi.", "info")
             self._out("no_lynch", day=self.day, summary=summary)
         self._bump()
@@ -879,11 +925,11 @@ class Game:
         except Exception as e:
             print(f"[mafia] statistika yozilmadi: {e}")
             return
-        if earned:
-            with LOCK:
-                self.earned = earned
+        with LOCK:
+            self.earned = earned
+            if earned:
                 self._out("achievements", earned={str(k): v for k, v in earned.items()})
-                self._bump()
+            self._bump()
 
     # ── tick ───────────────────────────────────────────────────────────
     def tick(self, now: float | None = None) -> None:
@@ -1087,6 +1133,9 @@ class Game:
                     "chat_channel": self._chat_channel(viewer),
                     "lover": ({"uid": viewer.lover, "name": self._name(viewer.lover)}
                               if viewer.lover is not None else None),
+                    "shield": bool(getattr(viewer, "shield", False)),
+                    "vote_shield": bool(getattr(viewer, "vote_shield", False)),
+                    "coins_gain": getattr(self, "coins_earned", {}).get(viewer.uid),
                     "vow": viewer.vow if viewer.action == "vow" else None,
                     "can_veto": bool(viewer.alive and viewer.role == "judge" and not viewer.judge_used
                                      and self.phase == "vote" and self.veto_by is None),
@@ -1208,7 +1257,7 @@ _SCALARS = ("gid", "chat_id", "chat_title", "host_id", "created", "last_activity
             "lobby_msg_id", "_eid", "settings", "phase_no", "veto_by", "log", "stats_recorded")
 _PFIELDS = ("uid", "name", "username", "is_bot", "alive", "role", "last_heal", "self_healed",
             "last_block", "death", "shots", "lucky_used", "lover", "bitten", "vow", "judge_used", "vetoed",
-            "sniper_hit_mafia", "lw_until", "last_word_used", "photo")
+            "sniper_hit_mafia", "lw_until", "last_word_used", "photo", "shield", "vote_shield")
 _saved: dict[str, int] = {}
 _last_save = 0.0
 
