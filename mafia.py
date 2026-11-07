@@ -168,6 +168,7 @@ class P:
         self.uid = uid
         self.name = (name or str(uid)).strip()[:24] or str(uid)
         self.username = username
+        self.photo: str | None = None
         self.is_bot = is_bot
         self.alive = True
         self.role: str | None = None
@@ -281,7 +282,7 @@ class Game:
         return p.name if p else "?"
 
     # ── lobbi ──────────────────────────────────────────────────────────
-    def add_player(self, uid: int, name: str, username: str | None = None, is_bot: bool = False) -> tuple[bool, str]:
+    def add_player(self, uid: int, name: str, username: str | None = None, is_bot: bool = False, photo: str | None = None) -> tuple[bool, str]:
         with LOCK:
             if self.phase != "lobby":
                 return False, "O'yin allaqachon boshlangan"
@@ -290,6 +291,7 @@ class Game:
             if len(self.players) >= MAX_PLAYERS:
                 return False, f"Joy qolmadi (maksimum {MAX_PLAYERS})"
             self.players[uid] = P(uid, name, username, is_bot)
+            self.players[uid].photo = photo
             self._bump()
             self._out("lobby")
             return True, "Qo'shildi"
@@ -1049,7 +1051,7 @@ class Game:
             for p in self.players.values():
                 role_visible = self._can_see_role(viewer, p)
                 players.append({
-                    "uid": p.uid, "name": p.name, "alive": p.alive, "is_bot": p.is_bot,
+                    "uid": p.uid, "name": p.name, "alive": p.alive, "is_bot": p.is_bot, "photo": getattr(p, "photo", None),
                     "host": p.uid == self.host_id,
                     "role": p.role if role_visible else None,
                     "role_name": ROLES[p.role]["name"] if role_visible and p.role else None,
@@ -1206,7 +1208,7 @@ _SCALARS = ("gid", "chat_id", "chat_title", "host_id", "created", "last_activity
             "lobby_msg_id", "_eid", "settings", "phase_no", "veto_by", "log", "stats_recorded")
 _PFIELDS = ("uid", "name", "username", "is_bot", "alive", "role", "last_heal", "self_healed",
             "last_block", "death", "shots", "lucky_used", "lover", "bitten", "vow", "judge_used", "vetoed",
-            "sniper_hit_mafia", "lw_until", "last_word_used")
+            "sniper_hit_mafia", "lw_until", "last_word_used", "photo")
 _saved: dict[str, int] = {}
 _last_save = 0.0
 
