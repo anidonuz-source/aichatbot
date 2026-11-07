@@ -140,6 +140,9 @@ h3{margin:0 0 4px;font:700 17px var(--ser)}.mut{color:var(--mut);font-size:12.5p
 .mkrow{display:flex;gap:6px;justify-content:center;margin:8px 0}
 .mkin{width:100%;background:rgba(255,255,255,.1);border:1px solid var(--line);border-radius:12px;padding:8px 10px;color:var(--ink);font:inherit;outline:0}
 html.kb #stage,html.kb #rx{display:none}html.kb #dock{height:auto;max-height:none;flex:1}
+#tabs{overflow-x:auto;scrollbar-width:none}#tabs::-webkit-scrollbar{display:none}#tabs button{flex:none;padding:8px 11px}
+.it{display:flex;gap:10px;align-items:center;justify-content:space-between;background:rgba(255,255,255,.07);border-radius:12px;padding:8px 10px;margin:6px 0}
+.it small{display:block;color:var(--mut)}.it .btn{width:auto;margin:0;padding:8px 12px;flex:none}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition-duration:.01s!important}}
 </style>
 {% endraw %}
@@ -158,10 +161,10 @@ html.kb #stage,html.kb #rx{display:none}html.kb #dock{height:auto;max-height:non
   <div id="rx"></div>
   <div id="dock">
     <button id="grip" aria-label="Panelni yig'ish"></button>
-    <div id="tabs"><button data-t="act" class="on">🎯 Harakat</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button><button data-t="stats">🏆 Reyting</button></div>
+    <div id="tabs"><button data-t="act" class="on">🎯 Harakat</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button><button data-t="stats">🏆 Reyting</button><button data-t="shop">🛒 Do'kon</button></div>
     <div class="pane on" id="p-act"></div>
     <div class="pane" id="p-chat"><div id="chs"></div><div id="msgs"></div><div id="qp"></div><form id="cf" autocomplete="off"><input id="ci" maxlength="220" placeholder="Xabar yoz…" enterkeyhint="send"><button type="submit" aria-label="Yuborish">➤</button></form></div>
-    <div class="pane" id="p-log"></div><div class="pane" id="p-roles"></div><div class="pane" id="p-stats"></div>
+    <div class="pane" id="p-log"></div><div class="pane" id="p-roles"></div><div class="pane" id="p-stats"></div><div class="pane" id="p-shop"></div>
   </div>
 </div>
 <div class="ov" id="ovr"><div id="card"><div id="cin"><div class="face f1">🎭<div style="font:14px system-ui;margin-top:10px;color:#cbb9ff">Rolingni ochish uchun bos</div></div><div class="face f2" id="cback"></div></div></div></div>
@@ -427,7 +430,7 @@ function choose(u) {
 function setTab(t) {
   tab = t; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + t));
-  if (t === 'stats') loadStats();
+  if (t === 'stats' || t === 'shop') loadStats();
   if (t === 'chat') { $('#cd').style.display = 'none'; if (V) seenChat = maxId(V.chat); const l = $('#msgs'); l.scrollTop = l.scrollHeight; }
 }
 $$('#tabs button').forEach(b => b.onclick = () => { $('#dock').classList.remove('min'); setTab(b.dataset.t); hap('light'); });
@@ -480,8 +483,9 @@ function panelAct() {
   if (v.phase === 'lobby' && BOTU) h += `<button class="btn alt" data-a="invite">📨 Do'stlarni chaqirish</button>`;
   if (v.phase === 'ended' && BOTU) h += `<button class="btn" data-a="again">🔁 Yana o'ynash</button>`;
   if (m && m.can_veto) h += `<button class="btn red" data-a="veto">👨‍⚖️ Hukmni bekor qilish (veto)</button>`;
+  const prot = (m && m.alive && v.phase !== 'ended' ? (m.shield ? '<div class="note ok">🛡 Tun himoyasi faol</div>' : '') + (m.vote_shield ? '<div class="note ok">🗳 Ovozdan himoya faol</div>' : '') : '') + (m && v.phase === 'ended' && m.coins_gain ? `<div class="note ok">+${m.coins_gain} 💵 mukofot</div>` : '');
   const lov = m && m.lover ? `<div class="note ok">💘 Sevishganing: <b>${esc(m.lover.name)}</b>. Biringiz o'lsa, ikkinchingiz ham o'ladi.</div>` : '';
-  e.innerHTML = L(notes + lov + h + (m && m.alive && ['night', 'day'].includes(v.phase) && TIP[m.role] ? `<div class="mut" style="margin-top:12px">💡 ${TIP[m.role]}</div>` : ''));
+  e.innerHTML = L(notes + prot + lov + h + (m && m.alive && ['night', 'day'].includes(v.phase) && TIP[m.role] ? `<div class="mut" style="margin-top:12px">💡 ${TIP[m.role]}</div>` : ''));
 }
 $('#p-act').addEventListener('click', ev => {
   const b = ev.target.closest('[data-a]'); if (!b || b.disabled || !V) return;
@@ -592,11 +596,24 @@ function renderStats() {
   const mine = new Set((me.achievements || []).map(a => a.key));
   const roles = (me.roles || []).filter(r => d.roles[r.role]).map(r => `<div class="lr"><span>${d.roles[r.role].emoji} ${esc(d.roles[r.role].name)}</span><span>${r.wins}/${r.games} · ${r.winrate}%</span></div>`).join('');
   const ach = Object.entries(d.achievements).map(([k, a]) => `<span class="ach${mine.has(k) ? '' : ' lock'}" title="${esc(a.desc)}">${a.emoji} ${esc(a.name)}</span>`).join('');
-  $('#p-stats').innerHTML = `<h3>🪪 Mening profilim</h3>${me.games ? `<div class="st"><span>🎮 ${me.games} o'yin</span><span>🏆 ${me.wins} g'alaba</span><span>📈 ${me.winrate}%</span><span>🔥 seriya ${me.best_streak}</span>${me.rank ? `<span>#${me.rank}</span>` : ''}</div>${roles ? `<div class="mut">Rollar bo'yicha</div>${roles}` : ''}` : `<div class="mut">Hali o'ynamagansan. Birinchi g'alabangni qozon!</div>`}
+  const grp = (d.groups || []).length ? d.groups.map((g, i) => `<div class="lr"><span>${['🥇', '🥈', '🥉'][i] || (i + 1) + '.'} ${esc(g.title)}</span><span>${g.games} o'yin · ${g.players} kishi</span></div>`).join('') : `<div class="mut">Hali guruh o'ynamagan</div>`;
+  renderShop(d);
+  $('#p-stats').innerHTML = `<h3>🪪 Mening profilim <span class="mut">${esc(d.currency)} ${me.coins}</span></h3>${me.games ? `<div class="st"><span>🎮 ${me.games} o'yin</span><span>🏆 ${me.wins} g'alaba</span><span>📈 ${me.winrate}%</span><span>🔥 seriya ${me.best_streak}</span>${me.rank ? `<span>#${me.rank}</span>` : ''}</div>${roles ? `<div class="mut">Rollar bo'yicha</div>${roles}` : ''}` : `<div class="mut">Hali o'ynamagansan. Birinchi g'alabangni qozon!</div>`}
     <div class="mut" style="margin-top:8px">Yutuqlar (xira — hali olinmagan)</div><div>${ach}</div>
     <h3 style="margin-top:14px">📅 Haftalik top-10 <span class="mut">${esc(d.week_key || '')}</span></h3>${lb(d.week)}
-    <h3 style="margin-top:14px">🌍 Umumiy top-10</h3>${lb(d.all)}`;
+    <h3 style="margin-top:14px">🌍 Umumiy top-10</h3>${lb(d.all)}<h3 style="margin-top:14px">🏘 Top guruhlar</h3>${grp}`;
 }
+function renderShop(d) {
+  const me = d.me || {}, inv = me.inv || {}, c = esc(d.currency);
+  $('#p-shop').innerHTML = `<h3>🛒 Do'kon <span class="mut">${c} ${me.coins}</span></h3><div class="mut">Sotib olingan narsa keyingi o'yin boshlanganda avtomatik ishlaydi.</div>`
+    + (d.daily_ready ? `<button class="btn good" data-buy="daily">🎁 Kunlik sovg'a (+${d.daily_amount} ${c})</button>` : `<div class="mut" style="margin-top:8px">🎁 Kunlik sovg'a ${Math.ceil(d.daily_in / 3600)} soatdan keyin</div>`)
+    + Object.entries(d.shop).map(([k, it]) => `<div class="it"><div><b>${it.emoji} ${esc(it.name)}</b> <span class="mut">×${inv[k] || 0}</span><small>${esc(it.desc)}</small></div><button class="btn" data-buy="${k}" ${me.coins < it.price ? 'disabled' : ''}>${it.price} ${c}</button></div>`).join('');
+}
+$('#p-shop').addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-buy]'); if (!b || b.disabled || dead) return;
+  try { const r = await api(b.dataset.buy === 'daily' ? 'daily' : 'buy', {item: b.dataset.buy}); statsData = r; statsAt = Date.now(); toast(r.result.msg, !r.result.ok); hap('n', r.result.ok ? 'success' : 'error'); renderStats(); }
+  catch (e) { netErr(e); }
+});
 
 /* yakuniy jadval */
 function recapHTML(v) {
