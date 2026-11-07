@@ -147,3 +147,71 @@ def chat():
         return err
     ok, msg = game.post_chat(int(user["id"]), str(body.get("text", "")))
     return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
+
+
+# ── yangi endpointlar: sozlamalar, oxirgi so'z, reaksiya, veto, reyting, qayta ulanish ──
+@bp.route("/api/mafia/settings", methods=["POST"])
+def settings():
+    user, game, body, err = _ctx()
+    if err:
+        return err
+    patch = body.get("settings") if isinstance(body.get("settings"), dict) else {}
+    ok, msg = game.set_settings(int(user["id"]), patch)
+    return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
+
+
+@bp.route("/api/mafia/lastword", methods=["POST"])
+def lastword():
+    user, game, body, err = _ctx()
+    if err:
+        return err
+    ok, msg = game.last_word(int(user["id"]), str(body.get("text", "")))
+    return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
+
+
+@bp.route("/api/mafia/react", methods=["POST"])
+def react():
+    user, game, body, err = _ctx()
+    if err:
+        return err
+    ok, msg = game.react(int(user["id"]), str(body.get("emoji", "")))
+    return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
+
+
+@bp.route("/api/mafia/veto", methods=["POST"])
+def veto():
+    user, game, body, err = _ctx()
+    if err:
+        return err
+    ok, msg = game.use_veto(int(user["id"]))
+    return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
+
+
+@bp.route("/api/mafia/mine", methods=["POST"])
+def mine():
+    """Mini App yopilib qolsa: foydalanuvchi qatnashayotgan o'yinni topib beradi."""
+    body = request.get_json(silent=True) or {}
+    user = _user(body)
+    if not user:
+        return jsonify({"error": "auth"}), 401
+    g = mafia.find_game_for(int(user["id"]))
+    return jsonify({"gid": g.gid if g else None, "phase": g.phase if g else None,
+                    "chat_title": g.chat_title if g else None})
+
+
+@bp.route("/api/mafia/stats", methods=["POST"])
+def stats():
+    body = request.get_json(silent=True) or {}
+    user = _user(body)
+    if not user:
+        return jsonify({"error": "auth"}), 401
+    import mafia_stats
+    uid = int(user["id"])
+    return jsonify({
+        "week": mafia_stats.leaderboard("week", 10),
+        "all": mafia_stats.leaderboard("all", 10),
+        "me": mafia_stats.profile(uid, user.get("first_name") or ""),
+        "week_key": mafia_stats.week_key(),
+        "achievements": mafia_stats.ACHIEVEMENTS,
+        "roles": mafia.ROLES_PUBLIC,
+    })
