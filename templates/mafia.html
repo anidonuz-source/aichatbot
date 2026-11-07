@@ -66,6 +66,27 @@ body.day .nm{text-shadow:0 1px 3px #000,0 0 6px rgba(0,0,0,.6)}
 #dock{position:relative;z-index:6;height:40vh;max-height:340px;min-height:240px;background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:2px solid var(--line);border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:var(--sab);transition:border-color .6s}
 body.day #dock{background:rgba(18,16,44,.9)}
 #dock.min{height:auto;min-height:0}#dock.min .pane,#dock.min #tabs{display:none!important}
+/* bo'limlar: Chat / Jurnal / Rollar alohida to'liq sahifa bo'lib ochiladi */
+#p-roles,#p-log{text-align:left}
+#pghead{display:none;align-items:center;gap:10px;padding:10px 14px 8px;flex:none}
+#pgback{background:rgba(255,255,255,.1);border-radius:12px;padding:8px 13px;font-weight:700;font-size:13px}
+#pgtitle{font:700 18px var(--ser)}
+#dock.full{position:fixed;left:0;right:0;top:var(--sat);bottom:0;height:auto;max-height:none;min-height:0;border-radius:0;z-index:20;background:rgba(10,8,24,.97)}
+#dock.full #pghead{display:flex;order:1}
+#dock.full .pane{order:2}
+#dock.full #tabs{order:3;padding:6px 10px calc(4px + var(--sab));border-top:1px solid var(--line)}
+#dock.full #grip{display:none}
+.pg-sec{margin:0 0 14px}.pg-sec>h4{margin:0 0 6px;font:700 11px system-ui;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.ph3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ph3>div{background:rgba(255,255,255,.07);border-radius:12px;padding:9px 6px;text-align:center;font-size:11px;color:var(--mut);line-height:1.35}
+.ph3 b{display:block;font-size:12.5px;color:var(--ink);margin:2px 0}
+.ph3 i{font-style:normal;font-size:20px}
+.pg-win{display:grid;gap:6px}
+.pg-win>div{background:rgba(255,255,255,.07);border-radius:12px;padding:8px 11px;font-size:12.5px;color:var(--mut);border-left:3px solid var(--town)}
+.pg-win>div.mafia{border-color:var(--mafia)}.pg-win>div.maniac{border-color:var(--maniac)}
+.pg-win b{color:var(--ink)}
+.rl.one{grid-template-columns:1fr}
+.rc .rt{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:var(--maniac)}
 #grip{width:56px;height:20px;display:grid;place-items:center;margin:0 auto;flex:none}#grip:before{content:'';width:44px;height:5px;border-radius:9px;background:rgba(255,255,255,.3)}
 #tabs{display:flex;gap:4px;padding:0 10px}
 #tabs button{flex:1;color:var(--mut);padding:8px 2px;border-radius:12px;font-weight:600;position:relative;font-size:13px}
@@ -137,6 +158,7 @@ h3{margin:0 0 4px;font:700 17px var(--ser)}.mut{color:var(--mut);font-size:12.5p
   </div></div>
   <div id="dock">
     <button id="grip" aria-label="Panelni yig'ish"></button>
+    <div id="pghead"><button id="pgback" type="button">‹ O'yin</button><div id="pgtitle"></div></div>
     <div id="tabs"><button data-t="act" class="on">🎯 Harakat</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button></div>
     <div class="pane on" id="p-act"></div>
     <div class="pane" id="p-chat"><div id="chs"></div><div id="msgs"></div><div id="qp"></div><form id="cf" autocomplete="off"><input id="ci" maxlength="220" placeholder="Xabar yoz…" enterkeyhint="send"><button type="submit" aria-label="Yuborish">➤</button></form></div>
@@ -295,7 +317,7 @@ function onPhase(v) {
   else if (v.phase === 'vote') announce('🗳 OVOZ BERISH', '#ffb02e');
   else if (v.phase === 'ended') { setTimeout(showEnd, 900); if (m && m.team === v.winner) snd('win'); }
   hap('n', 'warning');
-  if (v.phase === 'day' || (v.phase === 'night' && m && m.alive && m.team === 'mafia')) setTab('chat'); else setTab('act');
+  setTab('act');
 }
 
 /* render */
@@ -352,12 +374,20 @@ function choose(u) {
 }
 
 /* tablar */
+const TITLES = {chat: '💬 Chat', log: '📜 Jurnal', roles: '🎭 Rollar va qoidalar'};
 function setTab(t) {
   tab = t; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + t));
+  const full = t !== 'act';
+  $('#dock').classList.toggle('full', full);
+  if (full) { $('#dock').classList.remove('min'); $('#pgtitle').textContent = TITLES[t] || ''; }
   if (t === 'chat') { $('#cd').style.display = 'none'; if (V) seenChat = maxId(V.chat); const l = $('#msgs'); l.scrollTop = l.scrollHeight; }
 }
-$$('#tabs button').forEach(b => b.onclick = () => { $('#dock').classList.remove('min'); setTab(b.dataset.t); hap('light'); });
+$$('#tabs button').forEach(b => b.onclick = () => {
+  $('#dock').classList.remove('min');
+  setTab(b.dataset.t !== 'act' && b.dataset.t === tab ? 'act' : b.dataset.t); hap('light');
+});
+$('#pgback').onclick = () => { setTab('act'); hap('light'); };
 $('#grip').onclick = () => $('#dock').classList.toggle('min');
 
 /* harakat paneli */
@@ -448,8 +478,24 @@ $('#cf').addEventListener('submit', e => { e.preventDefault(); send(); });
 
 function panelLog() { $('#p-log').innerHTML = `<div class="tl">${V.feed.slice().reverse().map(f => `<div class="${esc(f.kind)}">${ICON[f.kind] || '•'} ${esc(f.text)}</div>`).join('') || '<div class="mut">Hali voqea yo\'q</div>'}</div>`; }
 function panelRoles() {
-  const mine = V.me && V.me.role;
-  $('#p-roles').innerHTML = `<div class="rl">${Object.entries(V.roles_info).map(([k, r]) => `<div class="rc ${esc(r.team)}${k === mine ? ' mine' : ''}"><b>${r.emoji} ${esc(r.name)}</b><span>${esc(r.desc)}</span></div>`).join('')}</div>`;
+  const mine = V.me && V.me.role, info = Object.entries(V.roles_info || {});
+  const grp = (team, cls) => {
+    const list = info.filter(([k, r]) => r.team === team);
+    if (!list.length) return '';
+    return `<div class="rl one">${list.map(([k, r]) => `<div class="rc ${esc(r.team)}${k === mine ? ' mine' : ''}"><b>${r.emoji} ${esc(r.name)}${k === mine ? '<em class="rt">SENING ROLING</em>' : ''}${r.night ? '' : ''}</b><span>${esc(r.desc)}</span></div>`).join('')}</div>`;
+  };
+  $('#p-roles').innerHTML =
+    `<div class="pg-sec"><h4>Qanday o'ynaladi</h4><div class="ph3">
+      <div><i>🌙</i><b>Tun</b>Rollar yashirin harakat qiladi</div>
+      <div><i>☀️</i><b>Kun</b>Muhokama, gumondorni aytish</div>
+      <div><i>🗳</i><b>Ovoz</b>Ko'p ovoz olgan osiladi</div></div></div>
+    <div class="pg-sec"><h4>Kim yutadi</h4><div class="pg-win">
+      <div><b>🏙 Shahar</b> — barcha mafiya va maniak yo'q qilinsa</div>
+      <div class="mafia"><b>🔫 Mafiya</b> — soni qolganlarga teng yoki ko'p bo'lsa</div>
+      <div class="maniac"><b>🔪 Maniak</b> — oxirgi tirik qolsa</div></div></div>
+    <div class="pg-sec"><h4>🏙 Shahar rollari</h4>${grp('town')}</div>
+    <div class="pg-sec"><h4>🔫 Mafiya rollari</h4>${grp('mafia')}</div>
+    <div class="pg-sec"><h4>🔪 Yakka</h4>${grp('maniac')}</div>`;
 }
 
 /* overlaylar */
