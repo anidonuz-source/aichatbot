@@ -43,6 +43,7 @@ import ai_core
 import game
 import ship
 import fun
+import moderation
 import games2
 import extras
 import sticker_store
@@ -927,6 +928,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message), group=0)
     app.add_handler(MessageHandler(filters.Sticker.ALL | filters.ANIMATION, handle_sticker_gif), group=0)
     app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER), group=0)
+
+    # Moderatsiya: /warn /mute /ban ... va Misumi o'zini himoya qilishi (group -2 / 0)
+    moderation.register(app)
 
     # GROUP 1 — yordamchi handlerlar (handle_message dan keyin ishlaydi)
     game.register(app)
