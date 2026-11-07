@@ -37,6 +37,7 @@ from telegram.ext import (
 
 import ai_core
 import mafia
+import mafia_hub
 import mafia_stats
 
 logger = logging.getLogger("misumi-mafia")
@@ -248,32 +249,7 @@ async def cb_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def _menu(uid: int, name: str, view: str = "home"):
-    cur = mafia_stats.CURRENCY
-    p = mafia_stats.profile(uid, name)
-    if view == "shop":
-        ready, left = mafia_stats.daily_info(uid)
-        t = f"🛒 <b>Mafia do'koni</b>\n💵 Balans: <b>{p['coins']} {cur}</b>\nSotib olingan narsa keyingi o'yin boshlanganda ishlaydi.\n"
-        rows = []
-        for k, it in mafia_stats.SHOP.items():
-            t += f"\n{it['emoji']} <b>{_e(it['name'])}</b> ({p['inv'].get(k, 0)} ta) — {it['price']} {cur}\n<i>{_e(it['desc'])}</i>\n"
-            rows.append([Btn(f"{it['emoji']} {it['name']} · {it['price']} {cur}", callback_data=f"mfs:buy:{k}")])
-        rows.append([Btn(f"🎁 Kunlik sovg'a (+{mafia_stats.DAILY_COINS})" if ready else f"🎁 {left // 3600 + 1} soatdan keyin", callback_data="mfs:daily")])
-        rows.append([Btn("⬅️ Orqaga", callback_data="mfs:home")])
-        return t, Markup(rows)
-    if view == "top":
-        rows = mafia_stats.leaderboard("all", 10)
-        t = "🏆 <b>Mafia — umumiy top-10</b>\n\n" + ("\n".join(
-            f"{['🥇', '🥈', '🥉'][i] if i < 3 else str(i + 1) + '.'} {_e(r['name'])} — {r['wins']} g'alaba / {r['games']}" for i, r in enumerate(rows)) or "Hali o'yin yo'q")
-        gs = mafia_stats.top_groups(5)
-        t += "\n\n🏘 <b>Top guruhlar</b>\n" + ("\n".join(f"{i + 1}. {_e(g['title'])} — {g['games']} o'yin, {g['players']} kishi" for i, g in enumerate(gs)) or "Hali yo'q")
-        return t, Markup([[Btn("⬅️ Orqaga", callback_data="mfs:home")]])
-    ach = ", ".join(a["emoji"] for a in p["achievements"]) or "hali yo'q"
-    t = (f"🎭 <b>MAFIA</b> — {_e(name)}\n\n💵 Balans: <b>{p['coins']} {cur}</b>\n"
-         f"🎮 O'yinlar: {p['games']} · 🏆 G'alaba: {p['wins']} · 📈 {p['winrate']}%\n"
-         f"🔥 Eng uzun seriya: {p['best_streak']}" + (f" · 🏅 Reyting: #{p['rank']}" if p.get("rank") else "") +
-         f"\n🎖 Yutuqlar ({len(p['achievements'])}/{len(mafia_stats.ACHIEVEMENTS)}): {ach}\n\n"
-         "O'ynash uchun guruhda /mafia deb yozing.")
-    return t, Markup([[Btn("🛒 Do'kon", callback_data="mfs:shop"), Btn("🏆 Reyting va guruhlar", callback_data="mfs:top")]])
+    return mafia_hub.render(uid, name, view)
 
 
 async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -283,7 +259,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 
-START_CARD = os.environ.get("MAFIA_START_CARD", "1") != "0"   # 0 = oddiy /start da kartani ko'rsatma
+START_CARD = os.environ.get("MAFIA_START_CARD", "0") == "1"   # 0 = oddiy /start da kartani ko'rsatma
 MENU_CB = os.environ.get("MAFIA_MENU_CB", r"^(mafia|menu_mafia|menu:mafia|mafia_menu)$")  # asosiy menyudagi Mafia tugmasi callback_data si
 
 
@@ -302,17 +278,22 @@ async def cb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cb_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """mfs:<ekran>[:arg] — Mafia hisob markazi tugmalari."""
     q = update.callback_query
     u = q.from_user
+    name = u.first_name or ""
     parts = q.data.split(":")
+    view = parts[1] if len(parts) > 1 else "home"
+    arg = parts[2] if len(parts) > 2 else None
     note = None
-    if parts[1] == "buy" and len(parts) > 2:
-        ok, note = await asyncio.to_thread(mafia_stats.buy, u.id, u.first_name or "", parts[2])
-    elif parts[1] == "daily":
-        ok, note = await asyncio.to_thread(mafia_stats.claim_daily, u.id, u.first_name or "")
-    view = {"shop": "shop", "buy": "shop", "daily": "shop", "top": "top"}.get(parts[1], "home")
-    t, kb = await asyncio.to_thread(_menu, u.id, u.first_name or "", view)
-    await q.answer(note or "", show_alert=bool(note and not note[0].isalpha() and False))
+    if view == "buy" and arg:
+        _, note = await asyncio.to_thread(mafia_stats.buy, u.id, name, arg)
+        view = "shop"
+    elif view == "daily":
+        _, note = await asyncio.to_thread(mafia_stats.claim_daily, u.id, name)
+        view = "shop"
+    await q.answer(note or "")
+    t, kb = await asyncio.to_thread(mafia_hub.render, u.id, name, view, arg)
     try:
         await q.edit_message_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
     except BadRequest:
