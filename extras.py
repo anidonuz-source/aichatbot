@@ -605,6 +605,10 @@ def _section_kb(sec: str, lang: str, premium: bool, bot_username: str | None = N
     li = _LI[lang]
     btns = [mk(_ITEMS[k][1][li], _ITEMS[k][0], callback_data=f"st:i:{sec}:{k}") for k in _SECTIONS[sec][1]]
     rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    if sec == "mafia":
+        bt = _MB.get(lang, _MB["uz"])
+        rows.append([mk(bt[0], "👤", callback_data="mfs:home"), mk(bt[1], "🛒", callback_data="mfs:shop")])
+        rows.append([mk(bt[2], "🏆", callback_data="mfs:top:week"), mk(bt[3], "🏘", callback_data="mfs:grp")])
     if sec == "mafia" and bot_username:
         rows.append([mk(tr(lang, "add_group"), "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
     rows.append([mk(tr(lang, "back"), "⬅️", callback_data="st:home")])
@@ -625,6 +629,39 @@ def _item_kb(sec: str, lang: str, premium: bool) -> InlineKeyboardMarkup:
     ]])
 
 
+_MB = {
+    "uz": ("Hisobim", "Do'kon", "Reyting", "Guruhlar"),
+    "ru": ("Мой аккаунт", "Магазин", "Рейтинг", "Группы"),
+    "en": ("My account", "Shop", "Ranking", "Groups"),
+}
+_MF = {
+    "uz": ("Mafia hisobing", "Balans", "O'yinlar", "G'alaba", "Reyting", "Yutuqlar", "Top guruhlar", "yo'q", "Do'kon", "Reyting", "o'yin"),
+    "ru": ("Твой аккаунт Мафии", "Баланс", "Игры", "Победы", "Рейтинг", "Достижения", "Топ групп", "нет", "Магазин", "Рейтинг", "игр"),
+    "en": ("Your Mafia account", "Balance", "Games", "Wins", "Rank", "Achievements", "Top groups", "none", "Shop", "Ranking", "games"),
+}
+
+
+def _mafia_block(user_id: int, name: str, lang: str) -> str:
+    """Mafia bo'limi uchun hisob: balans, statistika, yutuqlar, top guruhlar."""
+    try:
+        import mafia_stats
+        p = mafia_stats.profile(user_id, name or "")
+        gs = mafia_stats.top_groups(3)
+    except Exception:
+        logger.exception("mafia hisobi o'qilmadi")
+        return ""
+    t = _MF.get(lang, _MF["uz"])
+    ach = " ".join(a["emoji"] for a in p["achievements"]) or t[7]
+    out = (f"\n\n🎭 <b>{t[0]}</b> · ⭐ {p['lvl']['title']} · {p['lvl']['level']}\n💵 {t[1]}: <b>{p['coins']} {mafia_stats.CURRENCY}</b>\n"
+           f"🎮 {t[2]}: {p['games']} · 🏆 {t[3]}: {p['wins']} ({p['winrate']}%)"
+           + (f" · 🏅 {t[4]}: #{p['rank']}" if p.get("rank") else "")
+           + f"\n🎖 {t[5]} ({len(p['achievements'])}/{len(mafia_stats.ACHIEVEMENTS)}): {ach}")
+    if gs:
+        out += f"\n\n🏘 <b>{t[6]}</b>\n" + "\n".join(
+            f"{i + 1}. {_esc(g['title'])} — {g['games']} {t[10]}" for i, g in enumerate(gs))
+    return out
+
+
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -639,7 +676,10 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await edit_html(query, text, lambda prem: _start_kb(chat_id, bu, prem, lang))
     elif len(parts) == 3 and parts[1] == "s" and parts[2] in _SECTIONS:
         sec = parts[2]
-        await edit_html(query, _section_text(sec, lang), lambda prem: _section_kb(sec, lang, prem, context.bot.username))
+        text = _section_text(sec, lang)
+        if sec == "mafia":
+            text += await asyncio.to_thread(_mafia_block, user.id, user.first_name or "", lang)
+        await edit_html(query, text, lambda prem: _section_kb(sec, lang, prem, context.bot.username))
     elif len(parts) == 4 and parts[1] == "i" and parts[2] in _SECTIONS and parts[3] in _ITEMS:
         sec, item = parts[2], parts[3]
         await edit_html(query, _item_text(item, lang), lambda prem: _item_kb(sec, lang, prem))
