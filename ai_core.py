@@ -120,14 +120,16 @@ CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 # ---------------------------------------------------------------------------
 # Provider 2 (fallback + vision): Gemini — https://aistudio.google.com
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+import gemini_pool
+GEMINI_KEYS = gemini_pool.load_keys()      # GEMINI_API_KEYS=k1,k2,k3 (yoki GEMINI_API_KEY)
+GEMINI_API_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # Render env da noto'g'ri model nomi yozilgan bo'lsa — to'g'rilaymiz
 _KNOWN_BAD_GEMINI_MODELS = {"gemini-3.6-flash", "gemini-3.6-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash-latest"}
 if GEMINI_MODEL in _KNOWN_BAD_GEMINI_MODELS:
     print(f"[ai_core] WARNING: GEMINI_MODEL='{GEMINI_MODEL}' mavjud emas, 'gemini-2.5-flash' ga o'zgartirildi")
     GEMINI_MODEL = "gemini-3.5-flash-lite"
-_gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+_gemini_client = gemini_pool.GeminiPool(GEMINI_KEYS)   # genai.Client bilan bir xil interfeys, kalitlarni o'zi aylantiradi
 
 # Image generation — "Nano Banana". Imagen models are being retired
 # (shutdown Aug 17, 2026), so this uses generate_content with an
