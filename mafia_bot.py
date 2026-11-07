@@ -89,13 +89,25 @@ def _lobby_text(g: "mafia.Game") -> str:
 
 def _lobby_kb(g: "mafia.Game", bot_username: str) -> Markup:
     rows = [[Btn("🎮 Qo'shilish", url=_deeplink(bot_username, g.gid))]]
+    nb = g.bot_count()
     row2 = []
-    if mafia.BOT_UID not in g.players:
-        row2.append(Btn("🤖 Misumi'ni qo'shish", callback_data=f"mf:bot:{g.gid}"))
-    row2.append(Btn("▶️ Boshlash", callback_data=f"mf:go:{g.gid}"))
+    if nb < mafia.MAX_BOTS:
+        row2.append(Btn(f"🤖 Bot + ({nb})", callback_data=f"mf:bot:{g.gid}"))
+    if nb:
+        row2.append(Btn("🤖 Bot −", callback_data=f"mf:unbot:{g.gid}"))
     rows.append(row2)
+    rows.append([Btn("▶️ Boshlash", callback_data=f"mf:go:{g.gid}")])
     rows.append([Btn("✖️ Bekor qilish", callback_data=f"mf:x:{g.gid}")])
     return Markup(rows)
+
+
+async def _unpin(bot, g: "mafia.Game") -> None:
+    if not g.lobby_msg_id:
+        return
+    try:
+        await bot.unpin_chat_message(g.chat_id, g.lobby_msg_id)
+    except TelegramError:
+        pass
 
 
 async def _can_manage(context, g: "mafia.Game", user_id: int) -> bool:
@@ -126,6 +138,11 @@ async def cmd_mafia(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=_lobby_kb(g, context.bot.username),
     )
     g.lobby_msg_id = sent.message_id
+    try:
+        await context.bot.pin_chat_message(chat.id, sent.message_id, disable_notification=False)
+    except TelegramError as e:
+        logger.info(f"[mafia] pin qilib bo'lmadi: {e}")
+        await msg.reply_text("📌 Lobbi xabarini yopishtirish uchun botga «Xabarlarni pin qilish» huquqini bering.")
 
 
 async def cmd_mafiastop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -163,7 +180,10 @@ async def cb_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if action == "bot":
         ok, m = g.add_bot()
-        await q.answer("Misumi o'yinga qo'shildi 🤖" if ok else m, show_alert=not ok)
+        await q.answer("Bot qo'shildi 🤖" if ok else m, show_alert=not ok)
+    elif action == "unbot":
+        ok, m = g.remove_bot()
+        await q.answer(m, show_alert=not ok)
     elif action == "go":
         ok, m = g.start(g.host_id, force=True)
         await q.answer("Boshlandi!" if ok else m, show_alert=not ok)
@@ -241,7 +261,7 @@ async def _say(bot, chat_id: int, text: str, kb=None) -> None:
 
 
 async def _dm(bot, uid: int, text: str, kb=None) -> None:
-    if uid == mafia.BOT_UID:
+    if uid <= 0:
         return
     try:
         await bot.send_message(uid, text, parse_mode=ParseMode.HTML, reply_markup=kb)
@@ -250,7 +270,7 @@ async def _dm(bot, uid: int, text: str, kb=None) -> None:
 
 
 # ── Misumi o'yinchi sifatida gapiradi ─────────────────────────────────
-_LEAK_RE = re.compile(r"(mafiya|komissar|doktor|don|maniak|qo'riqchi|kelin|fuqaro)\s*(man\b|ekanman|bo'lib)", re.I)
+_LEAK_RE = re.compile(r"(mafiya|komissar|doktor|don|maniak|qo'riqchi|kelin|fuqaro|advokat|jurnalist|snayper|omadli)\s*(man\b|ekanman|bo'lib)", re.I)
 
 
 def _bot_context(g: "mafia.Game"):
@@ -327,19 +347,24 @@ async def _handle(context: ContextTypes.DEFAULT_TYPE, g: "mafia.Game", ev: dict)
 
     if k == "start":
         if g.lobby_msg_id:
+            await _unpin(bot, g)
+            with mafia.LOCK:
+                roster_txt = "\n".join(f"{i}. {'🤖 ' if p.is_bot else ''}{_e(p.name)}"
+                                       for i, p in enumerate(g.players.values(), 1))
             try:
-                await bot.edit_message_reply_markup(chat, g.lobby_msg_id, reply_markup=None)
+                await bot.edit_message_text(f"🎭 <b>MAFIA boshlandi</b>\n\n{roster_txt}", chat_id=chat,
+                                            message_id=g.lobby_msg_id, parse_mode=ParseMode.HTML)
             except TelegramError:
                 pass
         with mafia.LOCK:
             comp = Counter(p.role for p in g.players.values())
-            has_bot = mafia.BOT_UID in g.players
+            has_bot = g.bot_count() > 0
             n = len(g.players)
             roster = [(p.uid, p.role, p.team, p.is_bot) for p in g.players.values()]
             mafia_names = [p.name for p in g.players.values() if p.team == "mafia"]
         comp_text = ", ".join(f"{mafia.ROLES[r]['emoji']} {mafia.ROLES[r]['name']} ×{c}" if c > 1
                               else f"{mafia.ROLES[r]['emoji']} {mafia.ROLES[r]['name']}" for r, c in comp.items())
-        extra = "\n🤖 Misumi ham o'ynayapti — u kim ekanini hech kim bilmaydi." if has_bot else ""
+        extra = f"\n🤖 {g.bot_count()} ta bot ham o'ynayapti — qaysi biri nima ekanini hech kim bilmaydi." if has_bot else ""
         await _say(bot, chat,
                    f"🎭 <b>MAFIA boshlandi!</b> {n} ta o'yinchi.\n"
                    f"Rollar: {comp_text}{extra}\n\nRolingni Mini App'dan ko'r. {mafia.REVEAL_SEC} soniyadan keyin tun tushadi.",
@@ -416,6 +441,7 @@ async def _handle(context: ContextTypes.DEFAULT_TYPE, g: "mafia.Game", ev: dict)
         return
 
     if k == "cancel":
+        await _unpin(bot, g)
         await _say(bot, chat, f"🛑 {_e(ev.get('reason', 'O`yin bekor qilindi'))}")
         return
 
@@ -455,6 +481,12 @@ async def mafia_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def register(app) -> None:
+    try:
+        n = mafia.load_all()
+        if n:
+            logger.info(f"[mafia] {n} ta o'yin tiklandi")
+    except Exception:
+        logger.exception("[mafia] tiklashda xato")
     app.add_handler(CommandHandler("start", dm_start, filters=_PRIVATE), group=-3)
     app.add_handler(CommandHandler(["mafia", "mafiya"], cmd_mafia, filters=_GROUPS), group=0)
     app.add_handler(CommandHandler("mafiastop", cmd_mafiastop, filters=_GROUPS), group=0)
