@@ -31,6 +31,9 @@ app = Flask(__name__)
 import web_api  # website API (/api/web/*)
 app.register_blueprint(web_api.bp)
 
+import mafia_api  # Mafia o'yini Mini App (/mafia, /api/mafia/*)
+app.register_blueprint(mafia_api.bp)
+
 
 def verify_init_data(init_data: str) -> dict | None:
     """Validate Telegram WebApp initData. Returns the parsed data dict
