@@ -65,17 +65,13 @@ body.day .nm{text-shadow:0 1px 3px #000,0 0 6px rgba(0,0,0,.6)}
 /* dock */
 #dock{position:relative;z-index:6;height:40vh;max-height:340px;min-height:240px;background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:2px solid var(--line);border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:var(--sab);transition:border-color .6s}
 body.day #dock{background:rgba(18,16,44,.9)}
-#dock.min{height:auto;min-height:0}#dock.min .pane,#dock.min #tabs{display:none!important}
+#dock.min{height:auto;min-height:0}#dock.min .pane{display:none!important}
 /* bo'limlar: Chat / Jurnal / Rollar alohida to'liq sahifa bo'lib ochiladi */
 #p-roles,#p-log{text-align:left}
-#pghead{display:none;align-items:center;gap:10px;padding:10px 14px 8px;flex:none}
-#pgback{background:rgba(255,255,255,.1);border-radius:12px;padding:8px 13px;font-weight:700;font-size:13px}
-#pgtitle{font:700 18px var(--ser)}
-#dock.full{position:fixed;left:0;right:0;top:var(--sat);bottom:0;height:auto;max-height:none;min-height:0;border-radius:0;z-index:20;background:rgba(10,8,24,.97)}
-#dock.full #pghead{display:flex;order:1}
-#dock.full .pane{order:2}
-#dock.full #tabs{order:3;padding:6px 10px calc(4px + var(--sab));border-top:1px solid var(--line)}
-#dock.full #grip{display:none}
+#tabs{position:relative;z-index:6;margin:0 10px 6px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+#app.full #stage{display:none}
+#app.full #dock{flex:1;height:auto;max-height:none;min-height:0;border-radius:18px 18px 0 0;background:rgba(10,8,24,.97)}
+#app.full #grip{display:none}
 .pg-sec{margin:0 0 14px}.pg-sec>h4{margin:0 0 6px;font:700 11px system-ui;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
 .ph3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .ph3>div{background:rgba(255,255,255,.07);border-radius:12px;padding:9px 6px;text-align:center;font-size:11px;color:var(--mut);line-height:1.35}
@@ -87,9 +83,10 @@ body.day #dock{background:rgba(18,16,44,.9)}
 .pg-win b{color:var(--ink)}
 .rl.one{grid-template-columns:1fr}
 .rc .rt{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:var(--maniac)}
+#p-roles,#p-log{text-align:left}
 #grip{width:56px;height:20px;display:grid;place-items:center;margin:0 auto;flex:none}#grip:before{content:'';width:44px;height:5px;border-radius:9px;background:rgba(255,255,255,.3)}
 #tabs{display:flex;gap:4px;padding:0 10px}
-#tabs button{flex:1;color:var(--mut);padding:8px 2px;border-radius:12px;font-weight:600;position:relative;font-size:13px}
+#tabs button{flex:1;white-space:nowrap;color:var(--mut);padding:8px 2px;border-radius:12px;font-weight:600;position:relative;font-size:12.5px}
 #tabs button.on{background:rgba(255,255,255,.1);color:var(--ink)}
 #tabs b{position:absolute;top:3px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--mafia);display:none}
 .pane{display:none;flex:1;min-height:0;overflow:auto;padding:10px 14px;-webkit-overflow-scrolling:touch}
@@ -153,13 +150,12 @@ h3{margin:0 0 4px;font:700 17px var(--ser)}.mut{color:var(--mut);font-size:12.5p
 <svg id="city" viewBox="0 0 400 120" preserveAspectRatio="xMidYMax slice" aria-hidden="true"></svg>
 <div id="app">
   <div id="top"><div class="chip" id="ph">🎭 Mafia</div><div id="bar"><i></i></div><button class="chip" id="snd" aria-label="Ovoz">🔊</button><button class="chip" id="me">…</button></div>
+  <div id="tabs"><button data-t="act" class="on">🎮 O'yin</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button></div>
   <div id="stage"><div id="table"><div id="felt"></div><svg id="lines" viewBox="0 0 100 100"></svg>
     <div id="center"><svg id="ring" viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="47"/><circle class="fg" cx="50" cy="50" r="47" stroke-dasharray="295.3" stroke-dashoffset="0"/></svg><div id="tnum"></div><div id="tlab"></div></div>
   </div></div>
   <div id="dock">
     <button id="grip" aria-label="Panelni yig'ish"></button>
-    <div id="pghead"><button id="pgback" type="button">‹ O'yin</button><div id="pgtitle"></div></div>
-    <div id="tabs"><button data-t="act" class="on">🎯 Harakat</button><button data-t="chat">💬 Chat<b id="cd"></b></button><button data-t="log">📜 Jurnal</button><button data-t="roles">🎭 Rollar</button></div>
     <div class="pane on" id="p-act"></div>
     <div class="pane" id="p-chat"><div id="chs"></div><div id="msgs"></div><div id="qp"></div><form id="cf" autocomplete="off"><input id="ci" maxlength="220" placeholder="Xabar yoz…" enterkeyhint="send"><button type="submit" aria-label="Yuborish">➤</button></form></div>
     <div class="pane" id="p-log"></div><div class="pane" id="p-roles"></div>
@@ -374,20 +370,15 @@ function choose(u) {
 }
 
 /* tablar */
-const TITLES = {chat: '💬 Chat', log: '📜 Jurnal', roles: '🎭 Rollar va qoidalar'};
 function setTab(t) {
   tab = t; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + t));
   const full = t !== 'act';
-  $('#dock').classList.toggle('full', full);
-  if (full) { $('#dock').classList.remove('min'); $('#pgtitle').textContent = TITLES[t] || ''; }
+  $('#app').classList.toggle('full', full);
+  if (full) $('#dock').classList.remove('min');
   if (t === 'chat') { $('#cd').style.display = 'none'; if (V) seenChat = maxId(V.chat); const l = $('#msgs'); l.scrollTop = l.scrollHeight; }
 }
-$$('#tabs button').forEach(b => b.onclick = () => {
-  $('#dock').classList.remove('min');
-  setTab(b.dataset.t !== 'act' && b.dataset.t === tab ? 'act' : b.dataset.t); hap('light');
-});
-$('#pgback').onclick = () => { setTab('act'); hap('light'); };
+$$('#tabs button').forEach(b => b.onclick = () => { $('#dock').classList.remove('min'); setTab(b.dataset.t); hap('light'); });
 $('#grip').onclick = () => $('#dock').classList.toggle('min');
 
 /* harakat paneli */
