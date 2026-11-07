@@ -30,6 +30,18 @@ ACHIEVEMENTS = {
 }
 
 
+CURRENCY = "💵"
+START_COINS, DAILY_COINS, MAX_ITEM = 100, 50, 3
+REWARD_PLAY, REWARD_WIN, REWARD_ALIVE = 20, 50, 15
+# Do'kon: yangi mahsulot qo'shish uchun shu yerga yoz (mafia.py _apply_items da ishlatiladi)
+SHOP = {
+    "shield":      {"emoji": "🛡", "name": "Tun himoyasi",   "price": 150, "desc": "Keyingi o'yinda tunda bitta hujumdan omon qolasan."},
+    "vote_shield": {"emoji": "🗳", "name": "Ovozdan himoya", "price": 120, "desc": "Keyingi o'yinda osishga ovoz yig'ilsa, bir marta osilmaysan."},
+    "role_sniper": {"emoji": "🔫", "name": "Pistolet (Snayper roli)", "price": 300,
+                    "desc": "Keyingi o'yinda Snayper bo'lasan. Mafiya/Maniak/Vampir chiqsang, saqlanib qoladi."},
+}
+
+
 def _empty() -> dict:
     return {"players": {}, "weekly": {}}
 
@@ -75,6 +87,9 @@ def _player(uid: int, name: str) -> dict:
         "by_role": {}, "ach": [], "kills": 0, "survived": 0,
     })
     d["name"] = name
+    d.setdefault("coins", START_COINS)
+    d.setdefault("inv", {})
+    d.setdefault("daily_at", 0)
     return d
 
 
@@ -89,6 +104,7 @@ def record_game(game) -> dict[int, list[str]]:
     if game.cancelled or not game.winner:
         return {}
     earned: dict[int, list[str]] = {}
+    gains: dict[int, int] = {}
     wk = week_key()
     with _LOCK:
         data = _load()
@@ -101,6 +117,9 @@ def record_game(game) -> dict[int, list[str]]:
             won = p.team == game.winner
             d = _player(p.uid, p.name)
             d["games"] += 1
+            gain = REWARD_PLAY + (REWARD_WIN if won else 0) + (REWARD_ALIVE if (won and p.alive) else 0)
+            d["coins"] += gain
+            gains[p.uid] = gain
             r = d["by_role"].setdefault(p.role, {"g": 0, "w": 0})
             r["g"] += 1
             if won:
@@ -144,6 +163,16 @@ def record_game(game) -> dict[int, list[str]]:
                 _grant(d, "heartbreak", new)
             if new:
                 earned[p.uid] = new
+        cid = getattr(game, "chat_id", 0) or 0
+        if cid < 0:
+            gr = data.setdefault("groups", {}).setdefault(str(cid), {"title": "", "games": 0, "uids": [], "last": 0})
+            gr["title"] = (getattr(game, "chat_title", "") or gr["title"] or "Guruh")[:40]
+            gr["games"] += 1
+            gr["last"] = time.time()
+            for uid in gains:
+                if uid not in gr["uids"] and len(gr["uids"]) < 500:
+                    gr["uids"].append(uid)
+        game.coins_earned = gains
         global _dirty
         _dirty = True
         _save(force=True)
@@ -176,7 +205,7 @@ def profile(uid: int, name: str = "") -> dict:
         d = _load()["players"].get(str(uid))
         if not d:
             return {"uid": uid, "name": name, "games": 0, "wins": 0, "winrate": 0, "best_streak": 0,
-                    "roles": [], "achievements": [], "rank": None}
+                    "roles": [], "achievements": [], "rank": None, "coins": START_COINS, "inv": {}}
         roles = sorted(
             ({"role": k, "games": v["g"], "wins": v["w"], "winrate": _winrate(v["g"], v["w"])}
              for k, v in d["by_role"].items()),
@@ -186,7 +215,73 @@ def profile(uid: int, name: str = "") -> dict:
         rank = next((i + 1 for i, (u, _) in enumerate(allrows) if u == str(uid)), None)
         return {"uid": uid, "name": d["name"], "games": d["games"], "wins": d["wins"],
                 "winrate": _winrate(d["games"], d["wins"]), "best_streak": d["best_streak"],
-                "survived": d.get("survived", 0), "roles": roles, "achievements": ach, "rank": rank}
+                "survived": d.get("survived", 0), "coins": d.get("coins", START_COINS), "inv": d.get("inv", {}), "roles": roles, "achievements": ach, "rank": rank}
+
+
+def top_groups(limit: int = 10) -> list[dict]:
+    with _LOCK:
+        gs = _load().get("groups", {})
+        rows = [{"title": g["title"] or "Guruh", "games": g["games"], "players": len(g.get("uids", []))} for g in gs.values()]
+    rows.sort(key=lambda r: (-r["games"], -r["players"]))
+    return rows[:limit]
+
+
+def buy(uid: int, name: str, item: str) -> tuple[bool, str]:
+    global _dirty
+    it = SHOP.get(item)
+    if not it:
+        return False, "Bunday mahsulot yo'q"
+    with _LOCK:
+        d = _player(uid, name)
+        if d["inv"].get(item, 0) >= MAX_ITEM:
+            return False, f"Bitta mahsulotdan {MAX_ITEM} tadan ko'p saqlab bo'lmaydi"
+        if d["coins"] < it["price"]:
+            return False, f"Pul yetmaydi: {it['price']} {CURRENCY} kerak"
+        d["coins"] -= it["price"]
+        d["inv"][item] = d["inv"].get(item, 0) + 1
+        _dirty = True
+        _save(force=True)
+    return True, f"{it['emoji']} {it['name']} sotib olindi"
+
+
+def use(uid: int, item: str) -> bool:
+    """O'yin boshlanganda mahsulotni sarflaydi. Bo'lmasa False."""
+    global _dirty
+    with _LOCK:
+        d = _load()["players"].get(str(uid))
+        if not d or d.get("inv", {}).get(item, 0) <= 0:
+            return False
+        d["inv"][item] -= 1
+        _dirty = True
+        _save()
+        return True
+
+
+def inventory(uid: int) -> dict:
+    with _LOCK:
+        d = _load()["players"].get(str(uid))
+        return dict(d.get("inv", {})) if d else {}
+
+
+def daily_info(uid: int) -> tuple[bool, int]:
+    with _LOCK:
+        d = _load()["players"].get(str(uid))
+        left = 0 if not d else max(0, int(d.get("daily_at", 0) + 86400 - time.time()))
+    return left == 0, left
+
+
+def claim_daily(uid: int, name: str) -> tuple[bool, str]:
+    global _dirty
+    with _LOCK:
+        d = _player(uid, name)
+        left = d["daily_at"] + 86400 - time.time()
+        if left > 0:
+            return False, f"Kunlik sovg'a {int(left // 3600) + 1} soatdan keyin"
+        d["daily_at"] = time.time()
+        d["coins"] += DAILY_COINS
+        _dirty = True
+        _save(force=True)
+    return True, f"🎁 +{DAILY_COINS} {CURRENCY}"
 
 
 def flush() -> None:
