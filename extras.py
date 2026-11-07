@@ -417,7 +417,7 @@ T = {
         "hello_title": "Salom, {name}!",
         "hello_body": "Men <b>{bot}</b>man: gaplashaman, o'yin o'ynataman, rasm chizaman, ovozda gapiraman, darsda yordam beraman va bugungi kurs/ob-havo kabi savollarga jonli javob beraman.\n\nQuyidan bo'lim tanla yoki shunchaki yoz.",
         "open": "{bot} ni ochish", "add_group": "Guruhga qo'shish", "back": "Orqaga", "home": "Bosh sahifa",
-        "sec_ai": "AI imkoniyatlari", "sec_play": "O'yin va fun", "sec_tools": "Foydali", "sec_account": "Hisob",
+        "sec_ai": "AI imkoniyatlari", "sec_play": "O'yin va fun", "sec_tools": "Foydali", "sec_account": "Hisob", "sec_mafia": "Mafia", "desc_mafia": "Guruhda do'stlar bilan Mafia o'yini: qoidalar, rollar va buyruqlar",
         "desc_ai": "Suhbat, rasm, ovoz, YouTube, anime", "desc_play": "O'yinlar, ship va qiziqarli buyruqlar",
         "desc_tools": "Tarjima, ob-havo, eslatma va boshqalar", "pick": "Batafsil ko'rish uchun tanla:",
         "acc_title": "Hisobim", "acc_lang": "Til", "acc_msgs": "Xabarlar", "acc_games": "O'yinlar",
@@ -435,7 +435,7 @@ T = {
         "hello_title": "Привет, {name}!",
         "hello_body": "Я <b>{bot}</b>: болтаю, играю, рисую, отвечаю голосом, помогаю с учёбой и даю живые ответы на вопросы вроде курса валют или погоды сегодня.\n\nВыбери раздел ниже или просто напиши.",
         "open": "Открыть {bot}", "add_group": "Добавить в группу", "back": "Назад", "home": "Главная",
-        "sec_ai": "Возможности ИИ", "sec_play": "Игры и фан", "sec_tools": "Полезное", "sec_account": "Аккаунт",
+        "sec_ai": "Возможности ИИ", "sec_play": "Игры и фан", "sec_tools": "Полезное", "sec_account": "Аккаунт", "sec_mafia": "Мафия", "desc_mafia": "Игра в Мафию с друзьями в группе: правила, роли и команды",
         "desc_ai": "Чат, рисунки, голос, YouTube, аниме", "desc_play": "Игры, шип и весёлые команды",
         "desc_tools": "Перевод, погода, напоминания и другое", "pick": "Выбери, чтобы узнать подробнее:",
         "acc_title": "Мой аккаунт", "acc_lang": "Язык", "acc_msgs": "Сообщений", "acc_games": "Игры",
@@ -453,7 +453,7 @@ T = {
         "hello_title": "Hi, {name}!",
         "hello_body": "I'm <b>{bot}</b>: I chat, play games, draw pictures, talk by voice, help with homework, and give live answers to things like today's exchange rate or weather.\n\nPick a section below or just type.",
         "open": "Open {bot}", "add_group": "Add to group", "back": "Back", "home": "Home",
-        "sec_ai": "AI features", "sec_play": "Games & fun", "sec_tools": "Tools", "sec_account": "Account",
+        "sec_ai": "AI features", "sec_play": "Games & fun", "sec_tools": "Tools", "sec_account": "Account", "sec_mafia": "Mafia", "desc_mafia": "Play Mafia with friends in a group: rules, roles and commands",
         "desc_ai": "Chat, images, voice, YouTube, anime", "desc_play": "Games, ship and fun commands",
         "desc_tools": "Translate, weather, reminders and more", "pick": "Pick one for details:",
         "acc_title": "My account", "acc_lang": "Language", "acc_msgs": "Messages", "acc_games": "Games",
@@ -480,10 +480,23 @@ _SECTIONS = {
     "ai": ("🤖", ["chat", "imagine", "voice", "photo", "yt", "anime"]),
     "play": ("🎮", ["duel", "ship", "fun"]),
     "tools": ("🛠", ["util", "group", "mod", "sticker"]),
+    "mafia": ("🎭", ["mafia_play", "mafia_roles", "mafia_cmds"]),
 }
 
 # element -> (emoji, (uz, ru, en) nom, (uz, ru, en) matn)
 _ITEMS = {
+    "mafia_play": ("🎭", ("Qanday o'ynaladi", "Как играть", "How to play"), (
+        "1. Botni guruhga qo'shing (➕ tugmasi).\n2. Guruhda /mafia deb yozing: lobbi ochiladi.\n3. O'yinchilar «Qo'shilish» ni bosadi (4–16 kishi). Kerak bo'lsa 🤖 bot qo'shish mumkin.\n4. Host «Boshlash» ni bosadi va rollar tarqatiladi.\n\n🌙 Tun: rollar yashirin harakat qiladi.\n☀️ Kun: muhokama, keyin ovoz berish. Eng ko'p ovoz olgan osiladi.\n\nO'yin Telegram ichidagi Mini App'da o'ynaladi.",
+        "1. Добавьте бота в группу (кнопка ➕).\n2. Напишите в группе /mafia: откроется лобби.\n3. Игроки жмут «Присоединиться» (4–16 человек). При нехватке можно добавить 🤖 ботов.\n4. Хост жмёт «Начать»: роли раздаются.\n\n🌙 Ночь: роли действуют тайно.\n☀️ День: обсуждение, затем голосование. Кто набрал больше голосов, тот повешен.\n\nИграют в Mini App внутри Telegram.",
+        "1. Add the bot to a group (➕ button).\n2. Type /mafia in the group: a lobby opens.\n3. Players tap Join (4–16 people). You can add 🤖 bots if needed.\n4. The host taps Start and roles are dealt.\n\n🌙 Night: roles act in secret.\n☀️ Day: discussion, then a vote. Most votes gets hanged.\n\nThe game is played in a Mini App inside Telegram.")),
+    "mafia_roles": ("🕵️", ("Rollar", "Роли", "Roles"), (
+        "Shahar: 👤 Fuqaro · 🕵️ Komissar (tekshiradi) · 🩺 Doktor (davolaydi) · 🛡 Qo'riqchi · 💃 Kelin (band qiladi) · 📰 Jurnalist · 🎯 Snayper (1 ta o'q) · 🍀 Omadli\n\nMafiya: 🔫 Mafiya · 🎩 Don (boshliq) · ⚖️ Advokat\n\nYakka: 🔪 Maniak: hamma unga qarshi.\n\nBatafsil: /mafiarules",
+        "Город: 👤 Мирный · 🕵️ Комиссар (проверяет) · 🩺 Доктор (лечит) · 🛡 Телохранитель · 💃 Любовница (блокирует) · 📰 Журналист · 🎯 Снайпер (1 выстрел) · 🍀 Везунчик\n\nМафия: 🔫 Мафия · 🎩 Дон (главарь) · ⚖️ Адвокат\n\nОдиночка: 🔪 Маньяк: все против него.\n\nПодробнее: /mafiarules",
+        "Town: 👤 Citizen · 🕵️ Commissar (investigates) · 🩺 Doctor (heals) · 🛡 Bodyguard · 💃 Escort (blocks) · 📰 Journalist · 🎯 Sniper (1 shot) · 🍀 Lucky\n\nMafia: 🔫 Mafia · 🎩 Don (boss) · ⚖️ Lawyer\n\nSolo: 🔪 Maniac: everyone is against him.\n\nDetails: /mafiarules")),
+    "mafia_cmds": ("📜", ("Buyruqlar", "Команды", "Commands"), (
+        "/mafia — guruhda yangi o'yin lobbisini ochish\n/mafiastop — o'yinni to'xtatish (host yoki admin)\n/mafiarules — qoidalar va rollar",
+        "/mafia — открыть лобби новой игры в группе\n/mafiastop — остановить игру (хост или админ)\n/mafiarules — правила и роли",
+        "/mafia — open a new game lobby in the group\n/mafiastop — stop the game (host or admin)\n/mafiarules — rules and roles")),
     "chat": ("💬", ("Suhbat", "Чат", "Chat"), (
         "Oddiy yoz, javob beraman.\nGuruhda «Misumi» deb chaqir yoki xabarimga reply qil.\n/reset — suhbatni tozalash",
         "Просто пиши, я отвечу.\nВ группе позови «Misumi» или ответь на моё сообщение.\n/reset — очистить диалог",
@@ -562,6 +575,7 @@ def _start_kb(chat_id, bot_username: str | None, premium: bool, lang: str = "uz"
         mk(tr(lang, "sec_tools"), _SECTIONS["tools"][0], callback_data="st:s:tools"),
         mk(tr(lang, "sec_account"), "👤", callback_data="ac:home"),
     ])
+    rows.append([mk(tr(lang, "sec_mafia"), "🎭", callback_data="st:s:mafia")])
     if bot_username:
         rows.append([mk(tr(lang, "add_group"), "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
     if WEBAPP_URL and _is_admin(chat_id):
@@ -586,11 +600,13 @@ def _section_text(sec: str, lang: str) -> str:
     return f"{pe(emoji)} <b>{tr(lang, 'sec_' + sec)}</b>\n{tr(lang, 'desc_' + sec)}\n\n{tr(lang, 'pick')}"
 
 
-def _section_kb(sec: str, lang: str, premium: bool) -> InlineKeyboardMarkup:
+def _section_kb(sec: str, lang: str, premium: bool, bot_username: str | None = None) -> InlineKeyboardMarkup:
     mk = _btn_maker(premium)
     li = _LI[lang]
     btns = [mk(_ITEMS[k][1][li], _ITEMS[k][0], callback_data=f"st:i:{sec}:{k}") for k in _SECTIONS[sec][1]]
     rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    if sec == "mafia" and bot_username:
+        rows.append([mk(tr(lang, "add_group"), "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
     rows.append([mk(tr(lang, "back"), "⬅️", callback_data="st:home")])
     return InlineKeyboardMarkup(rows)
 
@@ -623,7 +639,7 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await edit_html(query, text, lambda prem: _start_kb(chat_id, bu, prem, lang))
     elif len(parts) == 3 and parts[1] == "s" and parts[2] in _SECTIONS:
         sec = parts[2]
-        await edit_html(query, _section_text(sec, lang), lambda prem: _section_kb(sec, lang, prem))
+        await edit_html(query, _section_text(sec, lang), lambda prem: _section_kb(sec, lang, prem, context.bot.username))
     elif len(parts) == 4 and parts[1] == "i" and parts[2] in _SECTIONS and parts[3] in _ITEMS:
         sec, item = parts[2], parts[3]
         await edit_html(query, _item_text(item, lang), lambda prem: _item_kb(sec, lang, prem))
