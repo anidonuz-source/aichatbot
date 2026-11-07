@@ -247,6 +247,78 @@ async def cb_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("Bekor qilindi")
 
 
+def _menu(uid: int, name: str, view: str = "home"):
+    cur = mafia_stats.CURRENCY
+    p = mafia_stats.profile(uid, name)
+    if view == "shop":
+        ready, left = mafia_stats.daily_info(uid)
+        t = f"🛒 <b>Mafia do'koni</b>\n💵 Balans: <b>{p['coins']} {cur}</b>\nSotib olingan narsa keyingi o'yin boshlanganda ishlaydi.\n"
+        rows = []
+        for k, it in mafia_stats.SHOP.items():
+            t += f"\n{it['emoji']} <b>{_e(it['name'])}</b> ({p['inv'].get(k, 0)} ta) — {it['price']} {cur}\n<i>{_e(it['desc'])}</i>\n"
+            rows.append([Btn(f"{it['emoji']} {it['name']} · {it['price']} {cur}", callback_data=f"mfs:buy:{k}")])
+        rows.append([Btn(f"🎁 Kunlik sovg'a (+{mafia_stats.DAILY_COINS})" if ready else f"🎁 {left // 3600 + 1} soatdan keyin", callback_data="mfs:daily")])
+        rows.append([Btn("⬅️ Orqaga", callback_data="mfs:home")])
+        return t, Markup(rows)
+    if view == "top":
+        rows = mafia_stats.leaderboard("all", 10)
+        t = "🏆 <b>Mafia — umumiy top-10</b>\n\n" + ("\n".join(
+            f"{['🥇', '🥈', '🥉'][i] if i < 3 else str(i + 1) + '.'} {_e(r['name'])} — {r['wins']} g'alaba / {r['games']}" for i, r in enumerate(rows)) or "Hali o'yin yo'q")
+        gs = mafia_stats.top_groups(5)
+        t += "\n\n🏘 <b>Top guruhlar</b>\n" + ("\n".join(f"{i + 1}. {_e(g['title'])} — {g['games']} o'yin, {g['players']} kishi" for i, g in enumerate(gs)) or "Hali yo'q")
+        return t, Markup([[Btn("⬅️ Orqaga", callback_data="mfs:home")]])
+    ach = ", ".join(a["emoji"] for a in p["achievements"]) or "hali yo'q"
+    t = (f"🎭 <b>MAFIA</b> — {_e(name)}\n\n💵 Balans: <b>{p['coins']} {cur}</b>\n"
+         f"🎮 O'yinlar: {p['games']} · 🏆 G'alaba: {p['wins']} · 📈 {p['winrate']}%\n"
+         f"🔥 Eng uzun seriya: {p['best_streak']}" + (f" · 🏅 Reyting: #{p['rank']}" if p.get("rank") else "") +
+         f"\n🎖 Yutuqlar ({len(p['achievements'])}/{len(mafia_stats.ACHIEVEMENTS)}): {ach}\n\n"
+         "O'ynash uchun guruhda /mafia deb yozing.")
+    return t, Markup([[Btn("🛒 Do'kon", callback_data="mfs:shop"), Btn("🏆 Reyting va guruhlar", callback_data="mfs:top")]])
+
+
+async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mafia bo'limi: statistika, balans, yutuqlar. /start mafia yoki /mafia (lichkada)."""
+    u = update.effective_user
+    t, kb = await asyncio.to_thread(_menu, u.id, u.first_name or "")
+    await update.effective_message.reply_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+
+START_CARD = os.environ.get("MAFIA_START_CARD", "1") != "0"   # 0 = oddiy /start da kartani ko'rsatma
+MENU_CB = os.environ.get("MAFIA_MENU_CB", r"^(mafia|menu_mafia|menu:mafia|mafia_menu)$")  # asosiy menyudagi Mafia tugmasi callback_data si
+
+
+async def start_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Oddiy /start dan keyin mafia hisobi kartasini ham yuboradi."""
+    if START_CARD and not (context.args or []):
+        await send_menu(update, context)
+
+
+async def cb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Asosiy menyudagi «Mafia» tugmasi bosilganda statistika kartasi."""
+    q = update.callback_query
+    await q.answer()
+    t, kb = await asyncio.to_thread(_menu, q.from_user.id, q.from_user.first_name or "")
+    await q.message.reply_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+
+async def cb_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    u = q.from_user
+    parts = q.data.split(":")
+    note = None
+    if parts[1] == "buy" and len(parts) > 2:
+        ok, note = await asyncio.to_thread(mafia_stats.buy, u.id, u.first_name or "", parts[2])
+    elif parts[1] == "daily":
+        ok, note = await asyncio.to_thread(mafia_stats.claim_daily, u.id, u.first_name or "")
+    view = {"shop": "shop", "buy": "shop", "daily": "shop", "top": "top"}.get(parts[1], "home")
+    t, kb = await asyncio.to_thread(_menu, u.id, u.first_name or "", view)
+    await q.answer(note or "", show_alert=bool(note and not note[0].isalpha() and False))
+    try:
+        await q.edit_message_text(t, parse_mode=ParseMode.HTML, reply_markup=kb)
+    except BadRequest:
+        pass
+
+
 async def dm_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start mafia_<gid> — guruhdagi «Qo'shilish» tugmasidan keladi."""
     args = context.args or []
@@ -258,6 +330,9 @@ async def dm_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await msg.reply_text("👁 Tomosha rejimi: o'yinni jonli kuzatasan (rollar yashirin qoladi).",
                                  reply_markup=_dm_kb(wg.gid, "👁 Tomosha qilish"))
+        raise ApplicationHandlerStop
+    if args and args[0] in ("mafia", "mafiya"):
+        await send_menu(update, context)
         raise ApplicationHandlerStop
     if not args or not args[0].startswith("mafia_"):
         return  # oddiy /start — boshqa handler ishlaydi
@@ -585,4 +660,8 @@ def register(app) -> None:
     app.add_handler(CommandHandler(["mafiaprofil", "mafiaprofile"], cmd_profile), group=0)
     app.add_handler(CommandHandler(["qaytish", "mafiaqaytish"], cmd_rejoin, filters=_PRIVATE), group=0)
     app.add_handler(CallbackQueryHandler(cb_lobby, pattern=r"^mf:"), group=0)
+    app.add_handler(CallbackQueryHandler(cb_shop, pattern=r"^mfs:"), group=0)
+    app.add_handler(CommandHandler("start", start_card, filters=_PRIVATE), group=1)
+    app.add_handler(CallbackQueryHandler(cb_menu, pattern=MENU_CB), group=0)
+    app.add_handler(CommandHandler(["mafiamenu", "mafiyamenu"], send_menu, filters=_PRIVATE), group=0)
     app.job_queue.run_repeating(mafia_job, interval=1.0, first=3)
