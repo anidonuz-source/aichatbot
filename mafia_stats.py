@@ -26,6 +26,10 @@ ACHIEVEMENTS = {
     "survivor":    {"emoji": "🛡", "name": "Omon qolgan",        "desc": "G'alaba qilgan jamoada oxirigacha tirik qol."},
     "sharpshooter": {"emoji": "🎯", "name": "Aniq nishon",       "desc": "Snayper bo'lib mafiyani ot va yut."},
     "judge_veto":  {"emoji": "⚖️", "name": "Oxirgi so'z sudyada", "desc": "Sudya bo'lib ovozni bekor qil."},
+    "veteran50":   {"emoji": "🏅", "name": "Yarim yuzlik",       "desc": "50 ta o'yin o'yna."},
+    "streak5":     {"emoji": "⚡", "name": "Cheksiz seriya",     "desc": "Ketma-ket 5 marta yut."},
+    "rich":        {"emoji": "💰", "name": "Boy",                "desc": "Hisobingda 1000 💵 to'pla."},
+    "shopper":     {"emoji": "🛍", "name": "Xaridor",            "desc": "Do'kondan birinchi mahsulotni sotib ol."},
     "heartbreak":  {"emoji": "💔", "name": "Sevgi qurboni",      "desc": "Sevishgan sherigingiz ketgani uchun o'l."},
 }
 
@@ -35,11 +39,24 @@ START_COINS, DAILY_COINS, MAX_ITEM = 100, 50, 3
 REWARD_PLAY, REWARD_WIN, REWARD_ALIVE = 20, 50, 15
 # Do'kon: yangi mahsulot qo'shish uchun shu yerga yoz (mafia.py _apply_items da ishlatiladi)
 SHOP = {
-    "shield":      {"emoji": "🛡", "name": "Tun himoyasi",   "price": 150, "desc": "Keyingi o'yinda tunda bitta hujumdan omon qolasan."},
-    "vote_shield": {"emoji": "🗳", "name": "Ovozdan himoya", "price": 120, "desc": "Keyingi o'yinda osishga ovoz yig'ilsa, bir marta osilmaysan."},
-    "role_sniper": {"emoji": "🔫", "name": "Pistolet (Snayper roli)", "price": 300,
-                    "desc": "Keyingi o'yinda Snayper bo'lasan. Mafiya/Maniak/Vampir chiqsang, saqlanib qoladi."},
+    "shield":         {"emoji": "🛡", "name": "Tun himoyasi",   "price": 150, "desc": "Keyingi o'yinda tunda bitta hujumdan omon qolasan."},
+    "vote_shield":    {"emoji": "🗳", "name": "Ovozdan himoya", "price": 120, "desc": "Keyingi o'yinda osishga ovoz yig'ilsa, bir marta osilmaysan."},
+    "coin_boost":     {"emoji": "🚀", "name": "Mukofot ×2",     "price": 200, "desc": "Keyingi o'yindagi pul mukofoti ikki baravar."},
+    "role_sniper":    {"emoji": "🔫", "name": "Pistolet (Snayper roli)", "price": 300,
+                       "desc": "Keyingi o'yinda Snayper bo'lasan (1 ta o'q)."},
+    "role_commissar": {"emoji": "🕵️", "name": "Komissar roli", "price": 350,
+                       "desc": "Keyingi o'yinda Komissar bo'lasan, har tun bitta odamni tekshirasan."},
+    "role_doctor":    {"emoji": "🩺", "name": "Doktor roli",    "price": 300,
+                       "desc": "Keyingi o'yinda Doktor bo'lasan, har tun bitta odamni davolaysan."},
 }
+# Rol sotib olish faqat shahar jamoasida chiqsang ishlaydi; aks holda mahsulot saqlanib qoladi.
+TITLES = ["Yangi kelgan", "Fuqaro", "Kuzatuvchi", "Tergovchi", "Mafiya a'zosi", "Shahar himoyachisi", "Don", "Afsonaviy"]
+
+
+def level_info(xp: int) -> dict:
+    lvl = int((max(0, xp) / 50) ** 0.5) + 1
+    return {"level": lvl, "title": TITLES[min(len(TITLES) - 1, (lvl - 1) // 2)], "xp": xp,
+            "lo": 50 * (lvl - 1) ** 2, "hi": 50 * lvl ** 2}
 
 
 def _empty() -> dict:
@@ -90,6 +107,10 @@ def _player(uid: int, name: str) -> dict:
     d.setdefault("coins", START_COINS)
     d.setdefault("inv", {})
     d.setdefault("daily_at", 0)
+    d.setdefault("xp", 0)
+    d.setdefault("earned", 0)
+    d.setdefault("hist", [])
+    d.setdefault("since", time.time())
     return d
 
 
@@ -118,8 +139,14 @@ def record_game(game) -> dict[int, list[str]]:
             d = _player(p.uid, p.name)
             d["games"] += 1
             gain = REWARD_PLAY + (REWARD_WIN if won else 0) + (REWARD_ALIVE if (won and p.alive) else 0)
+            if getattr(p, "boost", False):
+                gain *= 2
             d["coins"] += gain
+            d["earned"] += gain
+            d["xp"] += 10 + (25 if won else 0) + (10 if (won and p.alive) else 0)
             gains[p.uid] = gain
+            d["hist"] = ([{"t": time.time(), "role": p.role, "won": won, "gain": gain,
+                           "grp": (getattr(game, "chat_title", "") or "")[:30]}] + d["hist"])[:10]
             r = d["by_role"].setdefault(p.role, {"g": 0, "w": 0})
             r["g"] += 1
             if won:
@@ -159,6 +186,12 @@ def record_game(game) -> dict[int, list[str]]:
                 _grant(d, "sharpshooter", new)
             if getattr(p, "vetoed", False):
                 _grant(d, "judge_veto", new)
+            if d["games"] >= 50:
+                _grant(d, "veteran50", new)
+            if d["streak"] >= 5:
+                _grant(d, "streak5", new)
+            if d["coins"] >= 1000:
+                _grant(d, "rich", new)
             if p.death and p.death.get("cause") == "heartbreak":
                 _grant(d, "heartbreak", new)
             if new:
@@ -168,6 +201,8 @@ def record_game(game) -> dict[int, list[str]]:
             gr = data.setdefault("groups", {}).setdefault(str(cid), {"title": "", "games": 0, "uids": [], "last": 0})
             gr["title"] = (getattr(game, "chat_title", "") or gr["title"] or "Guruh")[:40]
             gr["games"] += 1
+            gr.setdefault("wins", {})
+            gr["wins"][game.winner] = gr["wins"].get(game.winner, 0) + 1
             gr["last"] = time.time()
             for uid in gains:
                 if uid not in gr["uids"] and len(gr["uids"]) < 500:
@@ -205,7 +240,8 @@ def profile(uid: int, name: str = "") -> dict:
         d = _load()["players"].get(str(uid))
         if not d:
             return {"uid": uid, "name": name, "games": 0, "wins": 0, "winrate": 0, "best_streak": 0,
-                    "roles": [], "achievements": [], "rank": None, "coins": START_COINS, "inv": {}}
+                    "roles": [], "achievements": [], "rank": None, "coins": START_COINS, "inv": {}, "xp": 0, "earned": 0, "streak": 0,
+                    "hist": [], "since": None, "lvl": level_info(0)}
         roles = sorted(
             ({"role": k, "games": v["g"], "wins": v["w"], "winrate": _winrate(v["g"], v["w"])}
              for k, v in d["by_role"].items()),
@@ -215,13 +251,14 @@ def profile(uid: int, name: str = "") -> dict:
         rank = next((i + 1 for i, (u, _) in enumerate(allrows) if u == str(uid)), None)
         return {"uid": uid, "name": d["name"], "games": d["games"], "wins": d["wins"],
                 "winrate": _winrate(d["games"], d["wins"]), "best_streak": d["best_streak"],
-                "survived": d.get("survived", 0), "coins": d.get("coins", START_COINS), "inv": d.get("inv", {}), "roles": roles, "achievements": ach, "rank": rank}
+                "survived": d.get("survived", 0), "coins": d.get("coins", START_COINS), "inv": d.get("inv", {}), "xp": d.get("xp", 0), "earned": d.get("earned", 0), "streak": d.get("streak", 0),
+                "hist": d.get("hist", []), "since": d.get("since"), "lvl": level_info(d.get("xp", 0)), "roles": roles, "achievements": ach, "rank": rank}
 
 
 def top_groups(limit: int = 10) -> list[dict]:
     with _LOCK:
         gs = _load().get("groups", {})
-        rows = [{"title": g["title"] or "Guruh", "games": g["games"], "players": len(g.get("uids", []))} for g in gs.values()]
+        rows = [{"title": g["title"] or "Guruh", "games": g["games"], "players": len(g.get("uids", [])), "wins": g.get("wins", {})} for g in gs.values()]
     rows.sort(key=lambda r: (-r["games"], -r["players"]))
     return rows[:limit]
 
@@ -239,6 +276,7 @@ def buy(uid: int, name: str, item: str) -> tuple[bool, str]:
             return False, f"Pul yetmaydi: {it['price']} {CURRENCY} kerak"
         d["coins"] -= it["price"]
         d["inv"][item] = d["inv"].get(item, 0) + 1
+        _grant(d, "shopper", [])
         _dirty = True
         _save(force=True)
     return True, f"{it['emoji']} {it['name']} sotib olindi"
@@ -282,6 +320,25 @@ def claim_daily(uid: int, name: str) -> tuple[bool, str]:
         _dirty = True
         _save(force=True)
     return True, f"🎁 +{DAILY_COINS} {CURRENCY}"
+
+
+def richest(limit: int = 10) -> list[dict]:
+    with _LOCK:
+        rows = [{"uid": int(u), "name": v["name"], "coins": v.get("coins", START_COINS)} for u, v in _load()["players"].items()]
+    rows.sort(key=lambda r: -r["coins"])
+    return rows[:limit]
+
+
+def rank_of_coins(uid: int):
+    rows = richest(100000)
+    return next((i + 1 for i, r in enumerate(rows) if r["uid"] == uid), None)
+
+
+def groups_of(uid: int) -> list[dict]:
+    with _LOCK:
+        gs = [{"title": g["title"] or "Guruh", "games": g["games"]} for g in _load().get("groups", {}).values() if uid in g.get("uids", [])]
+    gs.sort(key=lambda g: -g["games"])
+    return gs
 
 
 def flush() -> None:
