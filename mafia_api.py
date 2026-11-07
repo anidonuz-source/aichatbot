@@ -6,6 +6,7 @@ shuning uchun o'yinchi kimligi soxtalashtirib bo'lmaydi. Barcha o'zgartiruvchi
 endpointlar yangilangan ko'rinishni (view) qaytaradi.
 """
 import logging
+import os
 
 from flask import Blueprint, jsonify, render_template, request
 
@@ -24,6 +25,11 @@ def _user(body: dict):
     return data["user"]
 
 
+def _photo(user: dict):
+    u = str(user.get("photo_url") or "")
+    return u if u.startswith("https://t.me/") else None
+
+
 def _ctx():
     """(user, game, error_response)"""
     body = request.get_json(silent=True) or {}
@@ -34,6 +40,9 @@ def _ctx():
     game = mafia.get_game(gid)
     if not game:
         return user, None, body, (jsonify({"error": "game_not_found"}), 404)
+    _p = game.players.get(int(user["id"]))
+    if _p is not None and not getattr(_p, "photo", None):
+        _p.photo = _photo(user)
     return user, game, body, None
 
 
@@ -46,7 +55,8 @@ def _view(game: "mafia.Game", uid: int, extra: dict | None = None):
 
 @bp.route("/mafia")
 def page():
-    return render_template("mafia.html", bot_name=ai_core.BOT_NAME)
+    return render_template("mafia.html", bot_name=ai_core.BOT_NAME,
+                           bot_username=(os.environ.get("BOT_USERNAME") or getattr(ai_core, "BOT_USERNAME", "") or "").lstrip("@"))
 
 
 @bp.route("/api/mafia/state", methods=["POST"])
@@ -63,7 +73,7 @@ def join():
     user, game, body, err = _ctx()
     if err:
         return err
-    ok, msg = game.add_player(int(user["id"]), user.get("first_name") or "O'yinchi", user.get("username"))
+    ok, msg = game.add_player(int(user["id"]), user.get("first_name") or "O'yinchi", user.get("username"), False, _photo(user))
     return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
 
 
