@@ -87,6 +87,17 @@ def addbot():
     return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
 
 
+@bp.route("/api/mafia/removebot", methods=["POST"])
+def removebot():
+    user, game, body, err = _ctx()
+    if err:
+        return err
+    if int(user["id"]) != game.host_id:
+        return jsonify({"error": "host_only"}), 403
+    ok, msg = game.remove_bot()
+    return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
+
+
 @bp.route("/api/mafia/start", methods=["POST"])
 def start():
     user, game, body, err = _ctx()
@@ -103,9 +114,11 @@ def action():
         return err
     try:
         target = int(body.get("target"))
+        t2 = body.get("target2")
+        t2 = int(t2) if t2 is not None else None
     except (TypeError, ValueError):
         return jsonify({"error": "bad_target"}), 400
-    ok, msg = game.set_action(int(user["id"]), target)
+    ok, msg = game.set_action(int(user["id"]), target, t2)
     return _view(game, int(user["id"]), {"result": {"ok": ok, "msg": msg}})
 
 
