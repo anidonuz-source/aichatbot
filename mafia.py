@@ -19,8 +19,10 @@ from collections import Counter
 
 LOCK = threading.RLock()
 
-BOT_UID = 0                       # Misumi o'yinchi sifatida qatnashganda shu id
+BOT_UID = 0                       # Misumi AI (gapiradigan bot). Qolgan botlar: -1, -2, ...
 BOT_NAME = "Misumi AI"
+BOT_NAMES = ["Misumi AI", "Bot Akmal", "Bot Dilya", "Bot Sardor", "Bot Malika", "Bot Jasur"]
+MAX_BOTS = len(BOT_NAMES)
 MIN_PLAYERS, MAX_PLAYERS = 4, 16
 
 REVEAL_SEC = int(os.environ.get("MAFIA_REVEAL_SEC", "12"))
@@ -64,12 +66,29 @@ ROLES = {
         "name": "Maniak", "emoji": "🔪", "team": "maniac", "action": "slay",
         "desc": "Yakkasan: hamma senga qarshi. Har tun bitta odamni o'ldirasan. Oxirgi tirik qolsang yutasan.",
     },
+    "journalist": {
+        "name": "Jurnalist", "emoji": "📰", "team": "town", "action": "compare",
+        "desc": "Har tun ikki o'yinchini tanlaysan va ular bir jamoadami yoki yo'qligini bilasan.",
+    },
+    "sniper": {
+        "name": "Snayper", "emoji": "🎯", "team": "town", "action": "snipe",
+        "desc": "Butun o'yinda bitta o'qing bor. Tunda otasan. Begunohni (shahar) o'ldirsang, o'zing ham o'lasan.",
+    },
+    "lucky": {
+        "name": "Omadli", "emoji": "🍀", "team": "town", "action": None,
+        "desc": "Kechasi bo'lgan birinchi hujumdan omon qolasan. Ikkinchisi seni olib ketadi.",
+    },
+    "lawyer": {
+        "name": "Advokat", "emoji": "⚖️", "team": "mafia", "action": "defend",
+        "desc": "Mafiya jamoasidasan. Har tun bitta mafiyachini himoya qilasan: Komissar uni «tinch» deb ko'radi.",
+    },
 }
 TEAM_NAMES = {"town": "Shahar", "mafia": "Mafiya", "maniac": "Maniak"}
-ROLES_PUBLIC = {k: {"name": v["name"], "emoji": v["emoji"], "team": v["team"], "desc": v["desc"]} for k, v in ROLES.items()}
+ROLES_PUBLIC = {k: {"name": v["name"], "emoji": v["emoji"], "team": v["team"], "desc": v["desc"], "night": bool(v["action"])} for k, v in ROLES.items()}
 ACTION_LABELS = {
     "kill": "O'ldirish", "slay": "O'ldirish", "check": "Tekshirish",
     "heal": "Davolash", "guard": "Qo'riqlash", "block": "Band qilish",
+    "compare": "Solishtirish", "snipe": "O'q uzish", "defend": "Himoya qilish",
 }
 
 GAMES: dict[str, "Game"] = {}      # gid -> Game
@@ -77,20 +96,24 @@ CHAT_GAME: dict[int, str] = {}     # chat_id -> faol gid
 
 
 def mafia_count(n: int) -> int:
-    return {4: 1, 5: 1, 6: 2, 7: 2, 8: 2, 9: 3, 10: 3, 11: 3, 12: 4, 13: 4, 14: 4, 15: 5, 16: 5}[n]
+    return {4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 2, 10: 2, 11: 2, 12: 2, 13: 3, 14: 3, 15: 3, 16: 3}[n]
 
 
 def role_set(n: int) -> list[str]:
     """n ta o'yinchi uchun rollar ro'yxati (aralashtirilmagan)."""
     specials = ["commissar", "doctor"]
-    if n >= 8:
-        specials.append("maniac")
+    for need, r in ((6, "lucky"), (8, "escort"), (9, "journalist"), (11, "bodyguard"), (12, "sniper")):
+        if n >= need:
+            specials.append(r)
     if n >= 9:
-        specials.append("escort")
-    if n >= 10:
-        specials.append("bodyguard")
+        specials.append("maniac")
     m = mafia_count(n)
-    mafia = (["don"] if n >= 6 else []) + ["mafia"] * (m - (1 if n >= 6 else 0))
+    mafia = []
+    if n >= 7:
+        mafia.append("don")
+    if n >= 10:
+        mafia.append("lawyer")
+    mafia += ["mafia"] * (m - len(mafia))
     roles = mafia + specials
     roles += ["citizen"] * (n - len(roles))
     return roles
@@ -110,6 +133,8 @@ class P:
         self.checked: dict[int, str] = {}      # komissar: uid -> "mafia" | "tinch"
         self.death: dict | None = None
         self.last_chat = 0.0
+        self.shots = 1                          # snayper
+        self.lucky_used = False                 # omadli
 
     @property
     def team(self) -> str | None:
@@ -148,9 +173,10 @@ class Game:
         self.lobby_msg_id: int | None = None
         self._eid = 0
         # Misumi "miyasi"
-        self.bot_acted = False
-        self.bot_due = 0.0
-        self.bot_say_times: list[float] = []
+        self.bot_acted: set[int] = set()
+        self.bot_due: dict[int, float] = {}
+        self.bot_say_times: dict[int, list[float]] = {}
+        self.accuse: Counter = Counter()
 
     # ── ichki yordamchilar ─────────────────────────────────────────────
     def _id(self) -> int:
@@ -169,7 +195,7 @@ class Game:
         self.feed = self.feed[-80:]
 
     def _notify(self, uid: int, text: str, kind: str = "info") -> None:
-        if uid == BOT_UID:
+        if uid <= 0:
             return
         self.private.setdefault(uid, []).append({"id": self._id(), "kind": kind, "text": text, "t": time.time()})
 
@@ -179,8 +205,9 @@ class Game:
         self.phase_start = now
         self.duration = seconds
         self.deadline = now + seconds
-        self.bot_acted = False
-        self.bot_due = now + random.uniform(6, max(8, min(seconds - 8, 24)))
+        self.bot_acted = set()
+        hi = max(8, min(seconds - 8, 24))
+        self.bot_due = {u: now + random.uniform(4, hi) for u in self.players if u <= 0}
         self._bump()
 
     def alive_players(self) -> list[P]:
@@ -211,15 +238,37 @@ class Game:
             if uid not in self.players:
                 return False, "Sen o'yinda emassan"
             del self.players[uid]
-            if uid == self.host_id and self.players:
-                humans = [u for u in self.players if u != BOT_UID]
-                self.host_id = humans[0] if humans else self.host_id
+            humans = [u for u in self.players if u > 0]
+            if not humans:
+                self.cancel("Hamma chiqib ketdi, lobbi yopildi")
+                return True, "Chiqding"
+            if uid == self.host_id:
+                self.host_id = humans[0]
             self._bump()
             self._out("lobby")
             return True, "Chiqding"
 
     def add_bot(self) -> tuple[bool, str]:
-        return self.add_player(BOT_UID, BOT_NAME, None, True)
+        with LOCK:
+            slot = next((i for i in range(MAX_BOTS) if -i not in self.players), None)
+            if slot is None:
+                return False, f"Ko'pi bilan {MAX_BOTS} ta bot"
+            return self.add_player(-slot, BOT_NAMES[slot], None, True)
+
+    def remove_bot(self) -> tuple[bool, str]:
+        with LOCK:
+            if self.phase != "lobby":
+                return False, "O'yin boshlangan"
+            bots = [u for u in self.players if u <= 0]
+            if not bots:
+                return False, "Lobbida bot yo'q"
+            del self.players[min(bots)]
+            self._bump()
+            self._out("lobby")
+            return True, "Bot olib tashlandi"
+
+    def bot_count(self) -> int:
+        return sum(1 for u in self.players if u <= 0)
 
     def human_count(self) -> int:
         return sum(1 for p in self.players.values() if not p.is_bot)
@@ -262,18 +311,23 @@ class Game:
         if not p.alive:
             return []
         if self.phase == "night" and p.action:
+            a = p.action
+            if a == "snipe" and p.shots <= 0:
+                return []
             out = []
             for q in self.alive_players():
-                if p.action in ("kill",) and q.team == "mafia":
+                if a == "kill" and q.team == "mafia":
                     continue
-                if p.action in ("slay", "check", "guard", "block") and q.uid == p.uid:
+                if a == "defend" and q.team != "mafia":
                     continue
-                if p.action == "heal":
+                if a in ("slay", "check", "guard", "block", "compare", "snipe") and q.uid == p.uid:
+                    continue
+                if a == "heal":
                     if q.uid == p.uid and p.self_healed:
                         continue
                     if q.uid == p.last_heal:
                         continue
-                if p.action == "block" and q.uid == p.last_block:
+                if a == "block" and q.uid == p.last_block:
                     continue
                 out.append(q.uid)
             return out
@@ -281,7 +335,7 @@ class Game:
             return [q.uid for q in self.alive_players() if q.uid != p.uid]
         return []
 
-    def set_action(self, uid: int, target: int) -> tuple[bool, str]:
+    def set_action(self, uid: int, target: int, target2: int | None = None) -> tuple[bool, str]:
         with LOCK:
             p = self.players.get(uid)
             if not p or not p.alive:
@@ -290,9 +344,17 @@ class Game:
                 return False, "Hozir tun emas"
             if not p.action:
                 return False, "Sening rolingda tungi harakat yo'q"
-            if target not in self.targets_for(p):
+            allowed = self.targets_for(p)
+            rec = {"type": p.action, "target": target}
+            if p.action == "snipe" and target == -1 and allowed:
+                rec["target"] = None
+            elif target not in allowed:
                 return False, "Bu o'yinchini tanlab bo'lmaydi"
-            self.night_actions[uid] = {"type": p.action, "target": target}
+            if p.action == "compare":
+                if target2 not in allowed or target2 == target:
+                    return False, "Ikkita turli o'yinchi tanla"
+                rec["target2"] = target2
+            self.night_actions[uid] = rec
             self._bump()
             return True, "Qabul qilindi"
 
@@ -363,12 +425,14 @@ class Game:
     def _enter_day(self) -> None:
         self.ready = set()
         self._set_phase("day", DAY_SEC)
-        bot = self.players.get(BOT_UID)
-        self.bot_say_times = []
-        if bot and bot.alive:
-            k = random.choice([2, 2, 3])
-            lo, hi = time.time() + 6, self.deadline - 10
-            self.bot_say_times = sorted(random.uniform(lo, hi) for _ in range(k))
+        self.bot_say_times = {}
+        self.accuse = Counter()
+        for p in self.alive_players():
+            if p.is_bot:
+                k = random.choice([2, 2, 3]) if p.uid == BOT_UID else random.choice([1, 1, 2])
+                lo = time.time() + 5
+                hi = max(lo + 1, self.deadline - 8)
+                self.bot_say_times[p.uid] = sorted(random.uniform(lo, hi) for _ in range(k))
 
     def _enter_vote(self) -> None:
         self.votes = {}
@@ -378,7 +442,7 @@ class Game:
 
     def _night_complete(self) -> bool:
         for p in self.alive_players():
-            if p.action and p.uid not in self.night_actions:
+            if p.action and p.uid not in self.night_actions and self.targets_for(p):
                 return False
         return True
 
@@ -401,21 +465,30 @@ class Game:
                 blocked.add(a["target"])
                 self.players[uid].last_block = a["target"]
         for uid in blocked:
-            if self.players[uid].action:
+            if uid in self.players and self.players[uid].action:
                 self._notify(uid, "💃 Bu tun seni band qilishdi. Harakating bajarilmadi.", "block")
 
         def act_of(role: str):
             for uid, a in acts.items():
                 p = self.players[uid]
                 if p.role == role and uid in alive_ids and uid not in blocked:
-                    return p, a["target"]
+                    return p, a
             return None, None
 
-        # 2) Mafiya ovozi (Don teng ovozni hal qiladi)
+        def tgt(a):
+            return a["target"] if a else None
+
+        # 2) Advokat himoyasi
+        defended: set[int] = set()
+        lawyer, la = act_of("lawyer")
+        if lawyer and la:
+            defended.add(la["target"])
+
+        # 3) Mafiya ovozi (Don teng ovozni hal qiladi)
         mv: Counter = Counter()
         don_vote = None
         for p in self.alive_players():
-            if p.team == "mafia" and p.uid not in blocked and p.uid in acts:
+            if p.role in ("mafia", "don") and p.uid not in blocked and p.uid in acts:
                 t = acts[p.uid]["target"]
                 mv[t] += 1
                 if p.role == "don":
@@ -426,60 +499,80 @@ class Game:
             cands = [t for t, c in mv.items() if c == top]
             kill_target = don_vote if don_vote in cands else random.choice(cands)
 
-        maniac, slay_target = act_of("maniac")
-        doctor, heal_target = act_of("doctor")
-        guard, guard_target = act_of("bodyguard")
-        commissar, check_target = act_of("commissar")
-        # Doktor/Qo'riqchi/Kelin cheklovlari uchun harakat (bloklangan bo'lsa ham) yozib qo'yiladi
-        for uid, a in acts.items():
-            p = self.players[uid]
-            if p.role == "doctor" and uid in alive_ids and uid not in blocked:
-                p.last_heal = a["target"]
-                if a["target"] == uid:
-                    p.self_healed = True
+        maniac, ma = act_of("maniac")
+        doctor, da = act_of("doctor")
+        guard, ga = act_of("bodyguard")
+        commissar, ca = act_of("commissar")
+        journalist, ja = act_of("journalist")
+        sniper, sa = act_of("sniper")
+        slay_target, heal_target, guard_target, check_target = tgt(ma), tgt(da), tgt(ga), tgt(ca)
+        snipe_target = tgt(sa)
+        if doctor:
+            doctor.last_heal = heal_target
+            if heal_target == doctor.uid:
+                doctor.self_healed = True
 
-        # 3) Komissar tekshiruvi
+        # 4) Komissar tekshiruvi
         if commissar and check_target is not None:
             t = self.players[check_target]
-            res = "mafia" if t.role == "mafia" else "tinch"
+            res = "mafia" if t.role in ("mafia", "lawyer") and check_target not in defended else "tinch"
             commissar.checked[check_target] = res
             if res == "mafia":
                 self._notify(commissar.uid, f"🔎 Tekshiruv: {t.name} — MAFIYA!", "check")
             else:
                 self._notify(commissar.uid, f"🔎 Tekshiruv: {t.name} — tinch (mafiya emas).", "check")
 
-        # 4) Hujumlar
-        attacks = []
+        # 5) Jurnalist
+        if journalist and ja and ja.get("target2") is not None:
+            a_, b_ = self.players[ja["target"]], self.players[ja["target2"]]
+            same = a_.team == b_.team
+            self._notify(journalist.uid, f"📰 {a_.name} va {b_.name}: " +
+                         ("bir jamoada." if same else "turli jamoalarda."), "compare")
+
+        # 6) Hujumlar
+        attacks: list[tuple[int, str]] = []
         if kill_target is not None:
-            attacks.append(kill_target)
+            attacks.append((kill_target, "mafia"))
         if slay_target is not None:
-            attacks.append(slay_target)
+            attacks.append((slay_target, "maniac"))
+        if sniper and snipe_target is not None:
+            sniper.shots -= 1
+            attacks.append((snipe_target, "sniper"))
         died: list[tuple[int, str]] = []
         guard_used = False
         dead_now: set[int] = set()
-        for tgt in attacks:
-            if tgt in dead_now:
+        for t_uid, cause in attacks:
+            if t_uid in dead_now:
                 continue
-            if guard and not guard_used and guard_target == tgt and guard.uid not in dead_now and guard.uid != tgt:
+            tp = self.players[t_uid]
+            if guard and not guard_used and guard_target == t_uid and guard.uid not in dead_now and guard.uid != t_uid:
                 guard_used = True
                 dead_now.add(guard.uid)
                 died.append((guard.uid, "guard"))
-                self._notify(tgt, "🛡 Bu tun senga hujum bo'ldi, lekin Qo'riqchi seni qutqardi.", "saved")
+                self._notify(t_uid, "🛡 Bu tun senga hujum bo'ldi, lekin Qo'riqchi seni qutqardi.", "saved")
                 continue
-            if doctor and heal_target == tgt:
-                self._notify(tgt, "🩺 Bu tun senga hujum bo'ldi, lekin Doktor seni davoladi.", "saved")
-                if doctor:
-                    self._notify(doctor.uid, f"🩺 {self._name(tgt)} ga hujum bo'ldi — sen uni qutqarding!", "saved")
+            if doctor and heal_target == t_uid:
+                self._notify(t_uid, "🩺 Bu tun senga hujum bo'ldi, lekin Doktor seni davoladi.", "saved")
+                self._notify(doctor.uid, f"🩺 {self._name(t_uid)} ga hujum bo'ldi, sen uni qutqarding!", "saved")
                 continue
-            dead_now.add(tgt)
-            died.append((tgt, "mafia" if tgt == kill_target else "maniac"))
+            if tp.role == "lucky" and not tp.lucky_used:
+                tp.lucky_used = True
+                self._notify(t_uid, "🍀 Bu tun senga hujum bo'ldi, lekin omading keldi. Ikkinchisidan omon qolmaysan.", "saved")
+                continue
+            dead_now.add(t_uid)
+            died.append((t_uid, cause))
+        if sniper and (snipe_target, "sniper") in died and self.players[snipe_target].team == "town" \
+                and sniper.uid not in dead_now:
+            dead_now.add(sniper.uid)
+            died.append((sniper.uid, "guilt"))
 
+        notes = {"guard": " (o'rniga o'zini tikdi)", "guilt": " (begunohni otib, o'zini ham yo'qotdi)"}
         deaths = []
         for uid, cause in died:
             self._kill(uid, cause, "night")
             p = self.players[uid]
             deaths.append({"uid": uid, "name": p.name, "role": p.role, "cause": cause})
-            self._feed(f"{p.name} tunda o'ldirildi — {ROLES[p.role]['emoji']} {ROLES[p.role]['name']}.", "death")
+            self._feed(f"{p.name} tunda o'ldi{notes.get(cause, '')} — {ROLES[p.role]['emoji']} {ROLES[p.role]['name']}.", "death")
         if not deaths:
             self._feed("Bu tun hech kim o'lmadi.", "info")
         self._out("morning", day=self.day, deaths=deaths)
@@ -568,58 +661,104 @@ class Game:
                 if now >= self.deadline or all(u in self.votes for u in alive_ids):
                     self._resolve_vote()
 
-    # ── Misumi o'yinchi sifatida ───────────────────────────────────────
+    # ── botlar ─────────────────────────────────────────────────────────
     def _bot_tick(self, now: float) -> None:
-        bot = self.players.get(BOT_UID)
-        if not bot or not bot.alive:
-            return
-        if self.phase == "night" and not self.bot_acted and now >= self.bot_due:
-            self.bot_acted = True
-            self._bot_night(bot)
-        elif self.phase == "day":
-            while self.bot_say_times and now >= self.bot_say_times[0]:
-                self.bot_say_times.pop(0)
-                self._out("bot_say")
-        elif self.phase == "vote" and not self.bot_acted and now >= self.bot_due:
-            self.bot_acted = True
-            self._bot_vote(bot)
+        for bot in [p for p in self.alive_players() if p.is_bot]:
+            u = bot.uid
+            if self.phase == "night" and u not in self.bot_acted and now >= self.bot_due.get(u, 0):
+                self.bot_acted.add(u)
+                self._bot_night(bot)
+            elif self.phase == "day":
+                ts = self.bot_say_times.get(u)
+                while ts and now >= ts[0]:
+                    ts.pop(0)
+                    self._bot_say(bot)
+            elif self.phase == "vote" and u not in self.bot_acted and now >= self.bot_due.get(u, 0):
+                self.bot_acted.add(u)
+                self._bot_vote(bot)
 
     def _bot_night(self, bot: P) -> None:
         opts = self.targets_for(bot)
-        if not bot.action or not opts:
+        a = bot.action
+        if not a or not opts:
             return
-        pool = opts
-        if bot.action == "check":
-            fresh = [u for u in opts if u not in bot.checked]
-            pool = fresh or opts
-        elif bot.action == "heal":
-            others = [u for u in opts if u != bot.uid]
-            pool = others or opts
+        pool, t2 = opts, None
+        if a == "check":
+            pool = [u for u in opts if u not in bot.checked] or opts
+        elif a == "heal":
+            pool = [u for u in opts if u != bot.uid] or opts
             if bot.uid in opts and random.random() < 0.25:
                 pool = [bot.uid]
-        elif bot.action in ("kill", "slay"):
-            # Kuzatilgan komissar/doktor kabi xavfli odamlarni bilmaydi: tasodifiy, lekin jonli odamlardan
-            pool = opts
-        self.set_action(bot.uid, random.choice(pool))
+        elif a == "kill":
+            mates = Counter(x["target"] for x in self.night_actions.values()
+                            if x["type"] == "kill" and x["target"] in opts)
+            if mates and random.random() < 0.85:
+                pool = [mates.most_common(1)[0][0]]
+        elif a == "compare":
+            if len(opts) < 2:
+                return
+            pool, t2 = random.sample(opts, 2)[:1], None
+            t2 = random.choice([u for u in opts if u != pool[0]])
+        elif a == "snipe":
+            pool = [random.choice(opts)] if random.random() < 0.12 else [-1]
+        self.set_action(bot.uid, random.choice(pool), t2)
 
     def _bot_vote(self, bot: P) -> None:
         opts = self.targets_for(bot)
         if not opts:
             return
         known = [u for u, r in bot.checked.items() if r == "mafia" and u in opts]
-        if bot.role == "commissar" and known:
+        if known:
             self.set_vote(bot.uid, known[0])
             return
-        tally = Counter(t for v, t in self.votes.items() if t != "skip" and t in opts)
-        if bot.team == "mafia":
-            tally = Counter({u: c for u, c in tally.items() if self.players[u].team != "mafia"})
+        is_mafia = bot.team == "mafia"
+        if is_mafia:
             opts = [u for u in opts if self.players[u].team != "mafia"] or opts
-        if tally and random.random() < 0.75:
+        acc = [u for u, _ in self.accuse.most_common() if u in opts]
+        if acc and random.random() < (0.5 if is_mafia else 0.8):
+            self.set_vote(bot.uid, acc[0])
+            return
+        tally = Counter(t for t in self.votes.values() if t != "skip" and t in opts)
+        if tally and random.random() < 0.7:
             self.set_vote(bot.uid, tally.most_common(1)[0][0])
-        elif random.random() < 0.12:
+        elif random.random() < 0.1:
             self.set_vote(bot.uid, "skip")
         else:
             self.set_vote(bot.uid, random.choice(opts))
+
+    def _bot_say(self, bot: P) -> None:
+        others = [q for q in self.alive_players() if q.uid != bot.uid]
+        if not others:
+            return
+        if bot.role == "commissar":
+            known = [u for u, r in bot.checked.items() if r == "mafia" and self.players[u].alive]
+            if known:
+                t = self.players[known[0]]
+                self.accuse[t.uid] += 2
+                self.post_chat(bot.uid, random.choice([
+                    f"{t.name} mafiya, men aniq bilaman. Unga ovoz bering",
+                    f"Menda ma'lumot bor: {t.name} toza emas. Osamiz",
+                    f"{t.name} ni tekshirdim, mafiya chiqdi. Ishoninglar",
+                ]))
+                return
+        if bot.uid == BOT_UID and random.random() < 0.8:
+            self._out("bot_say")      # mafia_bot.py AI bilan gapirtiradi
+            return
+        town = [q for q in others if q.team != "mafia"] if bot.team == "mafia" else others
+        t = random.choice(town or others)
+        if self.accuse and random.random() < 0.5:
+            lead = self.accuse.most_common(1)[0][0]
+            if lead in self.players and self.players[lead].alive and lead != bot.uid:
+                self.post_chat(bot.uid, f"{self.players[lead].name} ga qo'shilaman, ovoz beraman")
+                return
+        self.post_chat(bot.uid, random.choice([
+            f"{t.name} nimadir yashiryapti, ko'zimni olmayman",
+            f"{t.name}, sen nega jimsan?",
+            "shoshmay ovoz beraylik, keyin pushaymon bo'lamiz",
+            f"{t.name} ning kechagi gapi menga yoqmadi",
+            "bu tunni kim qilganini bilaman deb o'ylayman",
+            f"men begunohman, {t.name} ni kuzataylik",
+        ]))
 
     # ── Mini App uchun ko'rinish ───────────────────────────────────────
     def _can_see_role(self, viewer: P | None, p: P) -> bool:
@@ -679,6 +818,11 @@ class Game:
                     "action_label": ACTION_LABELS.get(viewer.action) if viewer.action else None,
                     "targets": allowed,
                     "my_target": act["target"] if act and self.phase == "night" else None,
+                    "my_target2": act.get("target2") if act and self.phase == "night" else None,
+                    "my_pass": bool(act and self.phase == "night" and act["target"] is None),
+                    "shots": viewer.shots,
+                    "can_skip": viewer.action == "snipe" and viewer.shots > 0,
+                    "pick": 2 if viewer.action == "compare" else 1,
                     "my_vote": self.votes.get(uid) if self.phase == "vote" else None,
                     "ready": uid in self.ready,
                     "can_chat": self._can_chat(viewer),
@@ -694,7 +838,7 @@ class Game:
                 "host_id": self.host_id, "is_host": uid == self.host_id,
                 "min_players": MIN_PLAYERS, "max_players": MAX_PLAYERS,
                 "can_start": started is False and len(self.players) >= MIN_PLAYERS and uid == self.host_id,
-                "has_bot": BOT_UID in self.players,
+                "has_bot": self.bot_count() > 0, "bot_count": self.bot_count(), "max_bots": MAX_BOTS,
                 "chat_title": self.chat_title,
                 "roles_info": ROLES_PUBLIC, "team_names": TEAM_NAMES,
                 "players": players, "me": me, "votes": votes,
@@ -751,6 +895,7 @@ def tick_all() -> None:
                 del GAMES[gid]
                 if CHAT_GAME.get(g.chat_id) == gid:
                     del CHAT_GAME[g.chat_id]
+    _maybe_save(now)
 
 
 def drain_outbox() -> list[tuple["Game", dict]]:
@@ -762,3 +907,98 @@ def drain_outbox() -> list[tuple["Game", dict]]:
                     out.append((g, ev))
                 g.outbox = []
     return out
+
+
+# ── saqlash (Postgres, db.py orqali) ───────────────────────────────────
+STATE_STORE, STATE_KEY = "mafia", "games"
+_SCALARS = ("gid", "chat_id", "chat_title", "host_id", "created", "last_activity", "phase", "day",
+            "phase_start", "deadline", "duration", "winner", "cancelled", "ended_at", "version",
+            "lobby_msg_id", "_eid")
+_PFIELDS = ("uid", "name", "username", "is_bot", "alive", "role", "last_heal", "self_healed",
+            "last_block", "death", "shots", "lucky_used")
+_saved: dict[str, int] = {}
+_last_save = 0.0
+
+
+def _game_to_dict(g: "Game") -> dict:
+    d = {k: getattr(g, k) for k in _SCALARS}
+    d["players"] = [dict({k: getattr(p, k) for k in _PFIELDS}, checked={str(u): r for u, r in p.checked.items()})
+                    for p in g.players.values()]
+    d["night_actions"] = {str(k): v for k, v in g.night_actions.items()}
+    d["votes"] = {str(k): v for k, v in g.votes.items()}
+    d["ready"] = list(g.ready)
+    d["chat"], d["feed"] = g.chat, g.feed
+    d["private"] = {str(k): v for k, v in g.private.items()}
+    return d
+
+
+def _game_from_dict(d: dict) -> "Game":
+    g = Game(d["chat_id"], d["host_id"], d.get("chat_title", ""))
+    for k in _SCALARS:
+        if k in d:
+            setattr(g, k, d[k])
+    for pd in d.get("players", []):
+        p = P(pd["uid"], pd["name"], pd.get("username"), pd.get("is_bot", False))
+        for k in _PFIELDS:
+            if k in pd:
+                setattr(p, k, pd[k])
+        p.name = pd["name"]
+        p.checked = {int(u): r for u, r in (pd.get("checked") or {}).items()}
+        g.players[p.uid] = p
+    g.night_actions = {int(k): v for k, v in d.get("night_actions", {}).items()}
+    g.votes = {int(k): v for k, v in d.get("votes", {}).items()}
+    g.ready = set(d.get("ready", []))
+    g.chat, g.feed = d.get("chat", []), d.get("feed", [])
+    g.private = {int(k): v for k, v in d.get("private", {}).items()}
+    if g.phase not in ("lobby", "ended"):
+        g.deadline = max(g.deadline, time.time() + 30)   # qayta ishga tushgandan keyin vaqt beramiz
+    return g
+
+
+def save_all() -> None:
+    import db
+    with LOCK:
+        data = {"games": [_game_to_dict(g) for g in GAMES.values()]}
+    db.save(STATE_STORE, STATE_KEY, data)
+
+
+def load_all() -> int:
+    """Server qayta ishga tushganda o'yinlarni tiklaydi. Tiklangan o'yinlar soni."""
+    try:
+        import db
+        data = db.load(STATE_STORE, STATE_KEY, None)
+    except Exception as e:
+        print(f"[mafia] yuklab bo'lmadi: {e}")
+        return 0
+    n = 0
+    with LOCK:
+        for d in (data or {}).get("games", []):
+            try:
+                g = _game_from_dict(d)
+            except Exception as e:
+                print(f"[mafia] o'yin tiklanmadi: {e}")
+                continue
+            if g.gid in GAMES:
+                continue
+            GAMES[g.gid] = g
+            _saved[g.gid] = g.version
+            if g.phase != "ended":
+                CHAT_GAME[g.chat_id] = g.gid
+                n += 1
+    return n
+
+
+def _maybe_save(now: float) -> None:
+    global _last_save
+    if now - _last_save < 3:
+        return
+    cur = {gid: g.version for gid, g in GAMES.items()}
+    if cur == _saved:
+        return
+    _last_save = now
+    try:
+        save_all()
+        _saved.clear()
+        _saved.update(cur)
+    except Exception as e:
+        print(f"[mafia] saqlab bo'lmadi: {e}")
