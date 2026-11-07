@@ -44,6 +44,7 @@ import game
 import ship
 import fun
 import moderation
+import mafia_bot
 import games2
 import extras
 import sticker_store
@@ -931,6 +932,7 @@ def main():
 
     # Moderatsiya: /warn /mute /ban ... va Misumi o'zini himoya qilishi (group -2 / 0)
     moderation.register(app)
+    mafia_bot.register(app)  # /mafia o'yini (lobbi, Misumi boshlovchi + o'yinchi)
 
     # GROUP 1 — yordamchi handlerlar (handle_message dan keyin ishlaydi)
     game.register(app)
