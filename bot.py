@@ -405,7 +405,7 @@ def _services_menu_text_and_kb(user_id) -> tuple[str, InlineKeyboardMarkup]:
             "<code>.stats daily</code> / <code>.stats weekly</code> / <code>.stats off</code>"
         )
     else:
-        lines.append("\n🔒 <b>Misumi AI Pro</b> bilan yana ko'proq narsa ochiladi:")
+        lines.append("\n🔒 <b>Misumi AI Pro</b> (30 000 so'm/oy) bilan yana ko'proq narsa ochiladi:")
         lines.append("• 📝 Avtomatik bio yangilanishi")
         lines.append("• 🧠 Ichki AI yordamchisi — Saqlangan xabarlarga <code>.ai savolingiz</code> deb yozib AI bilan bevosita gaplashish")
         lines.append("• 🎙 Ovozli xabarlarni tinglab, o'rniga javob yozish")
@@ -503,17 +503,18 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text, kb = _schedule_menu_text_and_kb(user_id)
         await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
 
-    elif data == "ub:buy_pro":
+    elif data in ("ub:buy_pro", "ub:buy_max"):
+        plan, price = ("Max", "70 000") if data.endswith("max") else ("Pro", "30 000")
         await query.answer("So'rov adminga yuborildi ✅", show_alert=True)
         if ADMIN_ID:
             requester = update.effective_user
             uname = f"@{requester.username}" if requester.username else requester.full_name
             admin_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("✅ Tasdiqlash (Pro berish)", callback_data=f"ub:approve:{user_id}")]]
+                [[InlineKeyboardButton(f"✅ Tasdiqlash ({plan} berish)", callback_data=f"ub:approve:{user_id}")]]
             )
             await context.bot.send_message(
                 chat_id=int(ADMIN_ID),
-                text=f"💎 Misumi AI Pro so'rovi\n\nFoydalanuvchi: {uname} (ID: {user_id})",
+                text=f"💎 Misumi AI {plan} so'rovi ({price} so'm/oy)\n\nFoydalanuvchi: {uname} (ID: {user_id})",
                 reply_markup=admin_kb,
             )
 
