@@ -5,6 +5,9 @@ Misumi AI — Mafia o'yini, Telegram tomoni
                     Mini App'ni ochadi)
 /mafiastop        — o'yinni bekor qilish (ega yoki guruh admini)
 /mafiarules       — rollar va qoidalar
+/mafiatop         — haftalik top-10 (umumiy: /mafiatop hammasi)
+/mafiaprofil      — shaxsiy statistika va yutuqlar
+/qaytish          — (shaxsiy chat) faol o'yinga qaytish
 
 Misumi ikki rolda:
   • BOSHLOVCHI — tun/tong/osish/yakunni guruhga o'zi e'lon qiladi (AI bilan, tez ishlamasa — tayyor matn),
@@ -34,6 +37,7 @@ from telegram.ext import (
 
 import ai_core
 import mafia
+import mafia_stats
 
 logger = logging.getLogger("misumi-mafia")
 
@@ -80,15 +84,26 @@ def _lobby_text(g: "mafia.Game") -> str:
     need = ""
     if n < mafia.MIN_PLAYERS:
         need = f"\n\nYana kamida <b>{mafia.MIN_PLAYERS - n}</b> ta o'yinchi kerak."
+    st = g.settings
+    flags = []
+    if st.get("safe_first_night"):
+        flags.append("birinchi tun xavfsiz")
+    if not st.get("last_words", True):
+        flags.append("oxirgi so'zsiz")
+    if st.get("disabled"):
+        flags.append("o'chirilgan: " + ", ".join(mafia.ROLES[r]["name"] for r in st["disabled"]))
+    cfg = f"\n⚙️ Tun {st['night_sec']}s · Kun {st['day_sec']}s · Ovoz {st['vote_sec']}s" + \
+          (f" · {_e('; '.join(flags))}" if flags else "")
     return (
         "🎭 <b>MAFIA</b> — o'yin lobbisi\n\n"
-        f"O'yinchilar (<b>{n}/{mafia.MAX_PLAYERS}</b>):\n" + "\n".join(lines) + need +
+        f"O'yinchilar (<b>{n}/{mafia.MAX_PLAYERS}</b>):\n" + "\n".join(lines) + need + cfg +
         "\n\n«Qo'shilish» ni bosing → bot ochiladi → Mini App tugmasi chiqadi."
     )
 
 
 def _lobby_kb(g: "mafia.Game", bot_username: str) -> Markup:
-    rows = [[Btn("🎮 Qo'shilish", url=_deeplink(bot_username, g.gid))]]
+    rows = [[Btn("🎮 Qo'shilish", url=_deeplink(bot_username, g.gid)),
+             Btn("👁 Tomosha", url=f"https://t.me/{bot_username}?start=mafiaw_{g.gid}")]]
     nb = g.bot_count()
     row2 = []
     if nb < mafia.MAX_BOTS:
@@ -167,6 +182,46 @@ async def cmd_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
+async def cmd_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    period = "all" if (context.args and context.args[0].lower() in ("all", "hammasi", "umumiy")) else "week"
+    rows = await asyncio.to_thread(mafia_stats.leaderboard, period, 10)
+    title = "🏆 <b>Mafia reytingi — umumiy</b>" if period == "all" else f"🏆 <b>Mafia — haftalik top-10</b> ({mafia_stats.week_key()})"
+    if not rows:
+        await update.effective_message.reply_text("Hali reyting yo'q. /mafia bilan birinchi o'yinni boshlang.")
+        return
+    medals = ["🥇", "🥈", "🥉"]
+    lines = [f"{medals[i] if i < 3 else str(i + 1) + '.'} {_e(r['name'])} — {r['wins']} g'alaba / {r['games']} o'yin ({r['winrate']}%)"
+             for i, r in enumerate(rows)]
+    await update.effective_message.reply_text(title + "\n\n" + "\n".join(lines) +
+                                              "\n\n<i>Umumiy: /mafiatop hammasi</i>", parse_mode=ParseMode.HTML)
+
+
+async def cmd_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    u = update.effective_user
+    p = await asyncio.to_thread(mafia_stats.profile, u.id, u.first_name or "")
+    if not p["games"]:
+        await update.effective_message.reply_text("Sen hali Mafia o'ynamagansan. /mafia bilan boshla!")
+        return
+    roles = "\n".join(f"  {mafia.ROLES[r['role']]['emoji']} {mafia.ROLES[r['role']]['name']}: "
+                      f"{r['wins']}/{r['games']} ({r['winrate']}%)" for r in p["roles"][:6] if r["role"] in mafia.ROLES)
+    ach = "\n".join(f"  {a['emoji']} {_e(a['name'])}" for a in p["achievements"]) or "  hali yo'q"
+    await update.effective_message.reply_text(
+        f"🪪 <b>{_e(p['name'])}</b> — Mafia profili\n"
+        f"O'yinlar: <b>{p['games']}</b> · G'alaba: <b>{p['wins']}</b> ({p['winrate']}%)\n"
+        f"Eng uzun seriya: <b>{p['best_streak']}</b> · Reyting o'rni: <b>{p['rank'] or '-'}</b>\n\n"
+        f"<b>Rollar bo'yicha:</b>\n{roles}\n\n<b>Yutuqlar:</b>\n{ach}", parse_mode=ParseMode.HTML)
+
+
+async def cmd_rejoin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shaxsiy chatda: Mini App yopilib qolsa, faol o'yinga qaytarib yuboradi."""
+    g = mafia.find_game_for(update.effective_user.id)
+    if not g:
+        await update.effective_message.reply_text("Hozir sen qatnashayotgan faol o'yin yo'q. Guruhda /mafia deb yangisini och.")
+        return
+    await update.effective_message.reply_text(f"🎭 O'yin davom etyapti ({g.chat_title or 'guruh'}). Qaytib kirish:",
+                                              reply_markup=_dm_kb(g.gid, "🎭 O'yinga qaytish"))
+
+
 async def cb_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     _, action, gid = q.data.split(":", 2)
@@ -195,6 +250,15 @@ async def cb_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def dm_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start mafia_<gid> — guruhdagi «Qo'shilish» tugmasidan keladi."""
     args = context.args or []
+    if args and args[0].startswith("mafiaw_"):
+        msg = update.effective_message
+        wg = mafia.get_game(args[0][len("mafiaw_"):])
+        if not wg or wg.phase == "ended":
+            await msg.reply_text("Bu o'yin topilmadi yoki tugagan.")
+        else:
+            await msg.reply_text("👁 Tomosha rejimi: o'yinni jonli kuzatasan (rollar yashirin qoladi).",
+                                 reply_markup=_dm_kb(wg.gid, "👁 Tomosha qilish"))
+        raise ApplicationHandlerStop
     if not args or not args[0].startswith("mafia_"):
         return  # oddiy /start — boshqa handler ishlaydi
     msg, user = update.effective_message, update.effective_user
@@ -270,7 +334,7 @@ async def _dm(bot, uid: int, text: str, kb=None) -> None:
 
 
 # ── Misumi o'yinchi sifatida gapiradi ─────────────────────────────────
-_LEAK_RE = re.compile(r"(mafiya|komissar|doktor|don|maniak|qo'riqchi|kelin|fuqaro|advokat|jurnalist|snayper|omadli)\s*(man\b|ekanman|bo'lib)", re.I)
+_LEAK_RE = re.compile(r"(mafiya|komissar|doktor|don|maniak|qo'riqchi|kelin|fuqaro|advokat|jurnalist|snayper|omadli|qasoskor|sudya|vampir)\s*(man\b|ekanman|bo'lib)", re.I)
 
 
 def _bot_context(g: "mafia.Game"):
@@ -376,6 +440,9 @@ async def _handle(context: ContextTypes.DEFAULT_TYPE, g: "mafia.Game", ev: dict)
             text = f"{r['emoji']} <b>Sening rolling: {r['name']}</b>\n\n{_e(r['desc'])}"
             if team == "mafia" and len(mafia_names) > 1:
                 text += f"\n\n🔫 Mafiya jamoasi: <b>{_e(', '.join(mafia_names))}</b>"
+            lov = g.players[uid].lover
+            if lov is not None:
+                text += f"\n\n💘 Sevishganing: <b>{_e(g._name(lov))}</b>. Biringiz o'lsa, ikkinchingiz ham o'ladi."
             await _dm(bot, uid, text, _dm_kb(g.gid))
         return
 
@@ -403,32 +470,38 @@ async def _handle(context: ContextTypes.DEFAULT_TYPE, g: "mafia.Game", ev: dict)
         with mafia.LOCK:
             ended = g.phase == "ended"
             alive_n = len(g.alive_players())
-        tail = "" if ended else f"\n\n☀️ <b>{ev['day']}-kun.</b> Tirik: {alive_n}. Muhokama {mafia.DAY_SEC} soniya (Mini App)."
+        tail = "" if ended else f"\n\n☀️ <b>{ev['day']}-kun.</b> Tirik: {alive_n}. Muhokama {g.settings['day_sec']} soniya (Mini App)."
         await _say(bot, chat, f"{_e(flavor)}\n\n{facts_block}{tail}", None if ended else gk)
         return
 
     if k == "vote_start":
-        await _say(bot, chat, f"🗳 <b>Ovoz berish vaqti!</b> {mafia.VOTE_SEC} soniyang bor. "
+        await _say(bot, chat, f"🗳 <b>Ovoz berish vaqti!</b> {g.settings['vote_sec']} soniyang bor. "
                               "Kimni osamiz? Mini App'da ovoz ber.", gk)
         return
 
     if k == "lynch":
         flavor = await _narrate(f"Shahar ovoz berib {ev['name']} ni osdi.",
                                 "Shahar qaror qildi. Arqon tortildi.")
-        await _say(bot, chat, f"{_e(flavor)}\n\n⚖️ <b>{_e(ev['name'])}</b> osildi — {_role_label(ev['role'])}.\n"
+        extra = "".join(f"\n💔 <b>{_e(d['name'])}</b> ham ketdi — {_role_label(d['role'])}"
+                        f"{_e(mafia.NOTES.get(d['cause'], ''))}" for d in ev.get("extra", []))
+        await _say(bot, chat, f"{_e(flavor)}\n\n⚖️ <b>{_e(ev['name'])}</b> osildi — {_role_label(ev['role'])}.{extra}\n"
                               f"<i>Ovozlar: {_e(ev['summary'])}</i>")
         return
 
     if k == "no_lynch":
-        await _say(bot, chat, f"⚖️ Ovozlar bo'linib ketdi, hech kim osilmadi.\n<i>Ovozlar: {_e(ev['summary'])}</i>")
+        head = (f"👨‍⚖️ Sudya <b>{_e(ev['veto'])}</b> hukmni bekor qildi, hech kim osilmadi."
+                if ev.get("veto") else "⚖️ Ovozlar bo'linib ketdi, hech kim osilmadi.")
+        await _say(bot, chat, f"{head}\n<i>Ovozlar: {_e(ev['summary'])}</i>")
         return
 
     if k == "end":
         w = ev["winner"]
         titles = {"town": "🏙 <b>SHAHAR g'alaba qildi!</b>", "mafia": "🔫 <b>MAFIYA g'alaba qildi!</b>",
-                  "maniac": "🔪 <b>MANIAK g'alaba qildi!</b>"}
+                  "maniac": "🔪 <b>MANIAK g'alaba qildi!</b>",
+                  "vampire": "🧛 <b>VAMPIR g'alaba qildi!</b>"}
         facts = {"town": "Barcha jinoyatchilar topildi, shahar tinchidi.",
-                 "mafia": "Mafiya shaharni egalladi.", "maniac": "Oxirgi tirik qolgan Maniak bo'ldi."}[w]
+                 "mafia": "Mafiya shaharni egalladi.", "maniac": "Oxirgi tirik qolgan Maniak bo'ldi.",
+                 "vampire": "Shahar Vampirning qo'liga o'tdi."}[w]
         flavor = await _narrate(facts, facts)
         with mafia.LOCK:
             rows = []
@@ -437,7 +510,8 @@ async def _handle(context: ContextTypes.DEFAULT_TYPE, g: "mafia.Game", ev: dict)
                 bot_mark = "🤖 " if p.is_bot else ""
                 rows.append(f"{mark} {bot_mark}{_e(p.name)} — {_role_label(p.role)}")
         await _say(bot, chat, f"{titles[w]}\n{_e(flavor)}\n\n<b>Rollar:</b>\n" + "\n".join(rows) +
-                              "\n\nYana o'ynash uchun /mafia")
+                              "\n\n📋 Kim kimni tekshirgani, davolagani va o'ldirgani — Mini App'dagi yakuniy jadvalda.\n"
+                              "Yana o'ynash uchun /mafia")
         return
 
     if k == "cancel":
@@ -447,6 +521,22 @@ async def _handle(context: ContextTypes.DEFAULT_TYPE, g: "mafia.Game", ev: dict)
 
     if k == "bot_say":
         await _bot_say(g)
+        return
+
+    if k == "last_word":
+        await _say(bot, chat, f"💬 <b>{_e(ev['name'])}</b> oxirgi so'zi:\n<i>«{_e(ev['text'])}»</i>")
+        return
+
+    if k == "achievements":
+        lines = []
+        for uid, keys in ev["earned"].items():
+            nm = g._name(int(uid))
+            for key in keys:
+                a = mafia_stats.ACHIEVEMENTS.get(key)
+                if a:
+                    lines.append(f"{a['emoji']} <b>{_e(nm)}</b> — {_e(a['name'])}")
+        if lines:
+            await _say(bot, chat, "🏅 <b>Yangi yutuqlar</b>\n" + "\n".join(lines))
         return
 
 
@@ -491,5 +581,8 @@ def register(app) -> None:
     app.add_handler(CommandHandler(["mafia", "mafiya"], cmd_mafia, filters=_GROUPS), group=0)
     app.add_handler(CommandHandler("mafiastop", cmd_mafiastop, filters=_GROUPS), group=0)
     app.add_handler(CommandHandler("mafiarules", cmd_rules), group=0)
+    app.add_handler(CommandHandler(["mafiatop", "mafiareyting"], cmd_top), group=0)
+    app.add_handler(CommandHandler(["mafiaprofil", "mafiaprofile"], cmd_profile), group=0)
+    app.add_handler(CommandHandler(["qaytish", "mafiaqaytish"], cmd_rejoin, filters=_PRIVATE), group=0)
     app.add_handler(CallbackQueryHandler(cb_lobby, pattern=r"^mf:"), group=0)
     app.job_queue.run_repeating(mafia_job, interval=1.0, first=3)
