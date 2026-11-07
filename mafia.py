@@ -32,6 +32,19 @@ DAY_SEC = int(os.environ.get("MAFIA_DAY_SEC", "90"))
 VOTE_SEC = int(os.environ.get("MAFIA_VOTE_SEC", "45"))
 LOBBY_TTL = 30 * 60
 KEEP_ENDED_SEC = 30 * 60
+AFK_SEC = 75                       # shuncha vaqt Mini App ochilmasa, o'yinchi "AFK" deb belgilanadi
+EMOJIS = ["👍", "👎", "😂", "😱", "🔥", "🤔", "🙏", "😈"]
+REACTION_TTL = 10
+OPTIONAL_ROLES = ["commissar", "doctor", "lucky", "escort", "journalist", "bodyguard", "sniper",
+                  "avenger", "judge", "maniac", "vampire", "don", "lawyer"]
+DEFAULT_SETTINGS = {
+    "night_sec": NIGHT_SEC, "day_sec": DAY_SEC, "vote_sec": VOTE_SEC,
+    "safe_first_night": False,     # birinchi tunda hujumlar o'tmaydi
+    "last_words": True,            # o'lgan o'yinchi bitta oxirgi so'z qoldiradi
+    "lovers": True,                # 8+ o'yinchida ikki sevishgan
+    "disabled": [],                # o'chirilgan rollar
+}
+SETTING_LIMITS = {"night_sec": (25, 120), "day_sec": (30, 240), "vote_sec": (20, 120)}
 
 ROLES = {
     "citizen": {
@@ -82,13 +95,37 @@ ROLES = {
         "name": "Advokat", "emoji": "⚖️", "team": "mafia", "action": "defend",
         "desc": "Mafiya jamoasidasan. Har tun bitta mafiyachini himoya qilasan: Komissar uni «tinch» deb ko'radi.",
     },
+    "avenger": {
+        "name": "Qasoskor", "emoji": "🗡", "team": "town", "action": "vow",
+        "desc": "Har tun bitta o'yinchiga qasam ichasan. Kunduzi seni osib qo'yishsa, oxirgi qasam ichgan odaming sen bilan birga ketadi.",
+    },
+    "judge": {
+        "name": "Sudya", "emoji": "👨‍⚖️", "team": "town", "action": None, "day_action": "veto",
+        "desc": "Butun o'yinda bir marta ovoz berish paytida hukmni bekor qilasan: o'sha kuni hech kim osilmaydi. Sudya ekaningni hamma biladi.",
+    },
+    "vampire": {
+        "name": "Vampir", "emoji": "🧛", "team": "vampire", "action": "bite",
+        "desc": "Yakkasan. Har tun bitta odamni tishlaysan: birinchi tishlash belgi qoldiradi, ikkinchisi o'ldiradi. Oxirgi tirik qolsang yutasan.",
+    },
 }
-TEAM_NAMES = {"town": "Shahar", "mafia": "Mafiya", "maniac": "Maniak"}
-ROLES_PUBLIC = {k: {"name": v["name"], "emoji": v["emoji"], "team": v["team"], "desc": v["desc"], "night": bool(v["action"])} for k, v in ROLES.items()}
+TEAM_NAMES = {"town": "Shahar", "mafia": "Mafiya", "maniac": "Maniak", "vampire": "Vampir"}
+ROLES_PUBLIC = {k: {"name": v["name"], "emoji": v["emoji"], "team": v["team"], "desc": v["desc"], "night": bool(v["action"]), "day": bool(v.get("day_action"))} for k, v in ROLES.items()}
 ACTION_LABELS = {
     "kill": "O'ldirish", "slay": "O'ldirish", "check": "Tekshirish",
     "heal": "Davolash", "guard": "Qo'riqlash", "block": "Band qilish",
     "compare": "Solishtirish", "snipe": "O'q uzish", "defend": "Himoya qilish",
+    "vow": "Qasam ichish", "bite": "Tishlash",
+}
+
+DEATH_LABELS = {
+    "mafia": "mafiya o'ldirdi", "maniac": "maniak o'ldirdi", "sniper": "snayper otdi", "guard": "himoya qilib o'ldi",
+    "guilt": "begunohni otdi", "lynch": "osildi", "heartbreak": "sevgilisi ketdi", "revenge": "qasoskor olib ketdi",
+    "vampire": "vampir tishladi",
+}
+NOTES = {
+    "guard": " (o'rniga o'zini tikdi)", "guilt": " (begunohni otib, o'zini ham yo'qotdi)",
+    "heartbreak": " (sevgilisi ketgani uchun)", "revenge": " (Qasoskor o'zi bilan olib ketdi)",
+    "vampire": " (Vampir tishladi)",
 }
 
 GAMES: dict[str, "Game"] = {}      # gid -> Game
@@ -99,22 +136,29 @@ def mafia_count(n: int) -> int:
     return {4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 2, 10: 2, 11: 2, 12: 2, 13: 3, 14: 3, 15: 3, 16: 3}[n]
 
 
-def role_set(n: int) -> list[str]:
-    """n ta o'yinchi uchun rollar ro'yxati (aralashtirilmagan)."""
+def role_set(n: int, disabled=()) -> list[str]:
+    """n ta o'yinchi uchun rollar ro'yxati (aralashtirilmagan). disabled — host o'chirgan rollar."""
+    dis = set(disabled)
     specials = ["commissar", "doctor"]
     for need, r in ((6, "lucky"), (8, "escort"), (9, "journalist"), (11, "bodyguard"), (12, "sniper")):
         if n >= need:
             specials.append(r)
-    if n >= 9:
-        specials.append("maniac")
+    solos = ["maniac"] if n >= 9 else []
     m = mafia_count(n)
     mafia = []
     if n >= 7:
         mafia.append("don")
     if n >= 10:
         mafia.append("lawyer")
+    mafia = [r for r in mafia if r not in dis]
     mafia += ["mafia"] * (m - len(mafia))
-    roles = mafia + specials
+    roles = mafia + [r for r in specials + solos if r not in dis]
+    min_citizens = max(1, n // 8)
+    for need, r in ((7, "avenger"), (10, "judge"), (13, "vampire")):
+        if n >= need and r not in dis and len(roles) + 1 <= n - min_citizens:
+            roles.append(r)
+    while len(roles) > n:          # xavfsizlik: ortiqcha maxsus rollarni olib tashlaymiz
+        roles.pop()
     roles += ["citizen"] * (n - len(roles))
     return roles
 
@@ -135,6 +179,15 @@ class P:
         self.last_chat = 0.0
         self.shots = 1                          # snayper
         self.lucky_used = False                 # omadli
+        self.lover: int | None = None           # sevishgan sherigi uid
+        self.bitten = False                     # vampir tishlagan
+        self.vow: int | None = None             # qasoskor: oxirgi qasam nishoni
+        self.judge_used = False
+        self.vetoed = False                     # sudya vetosini ishlatgan (yutuq uchun)
+        self.sniper_hit_mafia = False
+        self.lw_until = -1                      # oxirgi so'z shu faza raqamigacha ochiq
+        self.last_word_used = False
+        self.last_seen = time.time()
 
     @property
     def team(self) -> str | None:
@@ -177,6 +230,15 @@ class Game:
         self.bot_due: dict[int, float] = {}
         self.bot_say_times: dict[int, list[float]] = {}
         self.accuse: Counter = Counter()
+        # sozlamalar, reaksiyalar, tomoshabinlar, yakuniy jadval
+        self.settings: dict = {**DEFAULT_SETTINGS, "disabled": []}
+        self.phase_no = 0
+        self.veto_by: int | None = None
+        self.reactions: list[dict] = []
+        self.spectators: dict[int, float] = {}
+        self.log: list[dict] = []
+        self.stats_recorded = False
+        self.earned: dict[int, list[str]] = {}
 
     # ── ichki yordamchilar ─────────────────────────────────────────────
     def _id(self) -> int:
@@ -202,6 +264,7 @@ class Game:
     def _set_phase(self, phase: str, seconds: int) -> None:
         now = time.time()
         self.phase = phase
+        self.phase_no += 1
         self.phase_start = now
         self.duration = seconds
         self.deadline = now + seconds
@@ -284,10 +347,16 @@ class Game:
                 return False, f"Kamida {MIN_PLAYERS} ta o'yinchi kerak (hozir {n})"
             if self.human_count() < 1:
                 return False, "Kamida bitta odam kerak"
-            roles = role_set(n)
+            roles = role_set(n, self.settings.get("disabled", []))
             random.shuffle(roles)
+            now = time.time()
             for p, r in zip(self.players.values(), roles):
                 p.role = r
+                p.lover = None
+                p.last_seen = now
+            if self.settings.get("lovers", True) and n >= 8:
+                a, b = random.sample(list(self.players.values()), 2)
+                a.lover, b.lover = b.uid, a.uid
             self.day = 0
             self._feed("O'yin boshlandi. Rollar tarqatildi.", "start")
             self._set_phase("reveal", REVEAL_SEC)
@@ -320,7 +389,7 @@ class Game:
                     continue
                 if a == "defend" and q.team != "mafia":
                     continue
-                if a in ("slay", "check", "guard", "block", "compare", "snipe") and q.uid == p.uid:
+                if a in ("slay", "check", "guard", "block", "compare", "snipe", "vow", "bite") and q.uid == p.uid:
                     continue
                 if a == "heal":
                     if q.uid == p.uid and p.self_healed:
@@ -385,6 +454,131 @@ class Game:
             self._bump()
             return True, "Tayyor"
 
+    # ── host sozlamalari ───────────────────────────────────────────────
+    def set_settings(self, uid: int, patch: dict) -> tuple[bool, str]:
+        with LOCK:
+            if self.phase != "lobby":
+                return False, "Sozlamalar faqat lobbida o'zgaradi"
+            if uid != self.host_id:
+                return False, "Faqat o'yin egasi sozlay oladi"
+            st = dict(self.settings)
+            for k, (lo, hi) in SETTING_LIMITS.items():
+                if k in patch:
+                    try:
+                        st[k] = max(lo, min(hi, int(patch[k])))
+                    except (TypeError, ValueError):
+                        return False, "Vaqt son bo'lishi kerak"
+            for k in ("safe_first_night", "last_words", "lovers"):
+                if k in patch:
+                    st[k] = bool(patch[k])
+            if "disabled" in patch:
+                st["disabled"] = [r for r in dict.fromkeys(patch["disabled"] or []) if r in OPTIONAL_ROLES]
+            self.settings = st
+            self._bump()
+            self._out("lobby")
+            return True, "Sozlamalar saqlandi"
+
+    # ── oxirgi so'z, reaksiya, sudya veto, AFK ─────────────────────────
+    def can_last_word(self, p: P) -> bool:
+        return (not p.alive and not p.is_bot and not p.last_word_used and self.settings.get("last_words", True)
+                and p.death is not None and self.phase not in ("lobby", "ended") and self.phase_no <= p.lw_until)
+
+    def last_word(self, uid: int, text: str) -> tuple[bool, str]:
+        with LOCK:
+            p = self.players.get(uid)
+            if not p or not self.can_last_word(p):
+                return False, "Oxirgi so'z vaqti o'tgan yoki ishlatilgan"
+            text = " ".join((text or "").split())[:160]
+            if not text:
+                return False, "Bo'sh xabar"
+            p.last_word_used = True
+            self.chat.append({"id": self._id(), "ch": "last", "uid": uid, "name": p.name, "text": text, "t": time.time()})
+            self.chat = self.chat[-200:]
+            self._bump()
+            self._out("last_word", name=p.name, role=p.role, text=text)
+            return True, "OK"
+
+    def react(self, uid: int, emoji: str) -> tuple[bool, str]:
+        with LOCK:
+            p = self.players.get(uid)
+            if not p:
+                return False, "Sen o'yinchi emassan"
+            if emoji not in EMOJIS:
+                return False, "Bunday reaksiya yo'q"
+            if self.phase == "lobby":
+                return False, "O'yin boshlanmagan"
+            now = time.time()
+            if now - getattr(p, "last_react", 0.0) < 1.5:
+                return False, "Sekinroq"
+            p.last_react = now
+            self.reactions.append({"id": self._id(), "uid": uid, "name": p.name, "emoji": emoji, "t": now})
+            self.reactions = self.reactions[-30:]
+            self._bump()
+            return True, "OK"
+
+    def use_veto(self, uid: int) -> tuple[bool, str]:
+        with LOCK:
+            p = self.players.get(uid)
+            if not p or not p.alive or p.role != "judge":
+                return False, "Sen Sudya emassan"
+            if self.phase != "vote":
+                return False, "Veto faqat ovoz berish paytida"
+            if p.judge_used:
+                return False, "Vetoni allaqachon ishlatgansan"
+            p.judge_used = True
+            p.vetoed = True
+            self.veto_by = uid
+            self._feed(f"⚖️ Sudya {p.name} hukmni bekor qildi.", "veto")
+            self._bump()
+            return True, "Veto qo'llandi"
+
+    def touch(self, uid: int) -> None:
+        now = time.time()
+        p = self.players.get(uid)
+        if p:
+            p.last_seen = now
+        elif uid > 0:
+            self.spectators[uid] = now
+            if len(self.spectators) > 200:
+                for u in sorted(self.spectators, key=self.spectators.get)[:50]:
+                    del self.spectators[u]
+
+    def is_afk(self, p: P, now: float | None = None) -> bool:
+        now = now or time.time()
+        return (not p.is_bot and p.alive and self.phase in ("night", "day", "vote")
+                and now - p.last_seen > AFK_SEC)
+
+    def _log(self, text: str) -> None:
+        self.log.append({"day": self.day, "text": text})
+        self.log = self.log[-300:]
+
+    def _finalize_deaths(self, died: list[tuple[int, str]], phase: str) -> list[dict]:
+        """O'limlarni qo'llaydi; sevishgan va qasoskor zanjirlarini ham hisoblaydi."""
+        out: list[dict] = []
+        queue = list(died)
+        while queue:
+            uid, cause = queue.pop(0)
+            p = self.players.get(uid)
+            if p is None or not p.alive:
+                continue
+            self._kill(uid, cause, phase)
+            out.append({"uid": uid, "name": p.name, "role": p.role, "cause": cause})
+            lov = self.players.get(p.lover) if p.lover is not None else None
+            if lov is not None and lov.alive:
+                queue.append((lov.uid, "heartbreak"))
+            if cause == "lynch" and p.role == "avenger" and p.vow is not None:
+                tv = self.players.get(p.vow)
+                if tv is not None and tv.alive:
+                    queue.append((tv.uid, "revenge"))
+        if out and not any(q.alive and q.role in ("mafia", "don") for q in self.players.values()):
+            for q in self.alive_players():          # oxirgi qotil Advokat bo'lsa, u Mafiyaga aylanadi
+                if q.role == "lawyer":
+                    q.role = "mafia"
+                    self._notify(q.uid, "🔫 Jamoang ketdi. Endi sen oddiy Mafiyasan: tunda o'ldira olasan.", "promote")
+        for d in out:
+            self._log(f"☠️ {d['name']} — {ROLES[d['role']]['emoji']} {ROLES[d['role']]['name']} ({DEATH_LABELS.get(d['cause'], d['cause'])})")
+        return out
+
     # ── chat ───────────────────────────────────────────────────────────
     def post_chat(self, uid: int, text: str) -> tuple[bool, str]:
         with LOCK:
@@ -418,13 +612,14 @@ class Game:
         self.day += 1
         self.night_actions = {}
         self.votes = {}
-        self._set_phase("night", NIGHT_SEC)
+        self.veto_by = None
+        self._set_phase("night", self.settings["night_sec"])
         self._feed(f"{self.day}-tun boshlandi. Shahar uxladi.", "night")
         self._out("night", day=self.day)
 
     def _enter_day(self) -> None:
         self.ready = set()
-        self._set_phase("day", DAY_SEC)
+        self._set_phase("day", self.settings["day_sec"])
         self.bot_say_times = {}
         self.accuse = Counter()
         for p in self.alive_players():
@@ -436,13 +631,14 @@ class Game:
 
     def _enter_vote(self) -> None:
         self.votes = {}
-        self._set_phase("vote", VOTE_SEC)
+        self._set_phase("vote", self.settings["vote_sec"])
         self._feed("Ovoz berish boshlandi.", "vote")
         self._out("vote_start")
 
     def _night_complete(self) -> bool:
+        now = time.time()
         for p in self.alive_players():
-            if p.action and p.uid not in self.night_actions and self.targets_for(p):
+            if p.action and p.uid not in self.night_actions and self.targets_for(p) and not self.is_afk(p, now):
                 return False
         return True
 
@@ -452,6 +648,7 @@ class Game:
             return
         p.alive = False
         p.death = {"day": self.day, "cause": cause, "phase": phase}
+        p.lw_until = self.phase_no + 1
         self._notify(uid, "Sen o'ldirilding. Endi kuzatuvchisan va hamma rollarni ko'rasan.", "death")
 
     def _resolve_night(self) -> None:
@@ -467,6 +664,15 @@ class Game:
         for uid in blocked:
             if uid in self.players and self.players[uid].action:
                 self._notify(uid, "💃 Bu tun seni band qilishdi. Harakating bajarilmadi.", "block")
+
+        for uid, a in acts.items():
+            p = self.players[uid]
+            if uid in alive_ids and p.role:
+                tn = self._name(a["target"]) if a["target"] is not None else "o'q uzmadi"
+                if a.get("target2") is not None:
+                    tn += f" va {self._name(a['target2'])}"
+                self._log(f"{ROLES[p.role]['emoji']} {p.name} ({ROLES[p.role]['name']}) → {tn}" +
+                          (" [band qilingan]" if uid in blocked else ""))
 
         def act_of(role: str):
             for uid, a in acts.items():
@@ -507,6 +713,12 @@ class Game:
         sniper, sa = act_of("sniper")
         slay_target, heal_target, guard_target, check_target = tgt(ma), tgt(da), tgt(ga), tgt(ca)
         snipe_target = tgt(sa)
+        avenger, va = act_of("avenger")
+        if avenger and va:
+            avenger.vow = va["target"]
+        vampire, vb = act_of("vampire")
+        bite_target = tgt(vb)
+        safe = bool(self.settings.get("safe_first_night")) and self.day == 1
         if doctor:
             doctor.last_heal = heal_target
             if heal_target == doctor.uid:
@@ -531,13 +743,22 @@ class Game:
 
         # 6) Hujumlar
         attacks: list[tuple[int, str]] = []
-        if kill_target is not None:
-            attacks.append((kill_target, "mafia"))
-        if slay_target is not None:
-            attacks.append((slay_target, "maniac"))
-        if sniper and snipe_target is not None:
-            sniper.shots -= 1
-            attacks.append((snipe_target, "sniper"))
+        if safe:
+            self._feed("Birinchi tun xavfsiz: hujumlar o'tmadi.", "info")
+        else:
+            if kill_target is not None:
+                attacks.append((kill_target, "mafia"))
+            if slay_target is not None:
+                attacks.append((slay_target, "maniac"))
+            if sniper and snipe_target is not None:
+                sniper.shots -= 1
+                attacks.append((snipe_target, "sniper"))
+        if vampire and bite_target is not None:
+            bp = self.players[bite_target]
+            if bp.bitten and not safe:
+                attacks.append((bite_target, "vampire"))
+            else:
+                bp.bitten = True
         died: list[tuple[int, str]] = []
         guard_used = False
         dead_now: set[int] = set()
@@ -561,18 +782,16 @@ class Game:
                 continue
             dead_now.add(t_uid)
             died.append((t_uid, cause))
+        if sniper and (snipe_target, "sniper") in died and self.players[snipe_target].team == "mafia":
+            sniper.sniper_hit_mafia = True
         if sniper and (snipe_target, "sniper") in died and self.players[snipe_target].team == "town" \
                 and sniper.uid not in dead_now:
             dead_now.add(sniper.uid)
             died.append((sniper.uid, "guilt"))
 
-        notes = {"guard": " (o'rniga o'zini tikdi)", "guilt": " (begunohni otib, o'zini ham yo'qotdi)"}
-        deaths = []
-        for uid, cause in died:
-            self._kill(uid, cause, "night")
-            p = self.players[uid]
-            deaths.append({"uid": uid, "name": p.name, "role": p.role, "cause": cause})
-            self._feed(f"{p.name} tunda o'ldi{notes.get(cause, '')} — {ROLES[p.role]['emoji']} {ROLES[p.role]['name']}.", "death")
+        deaths = self._finalize_deaths(died, "night")
+        for d in deaths:
+            self._feed(f"{d['name']} tunda o'ldi{NOTES.get(d['cause'], '')} — {ROLES[d['role']]['emoji']} {ROLES[d['role']]['name']}.", "death")
         if not deaths:
             self._feed("Bu tun hech kim o'lmadi.", "info")
         self._out("morning", day=self.day, deaths=deaths)
@@ -597,11 +816,23 @@ class Game:
             leaders = [u for u, c in tally.items() if c == top]
             if len(leaders) == 1 and top > skips:
                 lynched = leaders[0]
-        if lynched is not None:
-            self._kill(lynched, "lynch", "day")
+        who = ", ".join(f"{self._name(v)}→{self._name(t) if t != 'skip' else 'o`tkazdi'}"
+                        for v, t in self.votes.items() if v in self.players)
+        if who:
+            self._log(f"🗳 Ovozlar: {who}")
+        if lynched is not None and self.veto_by is not None:
+            vname = self._name(self.veto_by)
+            self._feed(f"Ovozlar: {summary}. Sudya {vname} hukmni bekor qildi, hech kim osilmadi.", "info")
+            self._log(f"⚖️ Sudya {vname} {self._name(lynched)} hukmini bekor qildi")
+            self._out("no_lynch", day=self.day, summary=summary, veto=vname)
+        elif lynched is not None:
+            deaths = self._finalize_deaths([(lynched, "lynch")], "day")
             p = self.players[lynched]
-            info = {"uid": lynched, "name": p.name, "role": p.role, "summary": summary}
+            extra = deaths[1:]
+            info = {"uid": lynched, "name": p.name, "role": p.role, "summary": summary, "extra": extra}
             self._feed(f"Ovozlar: {summary}. {p.name} osildi — {ROLES[p.role]['emoji']} {ROLES[p.role]['name']}.", "lynch")
+            for d in extra:
+                self._feed(f"{d['name']} ham ketdi{NOTES.get(d['cause'], '')} — {ROLES[d['role']]['emoji']} {ROLES[d['role']]['name']}.", "death")
             self._out("lynch", day=self.day, **info)
         else:
             self._feed(f"Ovozlar: {summary}. Hech kim osilmadi.", "info")
@@ -613,14 +844,15 @@ class Game:
     def _check_win(self) -> bool:
         alive = self.alive_players()
         m = sum(1 for p in alive if p.team == "mafia")
-        mn = sum(1 for p in alive if p.team == "maniac")
-        t = len(alive) - m - mn
+        solos = Counter(p.team for p in alive if p.team in ("maniac", "vampire"))
+        sn = sum(solos.values())
+        t = len(alive) - m - sn
         winner = None
-        if m == 0 and mn == 0:
+        if m == 0 and sn == 0:
             winner = "town"
-        elif m == 0 and mn > 0 and t <= 1:
-            winner = "maniac"
-        elif m > 0 and m >= t + mn:
+        elif m == 0 and len(solos) == 1 and t <= 1:
+            winner = next(iter(solos))
+        elif m > 0 and m >= t + sn:
             winner = "mafia"
         if winner:
             self._finish(winner)
@@ -634,6 +866,22 @@ class Game:
         self._feed(f"O'yin tugadi. G'olib: {TEAM_NAMES[winner]}.", "end")
         self._bump()
         self._out("end", winner=winner)
+        if not self.stats_recorded:
+            self.stats_recorded = True
+            threading.Thread(target=self._record_stats, daemon=True).start()
+
+    def _record_stats(self) -> None:
+        try:
+            import mafia_stats
+            earned = mafia_stats.record_game(self)
+        except Exception as e:
+            print(f"[mafia] statistika yozilmadi: {e}")
+            return
+        if earned:
+            with LOCK:
+                self.earned = earned
+                self._out("achievements", earned={str(k): v for k, v in earned.items()})
+                self._bump()
 
     # ── tick ───────────────────────────────────────────────────────────
     def tick(self, now: float | None = None) -> None:
@@ -650,7 +898,8 @@ class Game:
                 if now >= self.deadline:
                     self._enter_night()
             elif self.phase == "night":
-                if now >= self.deadline or (now - self.phase_start >= NIGHT_MIN_SEC and self._night_complete()):
+                if now >= self.deadline or (now - self.phase_start >= min(NIGHT_MIN_SEC, self.settings["night_sec"] - 5)
+                                            and self._night_complete()):
                     self._resolve_night()
             elif self.phase == "day":
                 alive = len(self.alive_players())
@@ -658,7 +907,10 @@ class Game:
                     self._enter_vote()
             elif self.phase == "vote":
                 alive_ids = [p.uid for p in self.alive_players()]
-                if now >= self.deadline or all(u in self.votes for u in alive_ids):
+                all_in = all(u in self.votes or self.is_afk(self.players[u], now) for u in alive_ids)
+                judge_wait = any(p.role == "judge" and not p.judge_used and not p.is_bot for p in self.alive_players()) \
+                    and now - self.last_activity < 8
+                if now >= self.deadline or (all_in and not judge_wait):
                     self._resolve_vote()
 
     # ── botlar ─────────────────────────────────────────────────────────
@@ -707,6 +959,8 @@ class Game:
         opts = self.targets_for(bot)
         if not opts:
             return
+        if bot.role == "judge" and not bot.judge_used and random.random() < 0.2:
+            self.use_veto(bot.uid)
         known = [u for u, r in bot.checked.items() if r == "mafia" and u in opts]
         if known:
             self.set_vote(bot.uid, known[0])
@@ -775,7 +1029,7 @@ class Game:
         return viewer.team == "mafia" and p.team == "mafia"
 
     def _msg_visible(self, viewer: P | None, m: dict) -> bool:
-        if self.phase == "ended" or m["ch"] == "day":
+        if self.phase == "ended" or m["ch"] in ("day", "last"):
             return True
         if viewer is None:
             return False
@@ -789,6 +1043,7 @@ class Game:
         with LOCK:
             viewer = self.players.get(uid)
             now = time.time()
+            self.touch(uid)
             started = self.phase != "lobby"
             players = []
             for p in self.players.values():
@@ -801,6 +1056,7 @@ class Game:
                     "role_emoji": ROLES[p.role]["emoji"] if role_visible and p.role else None,
                     "team": p.team if role_visible else None,
                     "death": p.death if not p.alive else None,
+                    "afk": self.is_afk(p, now),
                 })
             me = None
             if viewer:
@@ -827,6 +1083,12 @@ class Game:
                     "ready": uid in self.ready,
                     "can_chat": self._can_chat(viewer),
                     "chat_channel": self._chat_channel(viewer),
+                    "lover": ({"uid": viewer.lover, "name": self._name(viewer.lover)}
+                              if viewer.lover is not None else None),
+                    "vow": viewer.vow if viewer.action == "vow" else None,
+                    "can_veto": bool(viewer.alive and viewer.role == "judge" and not viewer.judge_used
+                                     and self.phase == "vote" and self.veto_by is None),
+                    "can_last_word": self.can_last_word(viewer),
                 }
             votes = None
             if self.phase == "vote":
@@ -845,10 +1107,31 @@ class Game:
                 "ready_count": len(self.ready), "alive_count": len(self.alive_players()),
                 "winner": self.winner, "winner_name": TEAM_NAMES.get(self.winner) if self.winner else None,
                 "cancelled": self.cancelled,
+                "settings": self.settings,
+                "optional_roles": [{"role": r, "name": ROLES[r]["name"], "emoji": ROLES[r]["emoji"],
+                                    "disabled": r in self.settings.get("disabled", [])} for r in OPTIONAL_ROLES],
+                "limits": SETTING_LIMITS,
+                "spectator": viewer is None,
+                "watching": sum(1 for t in self.spectators.values() if now - t < 30),
+                "emojis": EMOJIS,
+                "reactions": [r for r in self.reactions if now - r["t"] <= REACTION_TTL][-12:],
+                "veto_by": self._name(self.veto_by) if self.veto_by is not None else None,
+                "recap": self._recap() if self.phase == "ended" and not self.cancelled else None,
                 "chat": [m for m in self.chat if self._msg_visible(viewer, m)][-80:],
                 "feed": self.feed[-40:],
                 "private": (self.private.get(uid) or [])[-12:],
             }
+
+    def _recap(self) -> dict:
+        """O'yin tugagach: kim kim edi va kim nima qildi."""
+        roster = [{"uid": p.uid, "name": p.name, "is_bot": p.is_bot, "alive": p.alive,
+                   "role": p.role, "role_name": ROLES[p.role]["name"], "role_emoji": ROLES[p.role]["emoji"],
+                   "team": p.team, "won": p.team == self.winner,
+                   "lover": self._name(p.lover) if p.lover is not None else None,
+                   "death": DEATH_LABELS.get(p.death["cause"], p.death["cause"]) if p.death else None,
+                   "death_day": p.death["day"] if p.death else None}
+                  for p in self.players.values()]
+        return {"roster": roster, "log": self.log[-120:]}
 
     def _chat_channel(self, viewer: P) -> str:
         if self.phase in ("lobby", "reveal", "ended"):
@@ -885,6 +1168,13 @@ def active_game(chat_id: int) -> Game | None:
     return None
 
 
+def find_game_for(uid: int) -> Game | None:
+    """Foydalanuvchi qatnashayotgan eng yangi tugamagan o'yin (Mini App'ga qayta kirish uchun)."""
+    with LOCK:
+        mine = [g for g in GAMES.values() if g.phase != "ended" and uid in g.players]
+        return max(mine, key=lambda g: g.created) if mine else None
+
+
 def tick_all() -> None:
     now = time.time()
     with LOCK:
@@ -913,9 +1203,10 @@ def drain_outbox() -> list[tuple["Game", dict]]:
 STATE_STORE, STATE_KEY = "mafia", "games"
 _SCALARS = ("gid", "chat_id", "chat_title", "host_id", "created", "last_activity", "phase", "day",
             "phase_start", "deadline", "duration", "winner", "cancelled", "ended_at", "version",
-            "lobby_msg_id", "_eid")
+            "lobby_msg_id", "_eid", "settings", "phase_no", "veto_by", "log", "stats_recorded")
 _PFIELDS = ("uid", "name", "username", "is_bot", "alive", "role", "last_heal", "self_healed",
-            "last_block", "death", "shots", "lucky_used")
+            "last_block", "death", "shots", "lucky_used", "lover", "bitten", "vow", "judge_used", "vetoed",
+            "sniper_hit_mafia", "lw_until", "last_word_used")
 _saved: dict[str, int] = {}
 _last_save = 0.0
 
@@ -950,6 +1241,9 @@ def _game_from_dict(d: dict) -> "Game":
     g.ready = set(d.get("ready", []))
     g.chat, g.feed = d.get("chat", []), d.get("feed", [])
     g.private = {int(k): v for k, v in d.get("private", {}).items()}
+    g.settings = {**DEFAULT_SETTINGS, **(g.settings or {})}
+    for p in g.players.values():
+        p.last_seen = time.time()          # qayta ishga tushgandan keyin hamma "faol"
     if g.phase not in ("lobby", "ended"):
         g.deadline = max(g.deadline, time.time() + 30)   # qayta ishga tushgandan keyin vaqt beramiz
     return g
