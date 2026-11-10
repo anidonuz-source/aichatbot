@@ -662,6 +662,64 @@ def api_admin_love_message():
     return jsonify(result)
 
 
+@app.route("/api/admin/send-user-message", methods=["POST"])
+def api_admin_send_user_message():
+    """Admin paneldan BITTA foydalanuvchiga o'zi yozgan xabarni (matn yoki rasm) yuborish.
+    Body: { initData, user_id, message?, photo?: dataURL }
+    """
+    import requests as rq, base64 as b64
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    user_id = str(body.get("user_id", "")).strip()
+    message = (body.get("message") or "").strip()
+    photo_data_url = body.get("photo", "") or ""
+    if not user_id or not user_id.lstrip("-").isdigit():
+        return jsonify({"error": "user_id noto'g'ri"}), 400
+    if not message and not photo_data_url:
+        return jsonify({"error": "Xabar yoki rasm kiriting"}), 400
+    if len(message) > 4000:
+        return jsonify({"error": "Xabar juda uzun (4000 belgigacha)"}), 400
+
+    photo_bytes = None
+    if photo_data_url.startswith("data:"):
+        try:
+            photo_bytes = b64.b64decode(photo_data_url.split(",", 1)[1])
+        except Exception:
+            return jsonify({"error": "Rasm o'qilmadi"}), 400
+    if photo_bytes and len(message) > 1024:
+        return jsonify({"error": "Rasm bilan yuborilganda matn 1024 belgidan oshmasin"}), 400
+
+    base = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+    try:
+        if photo_bytes:
+            r = rq.post(f"{base}/sendPhoto",
+                        data={"chat_id": int(user_id), "caption": message, "parse_mode": "HTML"},
+                        files={"photo": ("p.jpg", photo_bytes, "image/jpeg")}, timeout=20)
+        else:
+            r = rq.post(f"{base}/sendMessage",
+                        json={"chat_id": int(user_id), "text": message, "parse_mode": "HTML"}, timeout=10)
+        data = r.json()
+        # HTML teg xato bo'lsa — oddiy matn sifatida qayta urinamiz
+        if not data.get("ok") and "parse entities" in (data.get("description") or "").lower():
+            if photo_bytes:
+                r = rq.post(f"{base}/sendPhoto", data={"chat_id": int(user_id), "caption": message},
+                            files={"photo": ("p.jpg", photo_bytes, "image/jpeg")}, timeout=20)
+            else:
+                r = rq.post(f"{base}/sendMessage", json={"chat_id": int(user_id), "text": message}, timeout=10)
+            data = r.json()
+    except Exception as e:
+        return jsonify({"sent": False, "error": f"Ulanish xatosi: {e}"}), 502
+
+    ok = bool(data.get("ok"))
+    admin_store.record_broadcast(f"DM {user_id}{'📷' if photo_bytes else ''}: {message[:80]}",
+                                 1 if ok else 0, 0 if ok else 1)
+    if ok:
+        return jsonify({"sent": True})
+    return jsonify({"sent": False, "error": data.get("description", "Telegram xatosi")}), 400
+
+
 @app.route("/api/admin/broadcast-history", methods=["POST"])
 def api_admin_broadcast_history():
     """Return recent broadcast history for the admin panel."""
