@@ -942,6 +942,30 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
   </div>
 </div>
 
+<!-- Bitta userga xabar yozish -->
+<div id="dmModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeDm()">
+  <div class="modal" style="position:relative">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeDm()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-title" id="dmTitle">Xabar yozish</div>
+    <div class="broadcast-panel" style="border:none;padding:0;background:none;margin:0">
+      <textarea id="dmMsg" placeholder="Xabar matni… (HTML teglar qo'llab-quvvatlanadi)"></textarea>
+      <div style="margin-top:8px;">
+        <label class="photo-upload-btn" for="dmPhotoInput">📷 Rasm biriktirish (ixtiyoriy)</label>
+        <input type="file" id="dmPhotoInput" accept="image/*" style="display:none" onchange="previewPhoto('dmPhotoInput','dmPhotoPreview')">
+        <img id="dmPhotoPreview" class="photo-preview" alt="">
+        <button id="dmPhotoClear" style="display:none;margin-top:4px;font-size:11px;color:var(--danger);background:none;border:none;cursor:pointer;padding:0" onclick="clearPhoto('dmPhotoInput','dmPhotoPreview','dmPhotoClear')">✕ Rasmni olib tashlash</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <span id="dmResult" style="font-size:12px;color:var(--subtext);flex:1"></span>
+        <button class="action-btn prem" id="dmSendBtn" onclick="sendDm()">Yuborish</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="bulkBar"><span id="bulkN">0 tanlandi</span><button onclick="bulkRun('block')">🚫 Blok</button><button onclick="bulkRun('unblock')">✅ Ochish</button><button class="pr" onclick="bulkRun('premium')">⭐ 30 kun</button><button onclick="setBulk(false)">✕</button></div>
 <div id="cmd"><div id="cmdBox"><input id="cmdIn" placeholder="Foydalanuvchi yoki guruh qidirish…" autocomplete="off"><div id="cmdRes"></div></div></div>
 
@@ -1401,6 +1425,13 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
     loveBtn2.textContent = '💌 Sevgi izhori';
     loveBtn2.addEventListener('click', function() { window.openLoveModal(String(u.id), u.name); });
 
+    const dmBtn = document.createElement('button');
+    dmBtn.className = 'action-btn';
+    dmBtn.style.cssText = 'flex:1 1 100%;background:var(--brass);color:#fff;border-color:var(--brass)';
+    dmBtn.textContent = '✉️ Xabar yozish';
+    dmBtn.addEventListener('click', function() { openDm(String(u.id), u.name); });
+
+    actionsEl.appendChild(dmBtn);
     actionsEl.appendChild(premBtn);
     actionsEl.appendChild(blkBtn);
     actionsEl.appendChild(loveBtn2);
@@ -1711,6 +1742,40 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
   }
 
   const askConfirm = msg => new Promise(r => (tg && tg.showConfirm) ? tg.showConfirm(msg, r) : r(confirm(msg)));
+
+  /* ── Bitta userga xabar yozish ───────────────────────────────────────── */
+  let dmUserId = null;
+  function openDm(id, name) {
+    dmUserId = id;
+    document.getElementById('dmTitle').textContent = '✉️ ' + (name || id) + 'ga xabar';
+    document.getElementById('dmMsg').value = '';
+    document.getElementById('dmResult').textContent = '';
+    clearPhoto('dmPhotoInput', 'dmPhotoPreview', 'dmPhotoClear');
+    document.getElementById('dmModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('dmMsg').focus(), 50);
+  }
+  function closeDm() { document.getElementById('dmModal').style.display = 'none'; dmUserId = null; }
+  async function sendDm() {
+    const msg = document.getElementById('dmMsg').value.trim();
+    const photo = getPhotoDataUrl('dmPhotoInput');
+    if (!msg && !photo) { showToast('Xabar yoki rasm kiriting', true); return; }
+    const btn = document.getElementById('dmSendBtn');
+    const res = document.getElementById('dmResult');
+    btn.disabled = true; btn.textContent = 'Yuborilyapti…'; res.textContent = '';
+    try {
+      const body = { user_id: dmUserId, message: msg };
+      if (photo) body.photo = photo;
+      const r = await api('/api/admin/send-user-message', body);
+      if (r.sent) {
+        showToast('Xabar yuborildi ✓');
+        closeDm();
+      } else {
+        res.style.color = 'var(--danger)';
+        res.textContent = '❌ ' + (r.error || "Yuborib bo'lmadi");
+      }
+    } catch { showToast("Yuborib bo'lmadi", true); }
+    finally { btn.disabled = false; btn.textContent = 'Yuborish'; }
+  }
 
   /* ── Broadcast — users ──────────────────────────────────────────────── */
   function updateUBroadcastCount() {
