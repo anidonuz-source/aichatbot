@@ -799,6 +799,14 @@ new MutationObserver(()=>{const t=document.getElementById('tnum');if(t&&t.classL
 new MutationObserver(()=>{if(document.getElementById('ovr').classList.contains('on'))pl('hit')}).observe(document.getElementById('ovr'),{attributes:1,attributeFilter:['class']});
 const eb=document.getElementById('endbox');new MutationObserver(()=>{if(!document.getElementById('ove').classList.contains('on')||eb.querySelector('.np'))return;const m=eb.querySelector('.mut'),b=eb.querySelector('.big');if(!m||!b||!/G'OLIB|ПОБЕД/i.test(m.textContent))return;const h=document.createElement('div');h.className='np';h.innerHTML=`<b>MAFIA TIMES</b><i>${new Date().toLocaleDateString()}</i><h3>${RU?'Экстренный выпуск':'Maxsus son'}: ${b.textContent}</h3>`;eb.prepend(h);pl('hit')}).observe(document.getElementById('ove'),{attributes:1,attributeFilter:['class']});
 
+const T=window.Telegram&&Telegram.WebApp;
+if(T&&T.requestFullscreen&&T.isVersionAtLeast&&T.isVersionAtLeast('8.0')&&!/^(android|ios)$/.test(T.platform||'')){
+const b=document.createElement('button');b.className='chip';b.id='fsb';b.setAttribute('aria-label','Fullscreen');b.innerHTML=P('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>');document.getElementById('snd').before(b);
+b.onclick=()=>{try{T.isFullscreen?T.exitFullscreen():T.requestFullscreen()}catch(e){}};
+const ins=()=>{const a=(T.safeAreaInset||{}).top||0,c=(T.contentSafeAreaInset||{}).top||0;document.documentElement.style.setProperty('--sat',T.isFullscreen&&a+c>0?(a+c)+'px':'')};
+['fullscreenChanged','safeAreaChanged','contentSafeAreaChanged'].forEach(e=>T.onEvent(e,ins));
+try{T.requestFullscreen()}catch(e){}}
+
 const kf=()=>{const e=document.getElementById('table');e&&document.documentElement.style.setProperty('--k',Math.min(1.9,Math.max(1,e.offsetWidth/360)).toFixed(2))};kf();addEventListener('resize',kf);window.ResizeObserver&&new ResizeObserver(kf).observe(document.getElementById('table'));
 })();</script>
 {% endraw %}
