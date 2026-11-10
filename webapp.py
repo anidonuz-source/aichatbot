@@ -19,6 +19,7 @@ from flask import Flask, jsonify, render_template, request
 
 import admin_store
 import ai_core
+import misumi_info
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
@@ -108,7 +109,7 @@ def index():
     return render_template(
         "index.html",
         bot_name=ai_core.BOT_NAME,
-        author=ai_core.AUTHOR_HANDLE,
+        author=misumi_info.SUPPORT,  # Pro/Max olish tugmasi support'ga olib boradi
         channel=ai_core.CHANNEL_HANDLE,
         model_tiers_json=json.dumps(list(ai_core.MODEL_TIERS.values())),
         default_model=ai_core.DEFAULT_MODEL,
