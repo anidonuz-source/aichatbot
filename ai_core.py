@@ -52,6 +52,7 @@ from google.genai import types
 import admin_store
 import db
 import memory_manager as mem
+import misumi_info
 import sticker_store
 
 BOT_NAME = "Misumi AI"
@@ -441,7 +442,7 @@ FLASH_CLAUSE = f"""
 Hozir {MODEL_TIERS['flash']['label']} sifatida ishlamoqdasan ({MODEL_TIERS['flash']['tagline']}).
 Agar foydalanuvchi katta, murakkab kod so'rasa — to'liq script, bot, app, yoki ko'p funksiyali
 dastur — yozma. Uning o'rniga o'z uslubingda kesatib ayt: bu Pro / Max ishi, bepul versiya
-shuncha, {AUTHOR_HANDLE} ga yoz. Har safar boshqacha iborada, mazax bilan ayt.
+shuncha, obuna uchun {misumi_info.SUPPORT} ga yoz. Har safar boshqacha iborada, mazax bilan ayt.
 Kichik narsalar yaxshi: bitta liner, ~10 qatordan kam snippet, xato tuzatish, tushuntirish.
 """
 
@@ -613,7 +614,10 @@ def build_system_prompt(model: str, user_id: str | None = None) -> str:
         mood_key = _get_or_assign_mood(str(user_id))
         mood_info = MOODS[mood_key]
         mood_clause = f"\n\nCURRENT MOOD: {mood_info['clause']}\n"
-    return base + mood_clause + tier_clause + MODEL_SELF_AWARENESS_CLAUSE
+    return (
+        base + mood_clause + tier_clause + MODEL_SELF_AWARENESS_CLAUSE
+        + misumi_info.identity_clause(user_id)
+    )
 
 
 STICKER_TAG_RE = re.compile(r"⟦STICKER:([a-zA-Z_]+)⟧")
