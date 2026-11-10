@@ -25,32 +25,37 @@ def _empty() -> dict:
     return {"maintenance": False, "blocked": [], "premium": [], "users": {}, "broadcasts": []}
 
 
+_STORE = "admin"
+_KEY = "data"
+
+
 def _load() -> dict:
-    if not STORE_FILE.exists():
+    """Postgres'dan o'qiydi (Render diski har restartda o'chadi).
+    Baza xatosida bo'sh dict QAYTARMAYDI — aks holda keyingi _save() hamma
+    statistikani o'chirib yuborardi. Xato ko'tariladi."""
+    import db
+    data = db.load_migrating(_STORE, _KEY, STORE_FILE, None)
+    if not isinstance(data, dict):
         return _empty()
-    try:
-        data = json.loads(STORE_FILE.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return _empty()
-        base = _empty()
-        base.update(data)
-        return base
-    except Exception as e:
-        print(f"[AdminStore] Load error: {e}")
-        return _empty()
+    base = _empty()
+    base.update(data)
+    return base
 
 
 def _save(data: dict) -> None:
+    import db
     with _lock:
-        STORE_FILE.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        db.save(_STORE, _KEY, data)
 
 
 def record_message(user_id, name: str | None = None, source: str = "telegram") -> None:
     """Call once per incoming user message to keep stats fresh."""
     user_id = str(user_id)
-    data = _load()
+    try:
+        data = _load()
+    except Exception as e:
+        print(f"[AdminStore] record_message: baza o'qilmadi, o'tkazib yuborildi: {e}")
+        return
     users = data.setdefault("users", {})
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     entry = users.get(user_id) or {"first_seen": now, "message_count": 0}
@@ -60,19 +65,31 @@ def record_message(user_id, name: str | None = None, source: str = "telegram") -
     if name:
         entry["name"] = name
     users[user_id] = entry
-    _save(data)
+    try:
+        _save(data)
+    except Exception as e:
+        print(f"[AdminStore] record_message: saqlanmadi: {e}")
 
 
 def is_blocked(user_id) -> bool:
-    return str(user_id) in _load().get("blocked", [])
+    try:
+        return str(user_id) in _load().get("blocked", [])
+    except Exception:
+        return False
 
 
 def is_premium(user_id) -> bool:
-    return str(user_id) in _load().get("premium", [])
+    try:
+        return str(user_id) in _load().get("premium", [])
+    except Exception:
+        return False
 
 
 def is_maintenance() -> bool:
-    return bool(_load().get("maintenance", False))
+    try:
+        return bool(_load().get("maintenance", False))
+    except Exception:
+        return False
 
 
 def set_maintenance(value: bool) -> bool:
