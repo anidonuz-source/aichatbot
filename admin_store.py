@@ -10,7 +10,7 @@ group bot. Not meant for high-concurrency production use.
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 
@@ -19,6 +19,11 @@ STORE_DIR.mkdir(parents=True, exist_ok=True)
 STORE_FILE = STORE_DIR / "_admin_data.json"
 
 _lock = Lock()
+_TZ = timezone(timedelta(hours=5))  # Toshkent
+
+
+def _today() -> str:
+    return datetime.now(_TZ).strftime("%Y-%m-%d")
 
 
 def _empty() -> dict:
@@ -65,6 +70,17 @@ def record_message(user_id, name: str | None = None, source: str = "telegram") -
     if name:
         entry["name"] = name
     users[user_id] = entry
+    try:
+        if int(user_id) > 0:  # guruhlar kunlik foydalanuvchi sonini buzmasin
+            daily = data.setdefault("daily", {})
+            day = daily.setdefault(_today(), {"m": 0, "u": []})
+            day["m"] += 1
+            if user_id not in day["u"]:
+                day["u"].append(user_id)
+            for k in sorted(daily)[:-14]:  # faqat oxirgi 14 kun
+                daily.pop(k, None)
+    except ValueError:
+        pass
     try:
         _save(data)
     except Exception as e:
@@ -131,25 +147,44 @@ def toggle_premium(user_id) -> bool:
     return state
 
 
+def get_activity(data: dict, days: int = 7) -> list[dict]:
+    """Oxirgi `days` kun: [{date, messages, users}] (Toshkent kunlari, eskidan yangiga)."""
+    daily = data.get("daily", {})
+    out = []
+    for n in range(days - 1, -1, -1):
+        d = (datetime.now(_TZ) - timedelta(days=n)).strftime("%Y-%m-%d")
+        e = daily.get(d, {})
+        out.append({"date": d, "messages": e.get("m", 0), "users": len(e.get("u", []))})
+    return out
+
+
 def get_stats() -> dict:
     data = _load()
-    users = data.get("users", {})
+    people = {k: v for k, v in data.get("users", {}).items() if not k.startswith("-")}
+    groups = len(data.get("users", {})) - len(people)
+    activity = get_activity(data)
     return {
-        "total_users": len(users),
-        "total_messages": sum(u.get("message_count", 0) for u in users.values()),
+        "total_users": len(people),
+        "total_groups": groups,
+        "total_messages": sum(u.get("message_count", 0) for u in people.values()),
+        "today_messages": activity[-1]["messages"],
+        "today_users": activity[-1]["users"],
+        "activity": activity,
         "maintenance": data.get("maintenance", False),
         "blocked_count": len(data.get("blocked", [])),
         "premium_count": len(data.get("premium", [])),
     }
 
 
-def get_users(limit: int = 300) -> list[dict]:
+def get_users(limit: int = 3000) -> list[dict]:
     data = _load()
     users = data.get("users", {})
     blocked = set(data.get("blocked", []))
     premium = set(data.get("premium", []))
     result = []
     for uid, info in users.items():
+        if uid.startswith("-"):
+            continue  # guruhlar alohida tabda
         result.append(
             {
                 "id": uid,
