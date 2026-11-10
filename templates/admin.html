@@ -647,6 +647,28 @@ body.maint header{box-shadow:0 2px 0 var(--danger)}
 body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--danger);font-weight:700}
 .kbd{display:none}
 @media (min-width:900px){.kbd{display:block;margin-top:6px;font-size:11px;color:var(--paper-dim)}.kbd b{padding:1px 6px;border:1px solid var(--hairline-strong);border-radius:6px;font-weight:600;color:var(--paper)}}
+
+/* ===== v5 ===== */
+.user-card.sel{outline:2px solid var(--brass);background:var(--panel-2)}
+body.bulk .user-actions{display:none}
+#bulkBar{position:fixed;left:50%;bottom:calc(84px + var(--safe-bottom));transform:translateX(-50%);z-index:70;display:none;align-items:center;gap:6px;padding:8px;border-radius:18px;background:var(--glass2);backdrop-filter:blur(18px);border:1px solid var(--hairline-strong);box-shadow:0 14px 40px rgba(0,0,0,.5);white-space:nowrap}
+body.bulk #bulkBar{display:flex}
+#bulkBar span{font-size:12px;font-weight:700;padding:0 8px}
+#bulkBar button{padding:9px 11px;border-radius:11px;border:1px solid var(--hairline-strong);background:var(--ink-2);color:var(--paper);font-size:12px;font-weight:600;cursor:pointer}
+#bulkBar .pr{background:var(--brass);color:var(--on);border-color:var(--brass)}
+@media (min-width:900px){ #bulkBar{bottom:26px} }
+#cmd{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:none;align-items:flex-start;justify-content:center;padding-top:12vh}
+#cmd.on{display:flex}
+#cmdBox{width:min(520px,calc(100% - 24px));background:var(--panel);border:1px solid var(--hairline-strong);border-radius:20px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55);animation:slideUp .2s ease}
+#cmdIn{width:100%;padding:16px 18px;background:transparent;border:0;border-bottom:1px solid var(--hairline);color:var(--paper);font-size:16px;outline:none}
+.cmd-r{display:flex;justify-content:space-between;gap:10px;padding:12px 18px;cursor:pointer;font-size:14px}
+.cmd-r:hover{background:var(--panel-2)}
+.cmd-r small{color:var(--paper-dim)}
+.rng{margin-left:8px;border:1px solid var(--hairline-strong);background:transparent;color:var(--brass);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;cursor:pointer}
+.bar-chart.r14{gap:4px}.r14 .bval{display:none}.r14 .bday{font-size:9px}
+.tpl button{flex:0 0 44px}.tpl select{flex:1 1 auto}
+.tpl .cnt{font-size:11px;color:var(--paper-dim);align-self:center;white-space:nowrap}
+.titles .sub{cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -669,6 +691,7 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     <button class="icon-btn" id="historyBtn" title="Broadcast tarixi" onclick="toggleHistory()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     </button>
+    <button class="icon-btn" id="cmdBtn" title="Qidirish (Ctrl+K)" style="font-size:16px">🔍</button>
     <button class="icon-btn" id="themeBtn" title="Tema" style="font-size:17px">🎨</button>
     <button class="icon-btn" id="refreshBtn" title="Yangilash">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -782,10 +805,11 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
         </div>
         <div class="kbd"><b>/</b> qidirish &nbsp;<b>1</b><b>2</b><b>3</b> bo'limlar &nbsp;<b>R</b> yangilash &nbsp;<b>T</b> tema</div>
         <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
-        <div class="tools"><select id="sortSel"><option value="seen">So'nggi faol</option><option value="msgs">Eng ko'p xabar</option><option value="new">Yangi qo'shilgan</option></select><button id="csvBtn" type="button">⬇ CSV</button></div>
+        <div class="tools"><select id="sortSel"><option value="seen">So'nggi faol</option><option value="msgs">Eng ko'p xabar</option><option value="new">Yangi qo'shilgan</option></select><button id="csvBtn" type="button">⬇ CSV</button><button id="bulkBtn" type="button">☑ Tanlash</button></div>
         <div class="filter-tabs" id="filterTabs">
           <button class="filter-tab active" data-filter="all">Hammasi</button>
           <button class="filter-tab" data-filter="today">🟢 Bugun</button>
+          <button class="filter-tab" data-filter="idle">😴 7+ kun</button>
           <button class="filter-tab" data-filter="premium">⭐ Premium</button>
           <button class="filter-tab" data-filter="blocked">🚫 Bloklangan</button>
           <button class="filter-tab" data-filter="miniapp">📱 Sayt/Mini App</button>
@@ -1032,17 +1056,19 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     `;
     maintenanceToggle.checked = !!stats.maintenance;
     document.body.classList.toggle('maint', !!stats.maintenance);
+    window.__tu = stats.total_users;
     countUp();
     statsGrid.classList.add('settled');
     renderActivityChart(stats.activity || []);
     renderHero(stats);
     renderTop();
     renderPrem();
+    renderFeed();
   }
 
   let _heroPrev = 0;
   function renderHero(s) {
-    const act = s.activity || [];
+    const act = (s.activity || []).slice(-7);
     let el = document.getElementById('hero'), first = !el;
     if (first) { el = document.createElement('div'); el.id = 'hero'; el.className = 'hero'; statsGrid.before(el); }
     const max = Math.max(...act.map(a => a.messages), 1);
@@ -1105,6 +1131,41 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     }).join('');
   }
 
+  const bulkSel = new Set();
+  function updBulk() { document.getElementById('bulkN').textContent = bulkSel.size + ' tanlandi'; }
+  function setBulk(on) { document.body.classList.toggle('bulk', on); if (!on) bulkSel.clear(); updBulk(); applyFilter(); }
+  function cardClick(id) {
+    if (!document.body.classList.contains('bulk')) return openUserModal(id);
+    if (bulkSel.has(id)) bulkSel.delete(id); else bulkSel.add(id);
+    const c = usersList.querySelector('.user-card[data-id="' + id + '"]'); if (c) c.classList.toggle('sel', bulkSel.has(id));
+    updBulk(); tg?.HapticFeedback?.selectionChanged();
+  }
+  async function bulkRun(kind) {
+    const ids = [...bulkSel];
+    if (!ids.length) { showToast('Hech kim tanlanmadi', true); return; }
+    if (!(await askConfirm(ids.length + ' ta foydalanuvchiga amal bajarilsinmi?'))) return;
+    let ok = 0;
+    for (const id of ids) {
+      const u = allUsers.find(x => x.id === id);
+      try {
+        if (kind === 'block' && u && !u.blocked) await api('/api/admin/toggle-block', { user_id: id });
+        else if (kind === 'unblock' && u && u.blocked) await api('/api/admin/toggle-block', { user_id: id });
+        else if (kind === 'premium') await api('/api/admin/set-premium', { user_id: id, days: 30 });
+        ok++;
+      } catch (_) {}
+    }
+    showToast(ok + ' ta bajarildi ✓'); setBulk(false); load(true);
+  }
+
+  function renderFeed() {
+    const f = [...allUsers].sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || '')).slice(0, 6);
+    const a = document.getElementById('activityChart');
+    if (!f.length || !a) return;
+    let el = document.getElementById('feedBox');
+    if (!el) { el = document.createElement('div'); el.id = 'feedBox'; el.className = 'blk'; a.after(el); }
+    el.innerHTML = '<h4>Jonli lenta</h4>' + f.map(u => `<div class="sys-row" style="cursor:pointer" onclick="cardClick('${u.id}')"><span class="d"></span><span>${escapeHtml(u.name)}</span><span class="m">${relativeTime(u.last_seen)}</span></div>`).join('');
+  }
+
   const _prevNums = {};
   const _fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   function countUp() {
@@ -1122,8 +1183,10 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     });
   }
 
-  function renderActivityChart(act) {
+  let _range = 7;
+  function renderActivityChart(act, anim) {
     if (!act.length) return;
+    window._act = act; act = act.slice(-_range);
     const first = !document.getElementById('activityChart');
     const wd = ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Sh', 'Ya'];
     const max = Math.max(...act.map(a => a.messages), 1);
@@ -1131,10 +1194,10 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     const last = act.length - 1;
     const el = document.getElementById('activityChart') || document.createElement('div');
     el.id = 'activityChart';
-    el.className = 'act-card' + (first ? ' fresh' : '');
+    el.className = 'act-card' + (first || anim ? ' fresh' : '');
     el.innerHTML = `
-      <div class="act-head"><span>Oxirgi 7 kun</span><span><b>${_fmt(sum)}</b> xabar</span></div>
-      <div class="bar-chart">${act.map((a, i) => `
+      <div class="act-head"><span>Oxirgi ${_range} kun<button class="rng" type="button">${_range === 7 ? '14 kun' : '7 kun'}</button></span><span><b>${_fmt(sum)}</b> xabar</span></div>
+      <div class="bar-chart r${act.length}">${act.map((a, i) => `
         <div class="bcol${i === last ? ' t' : ''}" title="${a.date}: ${a.messages} xabar, ${a.users} foydalanuvchi">
           <div class="bval">${a.messages || ''}</div>
           <div class="bar${i === last ? ' today' : ''}" style="--h:${Math.max(4, Math.round(a.messages / max * 100))}%"></div>
@@ -1157,7 +1220,7 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
       return;
     }
     usersList.innerHTML = users.slice(0, userPage * 50).map((u, i) => `
-      <div class="user-card" data-id="${u.id}" style="animation-delay:${Math.min(i * 0.03, 0.3)}s" onclick="openUserModal('${u.id}')">
+      <div class="user-card${bulkSel.has(u.id) ? ' sel' : ''}" data-id="${u.id}" style="animation-delay:${Math.min(i * 0.03, 0.3)}s" onclick="cardClick('${u.id}')">
         <div class="user-top">
           <div class="user-id-row">
             <div class="avatar">${escapeHtml(initials(u.name))}</div>
@@ -1189,6 +1252,7 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     let list = allUsers;
     if (currentFilter === 'premium') list = list.filter(u => u.premium);
     else if (currentFilter === 'today') list = list.filter(u => (u.last_seen || '').startsWith(new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tashkent' })));
+    else if (currentFilter === 'idle') list = list.filter(u => !u.last_seen || Date.now() - new Date(u.last_seen.replace(' ', 'T') + '+05:00') > 7 * 864e5);
     else if (currentFilter === 'blocked') list = list.filter(u => u.blocked);
     else if (currentFilter === 'miniapp') list = list.filter(u => u.source === 'miniapp' || u.source === 'web');
     if (q) list = list.filter(u => u.name.toLowerCase().includes(q) || u.id.includes(q));
@@ -1282,6 +1346,12 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     actionsEl.appendChild(premBtn);
     actionsEl.appendChild(blkBtn);
     actionsEl.appendChild(loveBtn2);
+    actionsEl.style.flexWrap = 'wrap';
+    const cp = document.createElement('button'); cp.className = 'action-btn'; cp.style.flex = '1'; cp.textContent = '📋 ID nusxalash';
+    cp.addEventListener('click', () => { navigator.clipboard?.writeText(String(u.id)); showToast('ID nusxalandi ✓'); });
+    const op = document.createElement('button'); op.className = 'action-btn'; op.style.flex = '1'; op.textContent = '↗ Telegramda ochish';
+    op.addEventListener('click', () => window.open('tg://user?id=' + u.id, '_blank'));
+    actionsEl.appendChild(cp); actionsEl.appendChild(op);
 
     document.getElementById('userModal').style.display = 'flex';
   }
@@ -1477,6 +1547,8 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
       if (groupMemberFilter === 'unknown') return g.is_member === null || g.is_member === undefined;
       return true;
     });
+    const gs = document.getElementById('gSort');
+    if (gs) filtered.sort((a, b) => gs.value === 'msgs' ? b.message_count - a.message_count : (b.last_seen || '').localeCompare(a.last_seen || ''));
     document.getElementById('groupCount').textContent = allGroups.length + ' ta guruh';
     const el = document.getElementById('groupsList');
     if (!filtered.length) {
@@ -1719,20 +1791,84 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
     else if (k === '1' || k === '2' || k === '3') switchMainTab(['users', 'groups', 'broadcast'][+k - 1]);
   });
 
+  /* ── Ommaviy tanlash ───────────────────────────────────────────────── */
+  document.getElementById('bulkBtn').addEventListener('click', () => setBulk(!document.body.classList.contains('bulk')));
+
+  /* ── Qidiruv paneli (Ctrl+K) ───────────────────────────────────────── */
+  const cmd = document.getElementById('cmd'), cmdIn = document.getElementById('cmdIn'), cmdRes = document.getElementById('cmdRes');
+  async function openCmd() { cmd.classList.add('on'); cmdIn.value = ''; cmdIn.focus(); cmdRender(); if (!allGroups.length) { await loadGroups(); cmdRender(); } }
+  function cmdRender() {
+    const q = cmdIn.value.trim().toLowerCase();
+    const us = allUsers.filter(u => !q || u.name.toLowerCase().includes(q) || u.id.includes(q)).slice(0, 6);
+    const gs = allGroups.filter(g => q && (g.title.toLowerCase().includes(q) || g.id.includes(q))).slice(0, 4);
+    cmdRes.innerHTML = (us.map(u => `<div class="cmd-r" data-u="${u.id}"><span>${escapeHtml(u.name)}</span><small>${u.id}</small></div>`).join('') + gs.map(g => `<div class="cmd-r" data-g="${g.id}"><span>👥 ${escapeHtml(g.title)}</span><small>${g.id}</small></div>`).join('')) || '<div class="cmd-r"><small>Topilmadi</small></div>';
+  }
+  function cmdGo(el) { if (!el) return; cmd.classList.remove('on'); if (el.dataset.u) openUserModal(el.dataset.u); else if (el.dataset.g) showGroupInfo(el.dataset.g); }
+  cmdIn.addEventListener('input', cmdRender);
+  cmdIn.addEventListener('keydown', e => { if (e.key === 'Enter') cmdGo(cmdRes.querySelector('[data-u],[data-g]')); });
+  cmdRes.addEventListener('click', e => cmdGo(e.target.closest('[data-u],[data-g]')));
+  cmd.addEventListener('click', e => { if (e.target === cmd) cmd.classList.remove('on'); });
+  document.getElementById('cmdBtn').addEventListener('click', openCmd);
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCmd(); }
+    else if (e.key === 'Escape') { cmd.classList.remove('on'); closeUserModal(); }
+  });
+  document.addEventListener('click', e => { if (e.target.closest('.rng')) { _range = _range === 7 ? 14 : 7; renderActivityChart(window._act || [], true); } });
+
+  /* ── Broadcast shablonlari + belgilar soni ─────────────────────────── */
+  ['uBroadcastMsg', 'broadcastMsg'].forEach(id => {
+    const ta = document.getElementById(id); if (!ta) return;
+    const rd = () => { try { return JSON.parse(localStorage.getItem('mAdminTpl') || '[]'); } catch (_) { return []; } };
+    const wr = arr => { try { localStorage.setItem('mAdminTpl', JSON.stringify(arr.slice(0, 20))); } catch (_) {} };
+    const bar = document.createElement('div'); bar.className = 'tools tpl';
+    bar.innerHTML = '<select></select><button type="button">💾</button><button type="button">🗑</button><span class="cnt"></span>';
+    ta.before(bar);
+    const sel = bar.children[0], sv = bar.children[1], dl = bar.children[2], cnt = bar.children[3];
+    const fill = () => { sel.innerHTML = '<option value="">📝 Shablonlar…</option>' + rd().map((t, i) => `<option value="${i}">${escapeHtml(t.slice(0, 40))}</option>`).join(''); };
+    const upd = () => { cnt.textContent = ta.value.length + ' belgi'; };
+    fill(); upd();
+    sel.addEventListener('change', () => { if (sel.value !== '') { ta.value = rd()[+sel.value] || ''; upd(); } });
+    sv.addEventListener('click', () => { const t = ta.value.trim(); if (!t) return; const arr = rd().filter(x => x !== t); arr.unshift(t); wr(arr); fill(); showToast('Shablon saqlandi ✓'); });
+    dl.addEventListener('click', () => { if (sel.value === '') return; const arr = rd(); arr.splice(+sel.value, 1); wr(arr); fill(); });
+    ta.addEventListener('input', upd);
+  });
+
+  /* ── Guruhlar: saralash, CSV, a'zolarni tanlash ────────────────────── */
+  (function () {
+    const bar = document.createElement('div'); bar.className = 'tools';
+    bar.innerHTML = '<select id="gSort"><option value="seen">So\'nggi faol</option><option value="msgs">Eng ko\'p xabar</option></select><button id="gCsv" type="button">⬇ CSV</button><button id="gMem" type="button">✅ A\'zolar</button>';
+    document.getElementById('groupFilterTabs').before(bar);
+    document.getElementById('gSort').addEventListener('change', renderGroups);
+    document.getElementById('gMem').addEventListener('click', () => {
+      selectedGroupIds = new Set(allGroups.filter(g => g.is_member === true).map(g => g.id));
+      document.getElementById('broadcastAll').checked = false; renderGroups(); updateBroadcastCount();
+      showToast(selectedGroupIds.size + ' ta guruh tanlandi (faqat a\'zo)');
+    });
+    document.getElementById('gCsv').addEventListener('click', () => {
+      const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      const rows = [['id', 'nom', 'xabarlar', 'oxirgi', 'azo'], ...allGroups.map(g => [g.id, g.title, g.message_count, g.last_seen, g.is_member])];
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' }));
+      a.download = 'misumi-groups.csv'; a.click(); showToast('CSV tayyor ✓');
+    });
+  })();
+
   load(false);
 
   /* ── Jonli yangilanish (15 soniya) ─────────────────────────────────── */
   let _sig = '';
   function setLive(ok) {
     document.getElementById('liveDot').classList.toggle('off', !ok);
-    document.getElementById('liveTxt').textContent = ok ? 'Jonli' : "Aloqa yo'q";
+    document.getElementById('liveTxt').textContent = ok ? (_pollMs ? 'Jonli · ' + _pollMs / 1000 + ' s' : 'Pauza') : "Aloqa yo'q";
   }
   async function livePoll() {
     if (document.hidden || dashEl.style.display === 'none') return;
     try {
       const [stats, ur] = await Promise.all([api('/api/admin/stats', {}), api('/api/admin/users', {})]);
+      const prevTu = window.__tu;
       allUsers = ur.users || allUsers;
       renderStats(stats);
+      if (prevTu != null && stats.total_users > prevTu) { const nu = [...allUsers].sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''))[0]; showToast('🎉 Yangi foydalanuvchi: ' + (nu ? nu.name : '')); }
       const sig = allUsers.length + ':' + stats.total_messages + ':' + stats.premium_count + ':' + stats.blocked_count;
       if (sig !== _sig && currentTab === 'users' && !modalUserId) applyFilter();
       _sig = sig;
@@ -1740,7 +1876,12 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
       loadSys();
     } catch { setLive(false); }
   }
-  setInterval(livePoll, 15000);
+  let _pollMs = 15000, _pollT = setInterval(livePoll, 15000);
+  document.querySelector('.titles .sub').addEventListener('click', () => {
+    _pollMs = _pollMs === 15000 ? 60000 : _pollMs === 60000 ? 0 : 15000;
+    clearInterval(_pollT); if (_pollMs) _pollT = setInterval(livePoll, _pollMs);
+    setLive(true); showToast(_pollMs ? 'Yangilanish: ' + _pollMs / 1000 + ' soniya' : 'Avto-yangilanish to\'xtatildi');
+  });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) livePoll(); });
 
   /* ── Love confession — eski kod o'chirildi, yangi versiya quyida ── */
@@ -1859,6 +2000,8 @@ body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--
 
 </script>
 
+<div id="bulkBar"><span id="bulkN">0 tanlandi</span><button onclick="bulkRun('block')">🚫 Blok</button><button onclick="bulkRun('unblock')">✅ Ochish</button><button class="pr" onclick="bulkRun('premium')">⭐ 30 kun</button><button onclick="setBulk(false)">✕</button></div>
+<div id="cmd"><div id="cmdBox"><input id="cmdIn" placeholder="Foydalanuvchi yoki guruh qidirish…" autocomplete="off"><div id="cmdRes"></div></div></div>
 <!-- LOVE MODAL HTML -->
 <div id="loveOverlay">
   <div id="loveBox">
