@@ -62,35 +62,44 @@ def verify_init_data(init_data: str) -> dict | None:
     return pairs
 
 
-def verify_admin(init_data: str) -> dict | None:
-    """Like verify_init_data, but also requires the user's id to match
-    ADMIN_ID. Returns None if unauthenticated, not the admin, or ADMIN_ID
-    isn't configured at all.
-    """
-    import logging
-    log = logging.getLogger("misumi-bot")
+_ADMIN_FAILS: dict = {}
 
-    # 1. Avval to'liq Telegram initData tekshiruvi
+
+def _client_ip() -> str:
+    return (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr or "?")
+
+
+def verify_admin(init_data: str) -> dict | None:
+    """Faqat ADMIN_ID egasi (Telegram initData) yoki to'g'ri maxfiy kalit (X-Admin-Secret).
+    ADMIN_ID bo'sh bo'lsa hech kim kira olmaydi. Noto'g'ri kalit 10 daqiqada 8 martadan
+    ko'p urinilsa, shu IP vaqtincha bloklanadi.
+    """
+    import hmac
+    import logging
+    import time
+    log = logging.getLogger("misumi-bot")
+    if not ADMIN_ID:
+        log.error("[verify_admin] ADMIN_ID sozlanmagan, admin panel yopiq")
+        return None
     if init_data:
         data = verify_init_data(init_data)
         if data:
-            user = data.get("user", {})
-            incoming_id = str(user.get("id", ""))
-            log.info(f"[verify_admin] initData OK, incoming_id={incoming_id!r}")
-            if not ADMIN_ID or incoming_id == ADMIN_ID:
+            if str(data.get("user", {}).get("id", "")) == ADMIN_ID:
                 return data
-            log.warning(f"[verify_admin] ID mos kelmadi: {incoming_id!r} != {ADMIN_ID!r}")
+            log.warning("[verify_admin] boshqa foydalanuvchi urindi")
             return None
-
-    # 2. initData bo'sh yoki noto'g'ri — secret key tekshiruvi
-    # Admin panel Telegram desktop da ochilsa initData kelmaydi
-    # Shuning uchun X-Admin-Secret header orqali ham qabul qilamiz
     secret = request.headers.get("X-Admin-Secret", "")
-    if secret and secret == (os.environ.get("ADMIN_SECRET") or ADMIN_ID):
-        log.info("[verify_admin] X-Admin-Secret orqali kirdi")
-        return {"user": {"id": int(ADMIN_ID)}}
-
-    log.warning(f"[verify_admin] initData bo'sh va secret yo'q")
+    if secret:
+        ip, now = _client_ip(), time.time()
+        fails = [t for t in _ADMIN_FAILS.get(ip, []) if now - t < 600]
+        _ADMIN_FAILS[ip] = fails
+        if len(fails) >= 8:
+            log.warning("[verify_admin] %s bloklandi (ko'p noto'g'ri urinish)", ip)
+            return None
+        expected = os.environ.get("ADMIN_SECRET") or ADMIN_ID
+        if hmac.compare_digest(secret.encode(), expected.encode()):
+            return {"user": {"id": int(ADMIN_ID)}}
+        fails.append(now)
     return None
 
 
@@ -240,6 +249,35 @@ def api_admin_system():
     except Exception:
         keys = []
     return jsonify({"gemini": keys, "model": getattr(ai_core, "GEMINI_MODEL", "")})
+
+
+@app.route("/api/admin/providers", methods=["POST"])
+def api_admin_providers():
+    """AI provayderlar (Cerebras, Groq, Mistral, ...) va Gemini kalitlari holati."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        keys = ai_core._gemini_client.status()
+    except Exception:
+        keys = []
+    return jsonify({"providers": ai_core.provider_status(), "gemini": keys})
+
+
+@app.route("/api/admin/provider-test", methods=["POST"])
+def api_admin_provider_test():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(ai_core.provider_test(str(body.get("provider", ""))))
+
+
+@app.route("/api/admin/security", methods=["POST"])
+def api_admin_security():
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify({"admin_secret_set": bool(os.environ.get("ADMIN_SECRET"))})
 
 
 @app.route("/api/admin/users", methods=["POST"])
