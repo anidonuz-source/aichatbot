@@ -62,7 +62,7 @@ def record_message(user_id, name: str | None = None, source: str = "telegram") -
         print(f"[AdminStore] record_message: baza o'qilmadi, o'tkazib yuborildi: {e}")
         return
     users = data.setdefault("users", {})
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now(_TZ).strftime("%Y-%m-%d %H:%M")
     entry = users.get(user_id) or {"first_seen": now, "message_count": 0}
     entry["last_seen"] = now
     entry["message_count"] = entry.get("message_count", 0) + 1
@@ -231,7 +231,7 @@ def record_group_membership(chat_id, title: str | None, is_member: bool) -> None
     chat_id = str(chat_id)
     data = _load()
     groups = data.setdefault("group_memberships", {})
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now(_TZ).strftime("%Y-%m-%d %H:%M")
     entry = groups.get(chat_id) or {"first_seen": now}
     entry["is_member"] = is_member
     entry["updated"] = now
@@ -305,7 +305,7 @@ def record_broadcast(summary: str, sent: int, failed: int) -> None:
     entries = data.setdefault("broadcasts", [])
     entries.append(
         {
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "time": datetime.now(_TZ).strftime("%Y-%m-%d %H:%M"),
             "summary": summary[:120],
             "sent": sent,
             "failed": failed,
