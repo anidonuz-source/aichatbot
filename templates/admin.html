@@ -916,6 +916,9 @@ body.bulk #bulkBar{display:flex}
   </div>
 </div>
 
+<div id="bulkBar"><span id="bulkN">0 tanlandi</span><button onclick="bulkRun('block')">🚫 Blok</button><button onclick="bulkRun('unblock')">✅ Ochish</button><button class="pr" onclick="bulkRun('premium')">⭐ 30 kun</button><button onclick="setBulk(false)">✕</button></div>
+<div id="cmd"><div id="cmdBox"><input id="cmdIn" placeholder="Foydalanuvchi yoki guruh qidirish…" autocomplete="off"><div id="cmdRes"></div></div></div>
+
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
@@ -1889,119 +1892,8 @@ body.bulk #bulkBar{display:flex}
 
 
 
-  // [ESKI KOD — O'CHIRILDI, pastdagi <script> blokiga ko'chirildi]
-  void(function() {
-    var _targetId = null;
-    var _style = 'romantic';
-    var _generated = '';
-
-    // Overlay va elementlarni yuklaymiz
-    var overlay   = document.getElementById('loveOverlay');
-    var lName     = document.getElementById('lName');
-    var lLang     = document.getElementById('lLang');
-    var lHint     = document.getElementById('lHint');
-    var lPreview  = document.getElementById('lovePreview');
-    var lGenBtn   = document.getElementById('lGenBtn');
-    var lSendBtn  = document.getElementById('lSendBtn');
-    var lCancelBtn = document.getElementById('lCancelBtn');
-
-    // Style chip lar
-    document.querySelectorAll('.lchip').forEach(function(chip) {
-      chip.addEventListener('click', function() {
-        document.querySelectorAll('.lchip').forEach(function(c) { c.classList.remove('on'); });
-        chip.classList.add('on');
-        _style = chip.getAttribute('data-s');
-      });
-    });
-
-    // Overlay background click — yopamiz
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) closeLove();
-    });
-
-    // Cancel
-    lCancelBtn.addEventListener('click', closeLove);
-
-    // Generatsiya
-    lGenBtn.addEventListener('click', function() {
-      if (!_targetId) return;
-      lGenBtn.disabled = true;
-      lGenBtn.textContent = '⏳ Yaratilmoqda...';
-      lPreview.className = 'empty';
-      lPreview.textContent = 'AI yozmoqda...';
-      lSendBtn.disabled = true;
-      _generated = '';
-
-      api('/api/admin/love-message', {
-        target_id:   _targetId,
-        target_name: lName.value.trim() || null,
-        style:       _style,
-        custom_hint: lHint.value.trim() || null,
-        lang:        lLang.value,
-        send:        false
-      }).then(function(r) {
-        _generated = r.message || '';
-        lPreview.className = '';
-        lPreview.textContent = _generated;
-        lSendBtn.disabled = false;
-        lGenBtn.textContent = '✨ Qayta generatsiya';
-        lGenBtn.disabled = false;
-      }).catch(function(err) {
-        lPreview.textContent = 'Xato: ' + err.message;
-        lGenBtn.textContent = '✨ Generatsiya';
-        lGenBtn.disabled = false;
-      });
-    });
-
-    // Yuborish
-    lSendBtn.addEventListener('click', function() {
-      if (!_targetId || !_generated) return;
-      lSendBtn.disabled = true;
-      lSendBtn.textContent = '📤 Yuborilmoqda...';
-
-      api('/api/admin/love-message', {
-        target_id:   _targetId,
-        target_name: lName.value.trim() || null,
-        style:       _style,
-        custom_hint: lHint.value.trim() || null,
-        lang:        lLang.value,
-        send:        true
-      }).then(function(r) {
-        if (r.sent) {
-          showToast('💌 Yuborildi!');
-          closeLove();
-        } else {
-          showToast('Xato: ' + (r.telegram_error || 'noma\'lum'), true);
-          lSendBtn.disabled = false;
-          lSendBtn.textContent = '💌 Yuborish';
-        }
-      }).catch(function(err) {
-        showToast('Xato: ' + err.message, true);
-        lSendBtn.disabled = false;
-        lSendBtn.textContent = '💌 Yuborish';
-      });
-    });
-
-    function closeLove() {
-      overlay.classList.remove('active');
-      _targetId = null;
-      _generated = '';
-      lPreview.className = 'empty';
-      lPreview.textContent = 'Generatsiya tugmasi bosing...';
-      lGenBtn.textContent = '✨ Generatsiya';
-      lGenBtn.disabled = false;
-      lSendBtn.disabled = true;
-      lName.value = '';
-      lHint.value = '';
-    }
-
-    // [ESKI openLoveModal — pastdagi script blokida yangi versiyasi bor]
-  }); // [ESKI KOD TUGADI]
-
 </script>
 
-<div id="bulkBar"><span id="bulkN">0 tanlandi</span><button onclick="bulkRun('block')">🚫 Blok</button><button onclick="bulkRun('unblock')">✅ Ochish</button><button class="pr" onclick="bulkRun('premium')">⭐ 30 kun</button><button onclick="setBulk(false)">✕</button></div>
-<div id="cmd"><div id="cmdBox"><input id="cmdIn" placeholder="Foydalanuvchi yoki guruh qidirish…" autocomplete="off"><div id="cmdRes"></div></div></div>
 <!-- LOVE MODAL HTML -->
 <div id="loveOverlay">
   <div id="loveBox">
