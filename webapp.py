@@ -86,7 +86,7 @@ def verify_admin(init_data: str) -> dict | None:
     # Admin panel Telegram desktop da ochilsa initData kelmaydi
     # Shuning uchun X-Admin-Secret header orqali ham qabul qilamiz
     secret = request.headers.get("X-Admin-Secret", "")
-    if secret and secret == ADMIN_ID:
+    if secret and secret == (os.environ.get("ADMIN_SECRET") or ADMIN_ID):
         log.info("[verify_admin] X-Admin-Secret orqali kirdi")
         return {"user": {"id": int(ADMIN_ID)}}
 
@@ -227,6 +227,19 @@ def api_admin_stats():
     if not verify_admin(body.get("initData", "")):
         return jsonify({"error": "Unauthorized"}), 403
     return jsonify(admin_store.get_stats())
+
+
+@app.route("/api/admin/system", methods=["POST"])
+def api_admin_system():
+    """Gemini kalitlari holati (qaysi biri tirik, qachon tiklanadi)."""
+    body = request.get_json(silent=True) or {}
+    if not verify_admin(body.get("initData", "")):
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        keys = ai_core._gemini_client.status()
+    except Exception:
+        keys = []
+    return jsonify({"gemini": keys, "model": getattr(ai_core, "GEMINI_MODEL", "")})
 
 
 @app.route("/api/admin/users", methods=["POST"])
