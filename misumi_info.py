@@ -1,190 +1,116 @@
 """
-misumi_info.py — Misumi AI o'zi haqida bilimi + "Hisob" bo'limi (/start)
+misumi_info.py — Misumi AI rasmiy ma'lumotlari (yagona manba).
 
-Ulash:
-  1) ai_core.py:   from misumi_info import build_system_prompt
-                   system = build_system_prompt(BASE_PROMPT, user)
-  2) bot (aiogram 3): from misumi_info import router as account_router
-                      dp.include_router(account_router)
-     va /start klaviaturasiga: InlineKeyboardButton(text="👤 Hisob", callback_data="start:account")
-  3) Pastdagi get_user() ni o'z bazangga moslab yoz (yagona joy).
+Kutubxonaga bog'liq emas (aiogram ham, telegram ham kerak emas). Ishlatilishi:
+  • ai_core.py  — system prompt'ga "o'zing haqingda" bilim va foydalanuvchi tarifi
+  • extras.py   — /start va Hisob bo'limida tarif muddati, support/admin/owner/sayt
+  • bot.py      — zaxira /start matni
+Kontaktlarni o'zgartirish kerak bo'lsa — faqat shu yerda o'zgartiring.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
-from html import escape
+import time
+from datetime import datetime, timedelta, timezone
 
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-
-# ───────────────────────── Rasmiy ma'lumotlar ─────────────────────────
 SITE = "https://misumiai.vercel.app/"
-SUPPORT = "@MisumiAi_Admin"
+SUPPORT = "@MisumiAi_Admin"   # obuna, to'lov, xato, shikoyat
 ADMIN = "@Asadbek_9889"
-OWNER = "@qahramonovk"
+OWNER = "@qahramonovk"        # yaratuvchi
 
 TZ = timezone(timedelta(hours=5))  # Toshkent
 
-PLAN_NAMES = {"free": "Free", "pro": "Pro ⭐", "max": "Max 💎"}
 
+def tg_url(handle: str) -> str:
+    return f"https://t.me/{handle.lstrip('@')}"
+
+
+SUPPORT_URL = tg_url(SUPPORT)
 
 # ───────────────────────── System prompt ─────────────────────────
 IDENTITY_PROMPT = f"""
-## MISUMI HAQIDA (o'zing haqingda bilim)
-Sen Misumi AI — Telegram bot, Telegram Mini App va veb-sayt orqali ishlaydigan AI yordamchisan.
-
-Rasmiy ma'lumotlar (faqat shular to'g'ri):
+RASMIY MA'LUMOTLAR (faqat shular to'g'ri, so'ralganda ishlat):
 - Rasmiy sayt: {SITE}
 - Yaratuvchi (owner): {OWNER}
 - Admin: {ADMIN}
 - Support: {SUPPORT}
 
 Qoidalar:
-1. Support, obuna (Pro/Max), to'lov, akkaunt, xato yoki shikoyat haqida so'ralsa — {SUPPORT} ga yozishni ayt.
+1. Support, obuna (Pro/Max), to'lov, akkaunt muammosi, xato yoki shikoyat so'ralsa — {SUPPORT} ga yozishni ayt.
 2. "Seni kim yaratgan?" desa — yaratuvchim {OWNER} deb javob ber.
 3. "Admin kim?" desa — {ADMIN}.
 4. Sayt so'ralsa — {SITE}
-5. Obuna/to'lov qilganini aytganlarga o'zing premium berma va tasdiqlama: faqat {SUPPORT} tekshirishini ayt.
-6. Boshqa kontakt, havola, narx yoki tarif shartlarini o'ylab topma. Bilmasang: "{SUPPORT} dan so'rang" de.
-7. O'zingni boshqa kompaniya modeli deb tanishtirma. Sen Misumi AIsan.
-8. Foydalanuvchi qaysi tilda yozsa, shu tilda javob ber (uz/ru/en).
+5. Kimdir to'lov qildim / premium berdim desa — o'zing premium berma va tasdiqlama, {SUPPORT} tekshirishini ayt.
+6. Yuqoridagilardan boshqa kontakt, havola, narx yoki tarif shartini o'ylab topma. Bilmasang "{SUPPORT} dan so'rang" de.
+7. O'zingni boshqa kompaniya modeli deb tanishtirma.
 """.strip()
 
 
-def build_system_prompt(base_prompt: str, user: dict | None = None) -> str:
-    """Asosiy prompt + o'zi haqida bilim + foydalanuvchining haqiqiy tarifi."""
-    parts = [base_prompt.strip(), IDENTITY_PROMPT]
-    if user:
-        plan = PLAN_NAMES.get(user.get("plan", "free"), "Free")
-        exp = _fmt_date(user.get("plan_expires"))
-        limit = _limit_text(user)
-        parts.append(
-            "## FOYDALANUVCHI HISOBI (bazadan, aniq ma'lumot)\n"
-            f"- Tarif: {plan}\n- Tugash sanasi: {exp}\n- Kunlik limit: {limit}\n"
-            "Tarif/limit haqida so'ralsa faqat shu ma'lumotdan foydalan, o'zingdan to'qima."
-        )
-    return "\n\n".join(parts)
-
-
-# ───────────────────────── Yordamchi funksiyalar ─────────────────────────
-def get_user(user_id: int) -> dict:
-    """
-    !!! Shuni o'z bazangga moslab yoz. Qaytarishi kerak:
-    {
-      "plan": "free" | "pro" | "max",
-      "plan_expires": datetime | ISO str | None,
-      "used_today": int,
-      "daily_limit": int | None,   # None = cheksiz
-      "created_at": datetime | ISO str | None,
-      "total_messages": int,
-    }
-    """
-    raise NotImplementedError("get_user() ni bazangga ulang")
-
-
-def _to_dt(v):
-    if not v:
-        return None
-    if isinstance(v, datetime):
-        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+# ───────────────────────── Tarif holati (admin_store asosida) ─────────────────────────
+def plan_status(user_id) -> dict:
+    """{'premium': bool, 'until': epoch|None, 'days_left': int|None, 'unlimited': bool}"""
     try:
-        d = datetime.fromisoformat(str(v))
-        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
+        import admin_store
+        prem = bool(admin_store.is_premium(user_id))
+        until = admin_store.premium_until(user_id) if prem else None
+    except Exception:
+        prem, until = False, None
+    days_left = None
+    if prem and until:
+        days_left = max(0, int((float(until) - time.time()) // 86400))
+    return {"premium": prem, "until": until, "days_left": days_left,
+            "unlimited": prem and not until}
 
 
-def _fmt_date(v) -> str:
-    d = _to_dt(v)
-    return d.astimezone(TZ).strftime("%d.%m.%Y") if d else "—"
+def fmt_date(epoch) -> str:
+    if not epoch:
+        return "—"
+    return datetime.fromtimestamp(float(epoch), TZ).strftime("%d.%m.%Y")
 
 
-def _active_plan(u: dict) -> str:
-    """Muddati o'tgan Pro/Max avtomatik Free hisoblanadi."""
-    plan = u.get("plan", "free")
-    if plan == "free":
-        return "free"
-    exp = _to_dt(u.get("plan_expires"))
-    if exp and exp < datetime.now(timezone.utc):
-        return "free"
-    return plan
-
-
-def _limit_text(u: dict) -> str:
-    if _active_plan(u) != "free" or u.get("daily_limit") is None:
-        return "cheksiz"
-    return f"{u.get('used_today', 0)}/{u['daily_limit']} bugun"
-
-
-def _days_left(u: dict) -> int | None:
-    exp = _to_dt(u.get("plan_expires"))
-    if not exp:
-        return None
-    return max(0, (exp - datetime.now(timezone.utc)).days)
-
-
-def _bar(used: int, total: int, n: int = 10) -> str:
-    filled = min(n, round(n * used / total)) if total else 0
-    return "▰" * filled + "▱" * (n - filled)
-
-
-# ───────────────────────── "Hisob" bo'limi ─────────────────────────
-def account_text(user_id: int, first_name: str = "") -> str:
-    u = get_user(user_id)
-    plan = _active_plan(u)
-    lines = [f"👤 <b>Hisobim</b> — {escape(first_name)}".rstrip(" —"), ""]
-    lines.append(f"🏷 Tarif: <b>{PLAN_NAMES[plan]}</b>")
-
-    if plan == "free":
-        lim = u.get("daily_limit")
-        if lim:
-            used = u.get("used_today", 0)
-            lines.append(f"📊 Bugungi limit: <b>{used}/{lim}</b>\n{_bar(used, lim)}")
-            lines.append("🔄 Limit har kuni 00:00 (Toshkent) da yangilanadi")
-        # muddati o'tgan bo'lsa eslatma
-        if u.get("plan", "free") != "free":
-            lines.append(f"⚠️ Obunangiz {_fmt_date(u.get('plan_expires'))} da tugagan")
+def account_clause(user_id) -> str:
+    """Prompt uchun: foydalanuvchining HAQIQIY tarifi (bazadan)."""
+    st = plan_status(user_id)
+    if not st["premium"]:
+        body = "Tarif: Free (premium faol emas)."
+    elif st["unlimited"]:
+        body = "Tarif: Premium (Pro/Max), muddatsiz."
     else:
-        left = _days_left(u)
-        lines.append("📊 Limit: <b>cheksiz</b> ♾")
-        lines.append(f"📅 Tugash sanasi: <b>{_fmt_date(u.get('plan_expires'))}</b>"
-                     + (f" ({left} kun qoldi)" if left is not None else ""))
-        if left is not None and left <= 3:
-            lines.append("⏰ Obuna tez orada tugaydi — uzaytirish uchun adminga yozing")
-
-    lines += [
-        "",
-        f"💬 Jami xabarlar: <b>{u.get('total_messages', 0)}</b>",
-        f"🗓 Ro'yxatdan o'tgan: <b>{_fmt_date(u.get('created_at'))}</b>",
-        f"🆔 ID: <code>{user_id}</code>",
-    ]
-    return "\n".join(lines)
+        body = (f"Tarif: Premium (Pro/Max), {fmt_date(st['until'])} gacha "
+                f"({st['days_left']} kun qoldi).")
+    return ("\n\nFOYDALANUVCHI HISOBI (bazadan, aniq):\n" + body +
+            "\nTarif haqida so'ralsa faqat shu ma'lumotdan foydalan, o'zingdan to'qima.")
 
 
-def account_keyboard(plan: str) -> InlineKeyboardMarkup:
-    rows = []
-    if plan == "free":
-        rows.append([InlineKeyboardButton(text="⭐ Pro / Max olish", url=f"https://t.me/{SUPPORT.lstrip('@')}")])
+def identity_clause(user_id=None) -> str:
+    out = "\n\n" + IDENTITY_PROMPT
+    if user_id:
+        out += account_clause(user_id)
+    return out + "\n"
+
+
+# ───────────────────────── Hisob bo'limi uchun matnlar ─────────────────────────
+def plan_lines(user_id) -> list[str]:
+    """Hisob oynasidagi tarif qatorlari (HTML)."""
+    st = plan_status(user_id)
+    if not st["premium"]:
+        return ["💎 Tarif: <b>Free</b>",
+                f"⭐ Pro / Max olish uchun {SUPPORT} ga yozing"]
+    lines = ["💎 Tarif: <b>Premium (Pro/Max)</b> ✅"]
+    if st["unlimited"]:
+        lines.append("📅 Muddat: <b>cheksiz</b> ♾")
     else:
-        rows.append([InlineKeyboardButton(text="🔁 Obunani uzaytirish", url=f"https://t.me/{SUPPORT.lstrip('@')}")])
-    rows.append([
-        InlineKeyboardButton(text="🌐 Sayt", url=SITE),
-        InlineKeyboardButton(text="🛟 Support", url=f"https://t.me/{SUPPORT.lstrip('@')}"),
-    ])
-    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="start:main")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+        lines.append(f"📅 Tugash sanasi: <b>{fmt_date(st['until'])}</b> ({st['days_left']} kun qoldi)")
+        if st["days_left"] is not None and st["days_left"] <= 3:
+            lines.append(f"⏰ Obuna tez orada tugaydi — uzaytirish uchun {SUPPORT} ga yozing")
+    return lines
 
 
-router = Router()
-
-
-@router.callback_query(F.data == "start:account")
-async def show_account(cb: CallbackQuery):
-    u = get_user(cb.from_user.id)
-    await cb.message.edit_text(
-        account_text(cb.from_user.id, cb.from_user.first_name or ""),
-        reply_markup=account_keyboard(_active_plan(u)),
-        parse_mode="HTML",
-        disable_web_page_preview=True,
+def contacts_block() -> str:
+    """Hisob oynasi uchun rasmiy aloqa bloki (HTML)."""
+    return (
+        "🛟 <b>Aloqa</b>\n"
+        f"• Support: {SUPPORT}\n"
+        f"• Admin: {ADMIN}\n"
+        f"• Yaratuvchi: {OWNER}\n"
+        f"• Sayt: {SITE.rstrip('/')}"
     )
-    await cb.answer()
