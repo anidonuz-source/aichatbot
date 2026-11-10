@@ -6,23 +6,24 @@
 <title>Misumi AI · Admin</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#0b0b0d;
-    --ink-2:#141417;
-    --panel:#1b1b1f;
-    --panel-2:#202024;
-    --hairline:rgba(201,162,39,0.16);
-    --hairline-strong:rgba(201,162,39,0.3);
-    --brass:#c9a227;
-    --brass-soft:#8a7228;
-    --brass-dim:rgba(201,162,39,0.1);
+    --glass:rgba(9,12,28,.72);--glass2:rgba(20,26,51,.8);--on:#0a0f24;--ink:#090c1c;
+    --ink-2:#0f1429;
+    --panel:#141a33;
+    --panel-2:#1b2342;
+    --hairline:rgba(124,156,255,0.16);
+    --hairline-strong:rgba(124,156,255,0.3);
+    --brass:#7c9cff;
+    --brass-soft:#5b73c7;
+    --brass-dim:rgba(124,156,255,0.1);
     --plum:#3b2f4a;
-    --plum-soft:#7d6a94;
-    --plum-dim:rgba(123,106,148,0.14);
-    --paper:#f2efe9;
-    --paper-dim:#a9a6a0;
+    --plum-soft:#5eead4;
+    --plum-dim:rgba(94,234,212,0.14);
+    --paper:#eaf0ff;
+    --paper-dim:#8f9bbd;
     --danger:#c9524a;
     --danger-dim:rgba(201,82,74,0.12);
     --success:#5c9c74;
@@ -31,18 +32,18 @@
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     /* Missing aliases — used by group/persona/tab components */
-    --border: rgba(201,162,39,0.18);
-    --surface: #1b1b1f;
-    --text: #f2efe9;
-    --subtext: #a9a6a0;
-    --accent: #c9a227;
+    --border: rgba(124,156,255,0.18);
+    --surface: #141a33;
+    --text: #eaf0ff;
+    --subtext: #8f9bbd;
+    --accent: #7c9cff;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
   body{
     margin:0;
     background:
-      radial-gradient(1200px 600px at 50% -10%, rgba(201,162,39,0.07), transparent 60%),
+      radial-gradient(1200px 600px at 50% -10%, rgba(124,156,255,0.07), transparent 60%),
       var(--ink);
     color:var(--paper);
     font-family:'Manrope',sans-serif;
@@ -279,7 +280,7 @@
     text-transform:uppercase; padding:3px 7px; border-radius:20px; border:1px solid var(--hairline);
     color:var(--paper-dim); white-space:nowrap;
   }
-  .badge.premium{color:var(--brass); border-color:rgba(201,162,39,0.4);}
+  .badge.premium{color:var(--brass); border-color:rgba(124,156,255,0.4);}
   .badge.blocked{color:var(--danger); border-color:rgba(201,82,74,0.4);}
 
   .user-meta{
@@ -305,7 +306,7 @@
   }
   .action-btn svg{width:12px;height:12px;}
   .action-btn:active{transform:scale(0.97);}
-  .action-btn.premium-on{color:var(--brass); border-color:rgba(201,162,39,0.4); background:var(--brass-dim);}
+  .action-btn.premium-on{color:var(--brass); border-color:rgba(124,156,255,0.4); background:var(--brass-dim);}
   .action-btn.block-on{color:var(--danger); border-color:rgba(201,82,74,0.4); background:var(--danger-dim);}
   .action-btn.loading{opacity:0.5; pointer-events:none;}
 
@@ -484,7 +485,7 @@
   /* ── Prem btn variant ── */
   .action-btn.prem{
     flex:none; padding:8px 18px; font-size:13px;
-    color:var(--brass); border-color:rgba(201,162,39,0.4); background:var(--brass-dim);
+    color:var(--brass); border-color:rgba(124,156,255,0.4); background:var(--brass-dim);
   }
 
   /* ── Love Modal ── */
@@ -504,24 +505,24 @@
     padding: 20px 18px 36px;
     width: 100%;
     max-width: 500px;
-    border-top: 1px solid rgba(201,162,39,0.2);
+    border-top: 1px solid rgba(124,156,255,0.2);
   }
   #loveBox h3 { margin: 0 0 16px; font-size: 16px; color: #f2efe9; }
   .lf { margin-bottom: 12px; }
   .lf label { display: block; font-size: 11px; color: #a9a6a0; margin-bottom: 5px; }
   .lf input, .lf select, .lf textarea {
-    width: 100%; background: #141417; border: 1px solid rgba(201,162,39,0.2);
+    width: 100%; background: #141417; border: 1px solid rgba(124,156,255,0.2);
     border-radius: 10px; color: #f2efe9; font-size: 13px; padding: 9px 12px;
     box-sizing: border-box; font-family: inherit; outline: none;
   }
   .lstyles { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .lchip {
-    padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(201,162,39,0.2);
+    padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(124,156,255,0.2);
     background: transparent; color: #a9a6a0; font-size: 12px; cursor: pointer;
   }
-  .lchip.on { background: #c9a227; color: #000; border-color: #c9a227; }
+  .lchip.on { background: #7c9cff; color: #000; border-color: #7c9cff; }
   #lovePreview {
-    background: #141417; border: 1px solid rgba(201,162,39,0.2); border-radius: 12px;
+    background: #141417; border: 1px solid rgba(124,156,255,0.2); border-radius: 12px;
     padding: 12px; font-size: 13px; line-height: 1.6; color: #f2efe9;
     min-height: 60px; margin-bottom: 14px; white-space: pre-wrap;
   }
@@ -533,29 +534,116 @@
   }
   .lbtn:disabled { opacity: 0.45; cursor: not-allowed; }
   .lbtn.cancel { background: #222; color: #f2efe9; }
-  .lbtn.gen { background: #c9a227; color: #000; }
+  .lbtn.gen { background: #7c9cff; color: #000; }
   .lbtn.send { background: #e05a7a; color: #fff; }
 
+
+/* ===== Misumi Admin v2 — yangi ko'rinish ===== */
+*{font-family:'Onest','Manrope',system-ui,sans-serif}
+body{background:radial-gradient(1100px 520px at 50% -180px,rgba(124,156,255,.16),transparent 70%),var(--ink)}
+header{position:sticky;top:0;z-index:40;background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--hairline)}
+.titles .name{font-family:'Onest',sans-serif;font-weight:800;font-size:19px;letter-spacing:-.02em}
+.titles .sub{text-transform:none;letter-spacing:0;font-family:'Onest',sans-serif;font-size:12px;display:flex;align-items:center;gap:6px;color:var(--paper-dim)}
+.live-dot{background:var(--plum-soft)!important;box-shadow:0 0 0 0 rgba(94,234,212,.6);animation:pulse 2s infinite}
+.live-dot.off{background:var(--danger)!important;animation:none;box-shadow:none}
+@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(94,234,212,0)}100%{box-shadow:0 0 0 0 rgba(94,234,212,0)}}
+main{padding-bottom:calc(108px + var(--safe-bottom))}
+.stats-grid .stat-card,.stat-card{border-radius:22px;background:var(--panel);border:1px solid var(--hairline);transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .25s}
+.stat-card:hover{transform:translateY(-3px);border-color:var(--hairline-strong)}
+.stat-card .num{font-family:'Onest',sans-serif;font-weight:800;font-size:34px;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.stat-card .label,.section-count,.filter-tab,.stat-detail{text-transform:none!important;letter-spacing:0!important;font-family:'Onest',sans-serif!important}
+.stat-card .label{font-size:13px}
+.stat-detail{color:var(--plum-soft);font-size:12px;font-weight:600;margin-top:4px}
+.stats-grid.settled .stat-card{animation:none!important;opacity:1!important}
+.panel,.user-card,.group-card,.broadcast-panel{border-radius:16px;background:var(--panel);border:1px solid var(--hairline)}
+.user-card,.group-card{transition:transform .2s,border-color .2s,background .2s}
+.user-card:hover,.group-card:hover{transform:translateX(3px);border-color:var(--hairline-strong);background:var(--panel-2)}
+.search,.broadcast-panel textarea,.lf input,.lf select{border-radius:12px!important;background:var(--ink-2)!important}
+.search:focus,.broadcast-panel textarea:focus{box-shadow:0 0 0 3px rgba(124,156,255,.22);border-color:var(--brass)!important}
+.action-btn{border-radius:11px;transition:transform .15s,background .2s,box-shadow .2s}
+.action-btn:active{transform:scale(.95)}
+.action-btn.prem{background:var(--brass);color:var(--on);border-color:var(--brass);font-weight:700}
+.filter-tab{border-radius:999px}
+.filter-tab.active{background:var(--brass);color:var(--on);border-color:var(--brass);font-weight:700}
+/* pastki dock-navigatsiya */
+.main-tabs{position:fixed!important;left:50%;bottom:calc(12px + var(--safe-bottom));transform:translateX(-50%);z-index:60;width:min(440px,calc(100% - 24px));display:flex;gap:4px;padding:6px;margin:0!important;border-radius:24px;background:var(--glass2);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--hairline-strong);box-shadow:0 14px 44px rgba(0,0,0,.5)}
+.main-tab{flex:1;border:0;border-radius:18px;padding:12px 6px;font-size:13px;font-weight:600;white-space:nowrap;background:transparent;color:var(--paper-dim);transition:background .3s cubic-bezier(.2,.8,.2,1),color .2s,transform .15s}
+.main-tab.active{background:var(--brass);color:var(--on);box-shadow:0 6px 18px rgba(124,156,255,.35)}
+/* faollik grafigi */
+.act-card{margin-bottom:16px;padding:16px 16px 12px;background:var(--panel);border:1px solid var(--hairline);border-radius:22px}
+.act-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;font-size:13px;color:var(--paper-dim)}
+.act-head b{color:var(--paper);font-size:15px;font-weight:700}
+.bar-chart{display:flex;align-items:flex-end;gap:9px;height:112px}
+.bcol{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}
+.bval{font-size:10px;color:var(--paper-dim);font-variant-numeric:tabular-nums;min-height:12px}
+.bar{width:100%;height:var(--h);min-height:4px;border-radius:9px 9px 4px 4px;background:var(--panel-2);border:1px solid var(--hairline);transform-origin:bottom}
+.bar.today{background:var(--brass);border-color:var(--brass);box-shadow:0 0 22px rgba(124,156,255,.45)}
+.act-card.fresh .bar{animation:grow .8s cubic-bezier(.2,.8,.2,1) both}
+.act-card.fresh .bcol:nth-child(2) .bar{animation-delay:.05s}.act-card.fresh .bcol:nth-child(3) .bar{animation-delay:.1s}.act-card.fresh .bcol:nth-child(4) .bar{animation-delay:.15s}.act-card.fresh .bcol:nth-child(5) .bar{animation-delay:.2s}.act-card.fresh .bcol:nth-child(6) .bar{animation-delay:.25s}.act-card.fresh .bcol:nth-child(7) .bar{animation-delay:.3s}
+@keyframes grow{from{transform:scaleY(0)}}
+.bday{font-size:11px;color:var(--paper-dim)}
+.bcol.t .bday{color:var(--paper);font-weight:700}
+.more-btn{display:block;width:100%;margin:12px 0 4px;padding:13px;border-radius:14px;border:1px dashed var(--hairline-strong);background:transparent;color:var(--paper);font-weight:600;cursor:pointer}
+.more-btn:active{transform:scale(.98)}
+.sheet-link{word-break:break-all;color:var(--brass)}
+
+/* ===== v3: temalar, hero, yangi bloklar ===== */
+html[data-theme=paper]{--glass:rgba(244,246,255,.8);--glass2:rgba(255,255,255,.85);--on:#fff;--ink:#eef1fb;--ink-2:#fff;--panel:#fff;--panel-2:#f0f3ff;--paper:#12172e;--paper-dim:#5d678a;--subtext:#5d678a;--text:#12172e;--surface:#fff;--brass:#4f6bff;--accent:#4f6bff;--hairline:rgba(79,107,255,.16);--hairline-strong:rgba(79,107,255,.3);--border:rgba(79,107,255,.18);--plum-soft:#0fa88f}
+html[data-theme=aurora]{--glass:rgba(12,7,22,.74);--glass2:rgba(26,16,48,.82);--on:#1a0b17;--ink:#0c0716;--ink-2:#130b22;--panel:#1a1030;--panel-2:#231640;--paper:#fff0fa;--paper-dim:#b79ad1;--subtext:#b79ad1;--text:#fff0fa;--surface:#1a1030;--brass:#ff6aa8;--accent:#ff6aa8;--hairline:rgba(255,106,168,.2);--hairline-strong:rgba(255,106,168,.38);--border:rgba(255,106,168,.2);--plum-soft:#ffd166}
+html[data-theme=paper] body{background:radial-gradient(1000px 480px at 50% -200px,rgba(79,107,255,.14),transparent 70%),var(--ink)}
+html[data-theme=aurora] body{background:radial-gradient(900px 500px at 85% -120px,rgba(255,106,168,.2),transparent 70%),radial-gradient(700px 420px at 0% 10%,rgba(255,209,102,.07),transparent 70%),var(--ink)}
+body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transition:background-color .5s,border-color .5s,color .4s}
+.hero{position:relative;overflow:hidden;padding:24px 22px 18px;margin-bottom:14px;border-radius:30px;background:var(--panel);border:1px solid var(--hairline-strong)}
+.hero::before{content:"";position:absolute;width:240px;height:240px;right:-70px;top:-90px;border-radius:50%;background:var(--brass);filter:blur(78px);opacity:.38;animation:drift 10s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(-50px,40px) scale(1.25)}}
+.hero>*{position:relative}
+.hero .k{font-size:13px;color:var(--paper-dim);font-weight:600}
+.hero .big{font-size:68px;font-weight:800;letter-spacing:-.05em;line-height:1.02;font-variant-numeric:tabular-nums;margin:4px 0 2px}
+.hero .sub2{font-size:13px;color:var(--paper)}
+.hero .sub2 b{color:var(--plum-soft)}
+.hero svg{display:block;width:100%;height:50px;margin-top:12px;overflow:visible}
+.hero polyline{fill:none;stroke:var(--brass);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:400;stroke-dashoffset:400;animation:draw 1.4s .2s ease forwards}
+.hero.seen polyline{animation:none;stroke-dashoffset:0}
+@keyframes draw{to{stroke-dashoffset:0}}
+.blk{margin-bottom:14px;padding:16px;border-radius:20px;background:var(--panel);border:1px solid var(--hairline)}
+.blk h4{margin:0 0 12px;font-size:14px;font-weight:700}
+.top-row{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;margin-bottom:10px;font-size:13px}
+.top-row .rk{font-weight:800;color:var(--brass)}
+.top-row .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-row .tr{grid-column:2/4;height:5px;border-radius:5px;background:var(--panel-2);overflow:hidden}
+.top-row .tr i{display:block;height:100%;background:var(--brass);border-radius:5px;transform-origin:left;animation:grow2 .9s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow2{from{transform:scaleX(0)}}
+.sys-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;border-top:1px solid var(--hairline)}
+.sys-row:first-of-type{border-top:0}
+.sys-row .d{width:9px;height:9px;border-radius:50%;background:var(--plum-soft)}
+.sys-row.off .d{background:var(--danger)}
+.sys-row .m{margin-left:auto;color:var(--paper-dim);font-size:12px}
+.tools{display:flex;gap:8px;margin:0 0 12px}
+.tools select,.tools button{flex:1;padding:10px 12px;border-radius:12px;border:1px solid var(--hairline-strong);background:var(--ink-2);color:var(--paper);font-weight:600;font-size:13px}
+.tools button:active{transform:scale(.96)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
+
 </head>
 <body>
 
 <header>
   <div class="mark">
     <svg viewBox="0 0 30 30" fill="none">
-      <circle cx="15" cy="6" r="2.4" fill="#c9a227"/>
-      <circle cx="6" cy="22" r="2.4" fill="#c9a227"/>
-      <circle cx="24" cy="22" r="2.4" fill="#c9a227"/>
+      <circle cx="15" cy="6" r="2.4" fill="#7c9cff"/>
+      <circle cx="6" cy="22" r="2.4" fill="#7c9cff"/>
+      <circle cx="24" cy="22" r="2.4" fill="#7c9cff"/>
     </svg>
   </div>
   <div class="titles">
     <div class="name">Misumi AI</div>
-    <div class="sub"><span class="live-dot"></span>Admin panel</div>
+    <div class="sub"><span class="live-dot" id="liveDot"></span><span id="liveTxt">Jonli</span></div>
   </div>
   <div class="header-actions">
     <button class="icon-btn" id="historyBtn" title="Broadcast tarixi" onclick="toggleHistory()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     </button>
+    <button class="icon-btn" id="themeBtn" title="Tema" style="font-size:17px">🎨</button>
     <button class="icon-btn" id="refreshBtn" title="Yangilash">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
@@ -655,9 +743,9 @@
 
       <!-- Main Tabs -->
       <div class="main-tabs">
-        <button class="main-tab active" id="tabUsers" onclick="switchMainTab('users')">👤 Foydalanuvchilar</button>
+        <button class="main-tab active" id="tabUsers" onclick="switchMainTab('users')">👤 Userlar</button>
         <button class="main-tab" id="tabGroups" onclick="switchMainTab('groups')">👥 Guruhlar</button>
-        <button class="main-tab" id="tabBroadcast" onclick="switchMainTab('broadcast')">📢 Broadcast</button>
+        <button class="main-tab" id="tabBroadcast" onclick="switchMainTab('broadcast')">📢 Xabar</button>
       </div>
 
       <!-- ══ USERS TAB ══ -->
@@ -667,11 +755,12 @@
           <div class="section-count" id="sectionCount"></div>
         </div>
         <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
+        <div class="tools"><select id="sortSel"><option value="seen">So'nggi faol</option><option value="msgs">Eng ko'p xabar</option><option value="new">Yangi qo'shilgan</option></select><button id="csvBtn" type="button">⬇ CSV</button></div>
         <div class="filter-tabs" id="filterTabs">
           <button class="filter-tab active" data-filter="all">Hammasi</button>
           <button class="filter-tab" data-filter="premium">⭐ Premium</button>
           <button class="filter-tab" data-filter="blocked">🚫 Bloklangan</button>
-          <button class="filter-tab" data-filter="miniapp">📱 Mini App</button>
+          <button class="filter-tab" data-filter="miniapp">📱 Sayt/Mini App</button>
         </div>
         <div id="usersList"></div>
       </div>
@@ -833,12 +922,12 @@
     });
     if (res.status === 403 || res.status === 401) {
       if (!window.__adminSecret) {
-        const s = prompt('Admin ID kiriting:');
+        const s = prompt('Admin kalitini kiriting:');
         if (s && s.trim()) { window.__adminSecret = s.trim(); return api(path, body); }
       }
       throw new Error('unauthorized');
     }
-    return res.json();
+    try { return await res.json(); } catch { throw new Error('server ' + res.status); }
   }
 
   /* ── Toast ──────────────────────────────────────────────────────────── */
@@ -900,6 +989,7 @@
         <div class="icon">${ICONS.messages}</div>
         <div class="num">${stats.total_messages}</div>
         <div class="label">Xabarlar · o'rt. ${avg}</div>
+        ${stats.today_messages?`<div class="stat-detail">+${stats.today_messages} bugun · ${stats.today_users} faol</div>`:''}
       </div>
       <div class="stat-card c-success" style="animation-delay:.1s">
         <div class="icon">${ICONS.star}</div>
@@ -913,51 +1003,106 @@
       </div>
     `;
     maintenanceToggle.checked = !!stats.maintenance;
-
-    // Mini bar chart — so'nggi 7 kun faollik
-    renderActivityChart();
+    countUp();
+    statsGrid.classList.add('settled');
+    renderActivityChart(stats.activity || []);
+    renderHero(stats);
+    renderTop();
   }
 
-  function renderActivityChart() {
-    // Oxirgi 7 kun uchun kunlik xabar soni
-    const days = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      days[key] = 0;
-    }
-    allUsers.forEach(u => {
-      if (u.last_seen) {
-        const key = u.last_seen.split(' ')[0];
-        if (days.hasOwnProperty(key)) days[key]++;
-      }
+  let _heroPrev = 0;
+  function renderHero(s) {
+    const act = s.activity || [];
+    let el = document.getElementById('hero'), first = !el;
+    if (first) { el = document.createElement('div'); el.id = 'hero'; el.className = 'hero'; statsGrid.before(el); }
+    const max = Math.max(...act.map(a => a.messages), 1);
+    const pts = act.map((a, i) => `${(i / Math.max(act.length - 1, 1) * 300).toFixed(1)},${(46 - a.messages / max * 42).toFixed(1)}`).join(' ');
+    el.innerHTML = `<div class="k">Bugun</div><div class="big" id="heroNum">0</div>
+      <div class="sub2">xabar · <b>${s.today_users}</b> faol foydalanuvchi · ${s.total_groups || 0} guruh</div>
+      <svg viewBox="0 0 300 50" preserveAspectRatio="none"><polyline points="${pts}"/></svg>`;
+    if (!first) el.classList.add('seen');
+    const n = el.querySelector('#heroNum'), to = s.today_messages || 0, from = _heroPrev; _heroPrev = to;
+    const t0 = performance.now();
+    (function f(t) { const p = Math.min(1, (t - t0) / 900); n.textContent = _fmt(Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(f); })(t0);
+  }
+
+  function renderTop() {
+    const top = [...allUsers].sort((a, b) => b.message_count - a.message_count).slice(0, 5);
+    if (!top.length) return;
+    let el = document.getElementById('topBox'), first = !el;
+    if (first) { el = document.createElement('div'); el.id = 'topBox'; el.className = 'blk'; document.getElementById('activityChart').after(el); }
+    const m = top[0].message_count || 1;
+    el.innerHTML = '<h4>Eng faol foydalanuvchilar</h4>' + top.map((u, i) => `<div class="top-row"><span class="rk">${i + 1}</span><span class="nm">${escapeHtml(u.name)}</span><span>${_fmt(u.message_count)}</span><div class="tr"><i style="width:${Math.round(u.message_count / m * 100)}%${first ? '' : ';animation:none'}"></i></div></div>`).join('');
+  }
+
+  async function loadSys() {
+    try {
+      const r = await api('/api/admin/system', {});
+      const ks = r.gemini || [];
+      let el = document.getElementById('sysBox');
+      if (!el) { const a = document.getElementById('topBox') || document.getElementById('activityChart'); if (!a) return; el = document.createElement('div'); el.id = 'sysBox'; el.className = 'blk'; a.after(el); }
+      el.innerHTML = `<h4>Gemini kalitlari${r.model ? ' · ' + escapeHtml(r.model) : ''}</h4>` + (ks.length ? ks.map(k => `<div class="sys-row ${k.alive ? '' : 'off'}"><span class="d"></span><span>${k.key} · …${escapeHtml(k.tail)}</span><span class="m">${k.alive ? 'tayyor' : '~' + (k.resets_in_min >= 60 ? Math.round(k.resets_in_min / 60) + ' soat' : k.resets_in_min + ' daq') + ' dam oladi'}</span></div>`).join('') : '<div class="sys-row"><span class="m" style="margin:0">Kalit topilmadi</span></div>');
+    } catch (_) {}
+  }
+  setTimeout(loadSys, 1200);
+
+  const THEMES = ['night', 'paper', 'aurora'];
+  function setTheme(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem('mAdminTheme', t); } catch (_) {} }
+  (function () { let t = 'night'; try { t = localStorage.getItem('mAdminTheme') || 'night'; } catch (_) {} setTheme(THEMES.includes(t) ? t : 'night'); })();
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const n = THEMES[(THEMES.indexOf(document.documentElement.dataset.theme) + 1) % THEMES.length];
+    setTheme(n); tg?.HapticFeedback?.selectionChanged(); showToast('Tema: ' + n);
+  });
+  document.getElementById('sortSel').addEventListener('change', () => { userPage = 1; applyFilter(); });
+  document.getElementById('csvBtn').addEventListener('click', () => {
+    const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const rows = [['id', 'ism', 'xabarlar', 'birinchi', 'oxirgi', 'manba', 'premium', 'bloklangan'], ...allUsers.map(u => [u.id, u.name, u.message_count, u.first_seen, u.last_seen, u.source, u.premium ? 1 : 0, u.blocked ? 1 : 0])];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' }));
+    a.download = 'misumi-users.csv'; a.click(); showToast('CSV tayyor ✓');
+  });
+
+  const _prevNums = {};
+  const _fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  function countUp() {
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    statsGrid.querySelectorAll('.num').forEach((el, i) => {
+      const to = parseInt(el.textContent, 10) || 0, from = _prevNums[i] ?? 0;
+      _prevNums[i] = to;
+      if (calm || from === to) { el.textContent = _fmt(to); return; }
+      const t0 = performance.now();
+      (function f(t) {
+        const p = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = _fmt(Math.round(from + (to - from) * e));
+        if (p < 1) requestAnimationFrame(f);
+      })(t0);
     });
-    const vals = Object.values(days);
-    const maxVal = Math.max(...vals, 1);
-    const labels = Object.keys(days).map(k => {
-      const d = new Date(k);
-      return ['Ya','Du','Se','Ch','Pa','Sh','Ya'][d.getDay()];
-    });
-    const chartHtml = `
-      <div style="margin-bottom:16px; padding:14px 16px; background:var(--panel); border:1px solid var(--hairline); border-radius:14px; opacity:0; animation:rise .5s ease .2s forwards">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--brass-soft);margin-bottom:10px">7 kunlik faollik</div>
-        <div class="bar-chart">
-          ${vals.map((v,i)=>`<div class="bar" title="${labels[i]}: ${v}" style="height:${Math.max(5,Math.round(v/maxVal*100))}%"></div>`).join('')}
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:4px">
-          ${labels.map(l=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--paper-dim)">${l}</div>`).join('')}
-        </div>
-      </div>
-    `;
-    const existing = document.getElementById('activityChart');
-    if (existing) existing.remove();
-    const el = document.createElement('div');
+  }
+
+  function renderActivityChart(act) {
+    if (!act.length) return;
+    const first = !document.getElementById('activityChart');
+    const wd = ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Sh', 'Ya'];
+    const max = Math.max(...act.map(a => a.messages), 1);
+    const sum = act.reduce((s, a) => s + a.messages, 0);
+    const last = act.length - 1;
+    const el = document.getElementById('activityChart') || document.createElement('div');
     el.id = 'activityChart';
-    el.innerHTML = chartHtml;
-    statsGrid.after(el);
+    el.className = 'act-card' + (first ? ' fresh' : '');
+    el.innerHTML = `
+      <div class="act-head"><span>Oxirgi 7 kun</span><span><b>${_fmt(sum)}</b> xabar</span></div>
+      <div class="bar-chart">${act.map((a, i) => `
+        <div class="bcol${i === last ? ' t' : ''}" title="${a.date}: ${a.messages} xabar, ${a.users} foydalanuvchi">
+          <div class="bval">${a.messages || ''}</div>
+          <div class="bar${i === last ? ' today' : ''}" style="--h:${Math.max(4, Math.round(a.messages / max * 100))}%"></div>
+          <div class="bday">${wd[new Date(a.date + 'T12:00:00').getDay()]}</div>
+        </div>`).join('')}</div>`;
+    if (first) statsGrid.after(el);
   }
 
   /* ── Users ──────────────────────────────────────────────────────────── */
+  let userPage = 1;
+  const srcLabel = s => s === 'web' ? '🌐 Sayt' : s === 'miniapp' ? '📱 Mini App' : '🤖 Telegram';
   function renderUsers(users) {
     sectionCount.textContent = `${users.length} / ${allUsers.length}`;
     if (!allUsers.length) {
@@ -968,7 +1113,7 @@
       usersList.innerHTML = `<div class="empty">${ICONS.empty}<div>Ushbu filtrga mos foydalanuvchi topilmadi.</div></div>`;
       return;
     }
-    usersList.innerHTML = users.map((u, i) => `
+    usersList.innerHTML = users.slice(0, userPage * 50).map((u, i) => `
       <div class="user-card" data-id="${u.id}" style="animation-delay:${Math.min(i * 0.03, 0.3)}s" onclick="openUserModal('${u.id}')">
         <div class="user-top">
           <div class="user-id-row">
@@ -986,14 +1131,14 @@
         <div class="user-meta">
           <span>${ICONS.chat}${u.message_count} xabar</span>
           <span>${ICONS.clock}${relativeTime(u.last_seen)}</span>
-          <span class="src-pill">${u.source === 'miniapp' ? 'Mini App' : 'Telegram'}</span>
+          <span class="src-pill">${srcLabel(u.source)}</span>
         </div>
         <div class="user-actions" onclick="event.stopPropagation()">
           <button class="action-btn ${u.premium ? 'premium-on' : ''}" data-action="premium">${ICONS.starSm}${u.premium ? 'Premium faol' : 'Premium berish'}</button>
           <button class="action-btn ${u.blocked ? 'block-on' : ''}" data-action="block">${ICONS.shieldOff}${u.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>
         </div>
       </div>
-    `).join('');
+    `).join('') + (users.length > userPage * 50 ? `<button class="more-btn">Yana ${users.length - userPage * 50} ta ko'rsatish</button>` : '');
   }
 
   function applyFilter() {
@@ -1001,12 +1146,15 @@
     let list = allUsers;
     if (currentFilter === 'premium') list = list.filter(u => u.premium);
     else if (currentFilter === 'blocked') list = list.filter(u => u.blocked);
-    else if (currentFilter === 'miniapp') list = list.filter(u => u.source === 'miniapp');
+    else if (currentFilter === 'miniapp') list = list.filter(u => u.source === 'miniapp' || u.source === 'web');
     if (q) list = list.filter(u => u.name.toLowerCase().includes(q) || u.id.includes(q));
+    const so = document.getElementById('sortSel').value;
+    list = [...list].sort((a, b) => so === 'msgs' ? b.message_count - a.message_count : so === 'new' ? (b.first_seen || '').localeCompare(a.first_seen || '') : (b.last_seen || '').localeCompare(a.last_seen || ''));
     renderUsers(list);
   }
 
-  searchInput.addEventListener('input', applyFilter);
+  searchInput.addEventListener('input', () => { userPage = 1; applyFilter(); });
+  usersList.addEventListener('click', e => { if (e.target.closest('.more-btn')) { userPage++; applyFilter(); } });
 
   filterTabs.addEventListener('click', (e) => {
     const btn = e.target.closest('.filter-tab');
@@ -1015,6 +1163,7 @@
     filterTabs.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentFilter = btn.dataset.filter;
+    userPage = 1;
     applyFilter();
   });
 
@@ -1058,7 +1207,7 @@
     document.getElementById('modalRows').innerHTML = `
       <div class="modal-row"><span class="k">Telegram ID</span><span class="v" style="font-family:'JetBrains Mono',monospace;font-size:12px">${u.id}</span></div>
       <div class="modal-row"><span class="k">Xabarlar soni</span><span class="v">${u.message_count} ta</span></div>
-      <div class="modal-row"><span class="k">Manba</span><span class="v">${u.source === 'miniapp' ? '📱 Mini App' : '🤖 Telegram Bot'}</span></div>
+      <div class="modal-row"><span class="k">Manba</span><span class="v">${srcLabel(u.source)}</span></div>
       <div class="modal-row"><span class="k">Birinchi ko'rilgan</span><span class="v">${u.first_seen || '—'}</span></div>
       <div class="modal-row"><span class="k">So'nggi faollik</span><span class="v">${relativeTime(u.last_seen)}</span></div>
       <div class="modal-row"><span class="k">Premium</span><span class="v">${u.premium ? '⭐ Ha' + (u.premium_until ? ' · ' + fmtUntil(u.premium_until) + ' gacha' : ' · cheksiz') : '—'}</span></div>
@@ -1301,7 +1450,7 @@
         <input type="checkbox" class="group-select" ${checked?'checked':''}
           onchange="toggleGroupSelect('${g.id}',this.checked)">
         <div class="group-avatar">👥</div>
-        <div class="group-info">
+        <div class="group-info" style="cursor:pointer" onclick="showGroupInfo('${g.id}')">
           <div class="group-title">${escapeHtml(g.title)}</div>
           <div class="group-meta">ID: ${g.id} · ${g.message_count} xabar · ${lastSeen}</div>
         </div>
@@ -1311,6 +1460,33 @@
         </div>
       </div>`;
     }).join('');
+  }
+
+  async function showGroupInfo(id) {
+    const g = allGroups.find(x => x.id === id); if (!g) return;
+    tg?.HapticFeedback?.impactOccurred('light');
+    document.getElementById('modalName').textContent = g.title;
+    document.getElementById('modalRows').innerHTML = '<div class="modal-row"><span class="k">Telegram ma\'lumoti</span><span class="v">yuklanmoqda…</span></div>';
+    document.getElementById('modalActions').innerHTML = '';
+    document.getElementById('userModal').style.display = 'flex';
+    try {
+      const r = await api('/api/admin/group-info', { chat_id: id });
+      if (r.error) throw new Error(r.error);
+      document.getElementById('modalRows').innerHTML = `
+        <div class="modal-row"><span class="k">ID</span><span class="v">${id}</span></div>
+        <div class="modal-row"><span class="k">A'zolar</span><span class="v">${r.member_count ?? '—'}</span></div>
+        <div class="modal-row"><span class="k">Turi</span><span class="v">${escapeHtml(r.type || '—')}</span></div>
+        <div class="modal-row"><span class="k">Xabarlar (bot)</span><span class="v">${g.message_count}</span></div>
+        ${r.invite_link ? `<div class="modal-row"><span class="k">Havola</span><span class="v sheet-link">${escapeHtml(r.invite_link)}</span></div>` : ''}`;
+      if (r.invite_link) {
+        const b = document.createElement('button');
+        b.className = 'action-btn'; b.style.flex = '1'; b.textContent = 'Havolani nusxalash';
+        b.addEventListener('click', () => { navigator.clipboard?.writeText(r.invite_link); showToast('Nusxalandi ✓'); });
+        document.getElementById('modalActions').appendChild(b);
+      }
+    } catch (e) {
+      document.getElementById('modalRows').innerHTML = `<div class="modal-row"><span class="k">Xato</span><span class="v">${escapeHtml(e.message || 'yuklanmadi')}</span></div>`;
+    }
   }
 
   function toggleGroupSelect(id, checked) {
@@ -1360,6 +1536,8 @@
     return preview && preview.src && preview.style.display !== 'none' ? preview.src : '';
   }
 
+  const askConfirm = msg => new Promise(r => (tg && tg.showConfirm) ? tg.showConfirm(msg, r) : r(confirm(msg)));
+
   /* ── Broadcast — users ──────────────────────────────────────────────── */
   function updateUBroadcastCount() {
     const el = document.getElementById('uBroadcastCount');
@@ -1370,6 +1548,7 @@
     const msg = document.getElementById('uBroadcastMsg').value.trim();
     const photo = getPhotoDataUrl('uPhotoInput');
     if (!msg && !photo) { showToast('Xabar yoki rasm kiriting', true); return; }
+    if (!(await askConfirm(allUsers.length + ' ta foydalanuvchiga yuborilsinmi?'))) return;
     const btn = document.getElementById('uBroadcastBtn');
     const resultEl = document.getElementById('uBroadcastResult');
     btn.disabled = true; btn.textContent = 'Yuborilyapti…';
@@ -1393,6 +1572,7 @@
     const photo = getPhotoDataUrl('gPhotoInput');
     if (!msg && !photo) { showToast('Xabar yoki rasm kiriting', true); return; }
     if (!selectedGroupIds.size) { showToast('Guruh tanlanmagan', true); return; }
+    if (!(await askConfirm(selectedGroupIds.size + ' ta guruhga yuborilsinmi?'))) return;
     const btn = document.getElementById('broadcastSendBtn');
     const resultEl = document.getElementById('broadcastResult');
     btn.disabled = true; btn.textContent = 'Yuborilyapti…';
@@ -1481,6 +1661,28 @@
   }
 
   load(false);
+
+  /* ── Jonli yangilanish (15 soniya) ─────────────────────────────────── */
+  let _sig = '';
+  function setLive(ok) {
+    document.getElementById('liveDot').classList.toggle('off', !ok);
+    document.getElementById('liveTxt').textContent = ok ? 'Jonli' : "Aloqa yo'q";
+  }
+  async function livePoll() {
+    if (document.hidden || dashEl.style.display === 'none') return;
+    try {
+      const [stats, ur] = await Promise.all([api('/api/admin/stats', {}), api('/api/admin/users', {})]);
+      allUsers = ur.users || allUsers;
+      renderStats(stats);
+      const sig = allUsers.length + ':' + stats.total_messages + ':' + stats.premium_count + ':' + stats.blocked_count;
+      if (sig !== _sig && currentTab === 'users' && !modalUserId) applyFilter();
+      _sig = sig;
+      setLive(true);
+      loadSys();
+    } catch { setLive(false); }
+  }
+  setInterval(livePoll, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) livePoll(); });
 
   /* ── Love confession — eski kod o'chirildi, yangi versiya quyida ── */
 
