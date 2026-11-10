@@ -40,6 +40,7 @@ from telethon.errors import SessionPasswordNeededError
 
 import admin_store
 import ai_core
+import misumi_info
 import game
 import ship
 import fun
@@ -164,7 +165,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         greeting = f"a, {first_name} — kelibsan." if first_name else "kelibsan."
         await update.message.reply_text(
             f"{greeting} men {ai_core.BOT_NAME}man.\n\ngapir — javob beraman.\n\n"
-            f"Yaratuvchi: {ai_core.AUTHOR_HANDLE}",
+            f"Yaratuvchi: {misumi_info.OWNER}\nSupport: {misumi_info.SUPPORT}\nSayt: {misumi_info.SITE}",
             reply_markup=_webapp_keyboard(chat_id),
         )
 
@@ -505,7 +506,7 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif data in ("ub:buy_pro", "ub:buy_max"):
         plan, price = ("Max", "70 000") if data.endswith("max") else ("Pro", "30 000")
-        await query.answer("So'rov adminga yuborildi ✅", show_alert=True)
+        await query.answer(f"So'rov adminga yuborildi ✅ Tezroq bo'lishi uchun {misumi_info.SUPPORT} ga ham yozing", show_alert=True)
         if ADMIN_ID:
             requester = update.effective_user
             uname = f"@{requester.username}" if requester.username else requester.full_name
