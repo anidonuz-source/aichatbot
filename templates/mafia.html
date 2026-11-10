@@ -186,6 +186,23 @@ body.night #lamp,body.vote #lamp,body.lobby #lamp{opacity:1}@keyframes fk{0%,90%
 #endbox{background:#d8cfb8;color:#1a1612;padding:16px;border:1px solid #000;box-shadow:0 24px 70px #000;transform:rotate(-1.2deg);animation:np .7s cubic-bezier(.2,1.2,.4,1);font-family:var(--tw)}@keyframes np{from{transform:rotate(8deg) scale(.4);opacity:0}}
 #endbox .mut{color:#5a5040}#endbox .big{font-family:var(--ser);letter-spacing:3px;filter:brightness(.55) contrast(1.3)}
 .np{border-bottom:3px double #1a1612;margin-bottom:10px;padding-bottom:6px}.np b{display:block;font:400 34px var(--ser);letter-spacing:4px}.np i{font-size:11px;opacity:.7}.np h3{margin:6px 0 0;font:400 20px var(--ser);letter-spacing:2px;text-transform:uppercase}
+
+/* ===== RESPONSIVE ===== */
+@media (min-width:600px) and (max-width:819px) and (orientation:portrait){#app{max-width:780px;margin:0 auto}#dock{height:44vh;max-height:none}}
+@media (min-width:820px),(orientation:landscape) and (min-width:620px){
+html,body{font-size:15px}
+#app{max-width:1680px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) clamp(360px,30vw,480px);grid-template-rows:auto minmax(0,1fr) auto}
+#top{grid-column:1;grid-row:1;padding:14px 20px}#stage{grid-column:1;grid-row:2}#rx{grid-column:1;grid-row:3}
+#dock{grid-column:2;grid-row:1/4;height:auto;max-height:none;min-height:0;border-radius:0;border-top:0;border-left:2px solid var(--line);padding-top:12px}
+#grip{display:none}#tabs button{flex:1;font-size:13px}.pane{padding:12px 18px}
+#table{height:auto;width:min(100%,calc(100vh - 140px))}
+#card{width:min(32vw,360px)}#pbox,#endbox,#deadbox{width:min(90vw,460px)}
+#city{bottom:0;height:32vh}#lamp{bottom:0;height:28vh;left:6%}#lamp::after{height:26vh;width:120px;left:-58px}.fog{bottom:6vh}
+#toasts{left:18px;right:auto;width:min(420px,50vw)}
+#nar{right:clamp(360px,30vw,480px);font-size:18px}
+}
+@media (min-width:1500px){html,body{font-size:16px}}
+@media (orientation:landscape) and (max-height:480px){#top{padding:6px 14px}#nar{top:calc(var(--sat) + 44px);font-size:14px}}
 </style>
 {% endraw %}
 <script>window.BOTU={{ (bot_username or '')|tojson }};</script>
@@ -433,7 +450,7 @@ function table() {
   const v = V, m = v.me; let ps = v.players.slice();
   const i = ps.findIndex(p => m && p.uid === m.uid); if (i > 0) ps = ps.slice(i).concat(ps.slice(0, i));
   const n = ps.length, sz = n <= 7 ? 58 : n <= 10 ? 50 : n <= 13 ? 42 : 36, R = n > 10 ? 38 : 36;
-  $('#table').style.setProperty('--sz', sz + 'px');
+  $('#table').style.setProperty('--sz', 'calc(' + sz + 'px * var(--k,1))');
   const canPick = !!(m && m.alive && (v.phase === 'night' || v.phase === 'vote'));
   const ok = new Set(canPick ? m.targets : []);
   const mine = new Set();
@@ -781,8 +798,9 @@ setInterval(()=>{if(B.classList.contains('night')&&Math.random()<.35){fl.classLi
 new MutationObserver(()=>{const t=document.getElementById('tnum');if(t&&t.classList.contains('pulse'))pl('tick')}).observe(document.getElementById('tnum'),{childList:1,characterData:1,subtree:1});
 new MutationObserver(()=>{if(document.getElementById('ovr').classList.contains('on'))pl('hit')}).observe(document.getElementById('ovr'),{attributes:1,attributeFilter:['class']});
 const eb=document.getElementById('endbox');new MutationObserver(()=>{if(!document.getElementById('ove').classList.contains('on')||eb.querySelector('.np'))return;const m=eb.querySelector('.mut'),b=eb.querySelector('.big');if(!m||!b||!/G'OLIB|ПОБЕД/i.test(m.textContent))return;const h=document.createElement('div');h.className='np';h.innerHTML=`<b>MAFIA TIMES</b><i>${new Date().toLocaleDateString()}</i><h3>${RU?'Экстренный выпуск':'Maxsus son'}: ${b.textContent}</h3>`;eb.prepend(h);pl('hit')}).observe(document.getElementById('ove'),{attributes:1,attributeFilter:['class']});
-})();
-</script>
+
+const kf=()=>{const e=document.getElementById('table');e&&document.documentElement.style.setProperty('--k',Math.min(1.9,Math.max(1,e.offsetWidth/360)).toFixed(2))};kf();addEventListener('resize',kf);window.ResizeObserver&&new ResizeObserver(kf).observe(document.getElementById('table'));
+})();</script>
 {% endraw %}
 </body>
 </html>
