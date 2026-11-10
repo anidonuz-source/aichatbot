@@ -49,6 +49,7 @@ import admin_store
 import ai_core
 import db
 import game_store
+import misumi_info
 import userbot_store
 
 logger = logging.getLogger("misumi-extras")
@@ -576,6 +577,8 @@ def _start_kb(chat_id, bot_username: str | None, premium: bool, lang: str = "uz"
         mk(tr(lang, "sec_account"), "👤", callback_data="ac:home"),
     ])
     rows.append([mk(tr(lang, "sec_mafia"), "🎭", callback_data="st:s:mafia")])
+    rows.append([mk("Sayt", "🌐", url=misumi_info.SITE),
+                 mk("Support", "🛟", url=misumi_info.SUPPORT_URL)])
     if bot_username:
         rows.append([mk(tr(lang, "add_group"), "➕", url=f"https://t.me/{bot_username}?startgroup=true")])
     if WEBAPP_URL and _is_admin(chat_id):
@@ -739,7 +742,8 @@ def _plans_text(owned: bool) -> str:
     if owned:
         text += "\n\n✅ Sizda premium faol."
     else:
-        text += "\n\nSotib olish uchun tugmani bosing: so'rov adminga yuboriladi."
+        text += (f"\n\nSotib olish uchun tugmani bosing: so'rov adminga yuboriladi. "
+                 f"Tezroq bo'lishi uchun {misumi_info.SUPPORT} ga ham yozing.")
     return text
 
 
@@ -774,8 +778,9 @@ def _account_info(user, lang: str) -> tuple[str, bool]:
         lines.append(f"{pe('🔗')} {tr(lang, 'acc_link_yes')} ({_esc(_mask_phone(meta.get('phone', '')))})")
     else:
         lines.append(f"{pe('🔗')} {tr(lang, 'acc_link_no')}")
-    lines.append(f"{pe('💎')} {tr(lang, 'acc_pro') if pro else tr(lang, 'acc_free')}")
+    lines.extend(misumi_info.plan_lines(uid))
     lines.append(f"\n💎 <b>Tariflar</b>\n<blockquote>{_plans_text(pro)}</blockquote>")
+    lines.append(f"\n<blockquote>{misumi_info.contacts_block()}</blockquote>")
     text = "\n".join(lines)
     if not connected:
         text += f"\n\n<blockquote>{_esc(tr(lang, 'why_link'))}</blockquote>"
@@ -796,6 +801,8 @@ def _account_kb(connected: bool, pro: bool, lang: str, premium: bool) -> InlineK
     rows.append([mk(tr(lang, "btn_lang"), "🌐", callback_data="ac:lang"),
                  mk(tr(lang, "btn_voice"), "🔊", callback_data="ac:voice")])
     rows.append([mk(tr(lang, "btn_clear"), "🧹", callback_data="ac:clear")])
+    rows.append([mk("Sayt", "🌐", url=misumi_info.SITE),
+                 mk("Support", "🛟", url=misumi_info.SUPPORT_URL)])
     if connected:
         rows.append([mk(tr(lang, "btn_disc"), "🔌", callback_data="ub:disconnect")])
     rows.append([mk(tr(lang, "back"), "⬅️", callback_data="st:home")])
