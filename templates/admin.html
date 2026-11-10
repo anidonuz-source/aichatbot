@@ -621,6 +621,32 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
 .tools{display:flex;gap:8px;margin:0 0 12px}
 .tools select,.tools button{flex:1;padding:10px 12px;border-radius:12px;border:1px solid var(--hairline-strong);background:var(--ink-2);color:var(--paper);font-weight:600;font-size:13px}
 .tools button:active{transform:scale(.96)}
+
+/* ===== v4: kompyuter / planshet / telefon ===== */
+@media (max-width:899px){#cols,#colL,#colR{display:contents}.toast{bottom:calc(88px + var(--safe-bottom))}}
+@media (min-width:600px) and (max-width:899px){.container{max-width:780px}#usersList,#groupsList{display:grid;grid-template-columns:1fr 1fr;gap:10px}#usersList>*,#groupsList>*{margin:0!important}#usersList .more-btn{grid-column:1/-1}}
+@media (min-width:900px){
+  .container{max-width:1240px}
+  main{padding:26px 32px 48px}
+  header{padding-left:max(24px,calc((100vw - 1240px)/2 + 32px));padding-right:max(24px,calc((100vw - 1240px)/2 + 32px))}
+  #cols{display:grid;grid-template-columns:minmax(340px,410px) minmax(0,1fr);gap:26px;align-items:start}
+  #colL,#colR{display:block;min-width:0}
+  #colL{position:sticky;top:12px;max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:none;padding-bottom:12px}
+  #colL::-webkit-scrollbar{display:none}
+  main{padding-bottom:48px}
+  .main-tabs{position:static!important;transform:none;width:100%;margin:0 0 16px!important;box-shadow:none}
+  #usersList,#groupsList{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+  #usersList>*,#groupsList>*{margin:0!important}
+  #usersList .more-btn{grid-column:1/-1}
+  .hero .big{font-size:78px}
+  .toast{bottom:26px}
+  .modal-overlay{align-items:center!important}
+  .modal{border-radius:24px;max-width:480px}
+}
+body.maint header{box-shadow:0 2px 0 var(--danger)}
+body.maint .titles .sub::after{content:' · Texnik ishlar yoqilgan';color:var(--danger);font-weight:700}
+.kbd{display:none}
+@media (min-width:900px){.kbd{display:block;margin-top:6px;font-size:11px;color:var(--paper-dim)}.kbd b{padding:1px 6px;border:1px solid var(--hairline-strong);border-radius:6px;font-weight:600;color:var(--paper)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -754,10 +780,12 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
           <div class="section-title"></div>
           <div class="section-count" id="sectionCount"></div>
         </div>
+        <div class="kbd"><b>/</b> qidirish &nbsp;<b>1</b><b>2</b><b>3</b> bo'limlar &nbsp;<b>R</b> yangilash &nbsp;<b>T</b> tema</div>
         <input class="search" id="searchInput" placeholder="Ism yoki ID bo'yicha qidirish…">
         <div class="tools"><select id="sortSel"><option value="seen">So'nggi faol</option><option value="msgs">Eng ko'p xabar</option><option value="new">Yangi qo'shilgan</option></select><button id="csvBtn" type="button">⬇ CSV</button></div>
         <div class="filter-tabs" id="filterTabs">
           <button class="filter-tab active" data-filter="all">Hammasi</button>
+          <button class="filter-tab" data-filter="today">🟢 Bugun</button>
           <button class="filter-tab" data-filter="premium">⭐ Premium</button>
           <button class="filter-tab" data-filter="blocked">🚫 Bloklangan</button>
           <button class="filter-tab" data-filter="miniapp">📱 Sayt/Mini App</button>
@@ -944,7 +972,7 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
   /* ── Relative time ──────────────────────────────────────────────────── */
   function relativeTime(str) {
     if (!str) return '—';
-    const then = new Date(str.replace(' ', 'T'));
+    const then = new Date(str.replace(' ', 'T') + '+05:00');
     if (isNaN(then.getTime())) return str;
     const diffMs = Date.now() - then.getTime();
     const min = Math.floor(diffMs / 60000);
@@ -974,7 +1002,7 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
     // Yangi foydalanuvchilar (so'nggi 7 kun taxminan)
     const newUsers7 = allUsers.filter(u => {
       if (!u.first_seen) return false;
-      const d = new Date(u.first_seen.replace(' ','T'));
+      const d = new Date(u.first_seen.replace(' ','T') + '+05:00');
       return (Date.now() - d.getTime()) < 7*24*3600*1000;
     }).length;
 
@@ -1003,11 +1031,13 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
       </div>
     `;
     maintenanceToggle.checked = !!stats.maintenance;
+    document.body.classList.toggle('maint', !!stats.maintenance);
     countUp();
     statsGrid.classList.add('settled');
     renderActivityChart(stats.activity || []);
     renderHero(stats);
     renderTop();
+    renderPrem();
   }
 
   let _heroPrev = 0;
@@ -1061,6 +1091,19 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
     a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' }));
     a.download = 'misumi-users.csv'; a.click(); showToast('CSV tayyor ✓');
   });
+
+  function renderPrem() {
+    const ps = allUsers.filter(u => u.premium).sort((a, b) => (a.premium_until || 9e12) - (b.premium_until || 9e12)).slice(0, 5);
+    let el = document.getElementById('premBox');
+    if (!ps.length) { if (el) el.remove(); return; }
+    const anchor = document.getElementById('topBox') || document.getElementById('activityChart');
+    if (!el && anchor) { el = document.createElement('div'); el.id = 'premBox'; el.className = 'blk'; anchor.after(el); }
+    if (!el) return;
+    el.innerHTML = '<h4>Premium muddatlari</h4>' + ps.map(u => {
+      const left = u.premium_until ? Math.ceil((u.premium_until * 1000 - Date.now()) / 864e5) : null;
+      return `<div class="sys-row ${left !== null && left <= 3 ? 'off' : ''}"><span class="d"></span><span>${escapeHtml(u.name)}</span><span class="m">${left === null ? 'cheksiz' : left + ' kun qoldi'}</span></div>`;
+    }).join('');
+  }
 
   const _prevNums = {};
   const _fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -1145,6 +1188,7 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
     const q = searchInput.value.trim().toLowerCase();
     let list = allUsers;
     if (currentFilter === 'premium') list = list.filter(u => u.premium);
+    else if (currentFilter === 'today') list = list.filter(u => (u.last_seen || '').startsWith(new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tashkent' })));
     else if (currentFilter === 'blocked') list = list.filter(u => u.blocked);
     else if (currentFilter === 'miniapp') list = list.filter(u => u.source === 'miniapp' || u.source === 'web');
     if (q) list = list.filter(u => u.name.toLowerCase().includes(q) || u.id.includes(q));
@@ -1659,6 +1703,21 @@ body,header,.panel,.stat-card,.user-card,.group-card,.act-card,.main-tabs{transi
       refreshBtn.classList.remove('spinning');
     }
   }
+
+  (function () {
+    const cols = document.createElement('div'), L = document.createElement('div'), R = document.createElement('div');
+    cols.id = 'cols'; L.id = 'colL'; R.id = 'colR';
+    [...dashEl.children].forEach(n => (n.classList.contains('main-tabs') || /^panel(Users|Groups|Broadcast)$/.test(n.id) ? R : L).appendChild(n));
+    cols.append(L, R); dashEl.appendChild(cols);
+  })();
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input,textarea,select') || e.ctrlKey || e.metaKey || e.altKey || dashEl.style.display === 'none') return;
+    const k = e.key.toLowerCase();
+    if (k === '/') { e.preventDefault(); switchMainTab('users'); searchInput.focus(); }
+    else if (k === 'r') load(true);
+    else if (k === 't') document.getElementById('themeBtn').click();
+    else if (k === '1' || k === '2' || k === '3') switchMainTab(['users', 'groups', 'broadcast'][+k - 1]);
+  });
 
   load(false);
 
