@@ -523,9 +523,9 @@ async def ub_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await query.answer("Ruxsat yo'q.", show_alert=True)
             return
         target_id = data.split(":", 2)[2]
-        admin_store.toggle_premium(target_id)
+        admin_store.grant_premium(target_id, 30)
         await query.answer("Tasdiqlandi ✅")
-        await query.edit_message_text(f"✅ Foydalanuvchi {target_id} endi Misumi AI Pro.")
+        await query.edit_message_text(f"✅ Foydalanuvchi {target_id} ga Misumi AI Premium 30 kunga berildi.")
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
