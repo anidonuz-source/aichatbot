@@ -94,11 +94,61 @@ def is_blocked(user_id) -> bool:
         return False
 
 
+def _expired(data: dict, uid: str) -> bool:
+    """premium_until (epoch soniya) o'tib ketgan bo'lsa True. Yozuv yo'q = cheksiz."""
+    until = (data.get("premium_until") or {}).get(uid)
+    return bool(until) and float(until) <= datetime.now(timezone.utc).timestamp()
+
+
 def is_premium(user_id) -> bool:
     try:
-        return str(user_id) in _load().get("premium", [])
+        data = _load()
+        uid = str(user_id)
+        return uid in data.get("premium", []) and not _expired(data, uid)
     except Exception:
         return False
+
+
+def premium_until(user_id):
+    """Tugash vaqti (epoch soniya) yoki None (cheksiz / premium emas)."""
+    try:
+        data = _load()
+        uid = str(user_id)
+        if uid not in data.get("premium", []) or _expired(data, uid):
+            return None
+        return (data.get("premium_until") or {}).get(uid)
+    except Exception:
+        return None
+
+
+def grant_premium(user_id, days: int | None = None):
+    """Premium beradi. days=None/0 -> cheksiz. Allaqachon faol bo'lsa muddat ustiga qo'shiladi.
+    Qaytaradi: tugash vaqti (epoch soniya) yoki None (cheksiz)."""
+    uid = str(user_id)
+    data = _load()
+    premium = set(data.get("premium", []))
+    until_map = data.setdefault("premium_until", {})
+    now = datetime.now(timezone.utc).timestamp()
+    if days:
+        cur = until_map.get(uid)
+        base = float(cur) if (uid in premium and cur and float(cur) > now) else now
+        until = int(base + days * 86400)
+        until_map[uid] = until
+    else:
+        until = None
+        until_map.pop(uid, None)
+    premium.add(uid)
+    data["premium"] = sorted(premium)
+    _save(data)
+    return until
+
+
+def revoke_premium(user_id) -> None:
+    uid = str(user_id)
+    data = _load()
+    data["premium"] = sorted(set(data.get("premium", [])) - {uid})
+    (data.get("premium_until") or {}).pop(uid, None)
+    _save(data)
 
 
 def is_maintenance() -> bool:
@@ -138,6 +188,7 @@ def toggle_premium(user_id) -> bool:
     premium = set(data.get("premium", []))
     if user_id in premium:
         premium.discard(user_id)
+        (data.get("premium_until") or {}).pop(user_id, None)
         state = False
     else:
         premium.add(user_id)
@@ -172,7 +223,7 @@ def get_stats() -> dict:
         "activity": activity,
         "maintenance": data.get("maintenance", False),
         "blocked_count": len(data.get("blocked", [])),
-        "premium_count": len(data.get("premium", [])),
+        "premium_count": sum(1 for u in data.get("premium", []) if not _expired(data, u)),
     }
 
 
@@ -180,7 +231,8 @@ def get_users(limit: int = 3000) -> list[dict]:
     data = _load()
     users = data.get("users", {})
     blocked = set(data.get("blocked", []))
-    premium = set(data.get("premium", []))
+    premium = {u for u in data.get("premium", []) if not _expired(data, u)}
+    until_map = data.get("premium_until") or {}
     result = []
     for uid, info in users.items():
         if uid.startswith("-"):
@@ -195,6 +247,7 @@ def get_users(limit: int = 3000) -> list[dict]:
                 "source": info.get("source", "telegram"),
                 "blocked": uid in blocked,
                 "premium": uid in premium,
+                "premium_until": until_map.get(uid) if uid in premium else None,
             }
         )
     result.sort(key=lambda u: u["last_seen"] or "", reverse=True)
