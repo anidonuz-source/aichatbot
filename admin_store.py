@@ -162,7 +162,7 @@ def get_stats() -> dict:
     data = _load()
     people = {k: v for k, v in data.get("users", {}).items() if not k.startswith("-")}
     groups = len(data.get("users", {})) - len(people)
-    activity = get_activity(data)
+    activity = get_activity(data, 14)
     return {
         "total_users": len(people),
         "total_groups": groups,
