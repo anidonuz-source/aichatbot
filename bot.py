@@ -53,6 +53,10 @@ import study
 import userbot_manager
 import userbot_store
 import webapp
+import payments
+import referral
+import inline_mode
+import menu
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -943,9 +947,13 @@ def main():
     games2.register(app)
     extras.register(app)
     study.register(app)
+    payments.register(app)     # ⭐ Telegram Stars to'lovi
+    referral.register(app)     # 🤝 do'st taklif qilish
+    inline_mode.register(app)  # @bot savol
 
     async def _post_init(_app):
         await userbot_manager.resume_all()
+        await menu.setup(_app)  # "/" buyruqlar menyusi
 
         # Bot restart bo'lganda — barcha ma'lum guruhlardagi adminlarni yuklaymiz
         # Bu ship._seen_members ni to'ldiradi (Telegram faqat adminlarni beradi)
