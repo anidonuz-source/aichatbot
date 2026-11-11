@@ -3,12 +3,14 @@ Misumi AI — Telegram Stars (XTR) orqali avtomatik to'lov.
 
 Oqim:
   "💎 Pro sotib olish" (ub:buy_pro / ub:buy_max)
-    -> tarif tanlash menyusi (⭐ Stars / qo'lda to'lov)
+    -> tarif tanlash menyusi (⭐ Stars / support'ga yozish tugmasi)
     -> send_invoice (XTR)  -> PreCheckoutQuery -> SUCCESSFUL_PAYMENT
     -> admin_store.grant_premium(user, kun)  -> foydalanuvchi va adminga xabar
 
 Stars uchun provider_token KERAK EMAS (bo'sh qoldiriladi), BotFather'da
 hech narsa yoqish shart emas.
+
+Test tarif: 1⭐ = 20 daqiqa Pro, har bir akkaunt uchun FAQAT BIR MARTA.
 
 Env (ixtiyoriy):
   STARS_PRO_30    Pro, 30 kun narxi (Stars)   default 50
@@ -64,7 +66,24 @@ PLANS = {
     "pro30": ("Misumi AI Pro — 30 kun", 30, _int_env("STARS_PRO_30", 50), "30 000"),
     "pro90": ("Misumi AI Pro — 90 kun", 90, _int_env("STARS_PRO_90", 130), "80 000"),
     "max30": ("Misumi AI Max — 30 kun", 30, _int_env("STARS_MAX_30", 110), "70 000"),
+    # TEST: 20 daqiqa, 1 Star, har bir akkaunt uchun bir marta
+    "test20": ("Misumi AI Pro — TEST 20 daqiqa", 20 / 1440, 1, "—"),
 }
+TEST_PLAN = "test20"
+
+
+def _dur_text(days: float) -> str:
+    if days < 1:
+        return f"{round(days * 1440)} daqiqa"
+    return f"{int(days)} kun"
+
+
+def _test_used_sync(user_id) -> bool:
+    try:
+        return db.exists(STORE, f"test:{user_id}")
+    except Exception:
+        logger.exception("test holatini tekshirib bo'lmadi")
+        return False
 
 
 def _is_admin(user_id) -> bool:
@@ -73,12 +92,15 @@ def _is_admin(user_id) -> bool:
 
 # ───────────────────────── tarif menyusi ─────────────────────────
 
-def _plans_kb(highlight: str | None = None) -> InlineKeyboardMarkup:
+def _plans_kb(highlight: str | None = None, test_used: bool = False) -> InlineKeyboardMarkup:
     rows = []
     for pid, (title, days, stars, _uzs) in PLANS.items():
+        if pid == TEST_PLAN and test_used:
+            continue
         mark = "👉 " if pid.startswith(highlight or "~") else ""
         rows.append([InlineKeyboardButton(f"{mark}⭐ {title} — {stars} Stars", callback_data=f"pay:stars:{pid}")])
-    rows.append([InlineKeyboardButton("💳 Click/Payme (qo'lda, support orqali)", callback_data="pay:manual")])
+    # Support'ga to'g'ridan-to'g'ri lichkaga o'tadi (adminga so'rov yuborilmaydi)
+    rows.append([InlineKeyboardButton("💳 Click/Payme — Support'ga yozish", url=misumi_info.SUPPORT_URL)])
     rows.append([InlineKeyboardButton("⬅️ Orqaga", callback_data="ub:services")])
     return InlineKeyboardMarkup(rows)
 
@@ -88,6 +110,7 @@ async def buy_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     hl = "max" if query.data.endswith("max") else "pro"
+    test_used = await asyncio.to_thread(_test_used_sync, update.effective_user.id)
     until = admin_store.premium_until(update.effective_user.id)
     extra = ""
     if admin_store.is_premium(update.effective_user.id):
@@ -99,10 +122,10 @@ async def buy_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{extra}"
     )
     try:
-        await query.edit_message_text(text, reply_markup=_plans_kb(hl), parse_mode="HTML")
+        await query.edit_message_text(text, reply_markup=_plans_kb(hl, test_used), parse_mode="HTML")
     except Exception:
         await context.bot.send_message(
-            update.effective_chat.id, text, reply_markup=_plans_kb(hl), parse_mode="HTML"
+            update.effective_chat.id, text, reply_markup=_plans_kb(hl, test_used), parse_mode="HTML"
         )
     raise ApplicationHandlerStop  # eski ub_callback_router ga o'tmasin
 
@@ -116,39 +139,19 @@ async def stars_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     title, days, stars, _ = plan
     user = update.effective_user
+    if pid == TEST_PLAN and await asyncio.to_thread(_test_used_sync, user.id):
+        await query.answer("Test tarifdan siz allaqachon foydalangansiz (bir akkaunt uchun bir marta).", show_alert=True)
+        return
     await query.answer()
     await context.bot.send_invoice(
         chat_id=update.effective_chat.id,
         title=title,
-        description=f"{days} kun Misumi AI Pro: barcha Pro xizmatlar, kuchliroq modellar. To'lovdan keyin avtomatik yoqiladi.",
+        description=f"{_dur_text(days)} Misumi AI Pro: barcha Pro xizmatlar, kuchliroq modellar. To'lovdan keyin avtomatik yoqiladi.",
         payload=f"{pid}:{user.id}",
         provider_token="",  # Stars uchun bo'sh
         currency="XTR",
         prices=[LabeledPrice(title, stars)],
     )
-
-
-async def manual_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Eski qo'lda oqim: adminga tasdiqlash tugmasi bilan so'rov ketadi."""
-    query = update.callback_query
-    user = update.effective_user
-    await query.answer(
-        f"So'rov adminga yuborildi ✅ Tezroq bo'lishi uchun {misumi_info.SUPPORT} ga ham yozing",
-        show_alert=True,
-    )
-    if ADMIN_ID:
-        uname = f"@{user.username}" if user.username else user.full_name
-        kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("✅ Tasdiqlash (Pro 30 kun)", callback_data=f"ub:approve:{user.id}")]]
-        )
-        try:
-            await context.bot.send_message(
-                int(ADMIN_ID),
-                f"💎 Qo'lda Pro so'rovi\n\nFoydalanuvchi: {uname} (ID: {user.id})",
-                reply_markup=kb,
-            )
-        except Exception:
-            logger.exception("adminga so'rov yuborilmadi")
 
 
 # ───────────────────────── to'lov jarayoni ─────────────────────────
@@ -159,6 +162,9 @@ async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid, uid = q.invoice_payload.split(":", 1)
         plan = PLANS.get(pid)
         ok = plan is not None and str(q.from_user.id) == uid and q.currency == "XTR" and q.total_amount == plan[2]
+        if ok and pid == TEST_PLAN and await asyncio.to_thread(_test_used_sync, q.from_user.id):
+            await q.answer(ok=False, error_message="Test tarifdan siz allaqachon foydalangansiz.")
+            return
     except Exception:
         ok = False
     if ok:
@@ -183,6 +189,11 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     pid = pay.invoice_payload.split(":", 1)[0]
     plan = PLANS.get(pid)
     days = plan[1] if plan else 30
+    if pid == TEST_PLAN:
+        try:
+            await asyncio.to_thread(db.save, STORE, f"test:{user.id}", {"ts": int(time.time()), "charge_id": charge_id})
+        except Exception:
+            logger.exception("test belgisini yozib bo'lmadi")
     title = plan[0] if plan else "Misumi AI Pro"
 
     until = admin_store.grant_premium(user.id, days)
@@ -206,7 +217,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception:
         logger.exception("to'lovni bazaga yozib bo'lmadi (Pro berildi): %s", record)
 
-    until_txt = time.strftime("%d.%m.%Y", time.gmtime(until + 5 * 3600)) if until else "cheksiz"
+    fmt = "%d.%m.%Y %H:%M" if days < 1 else "%d.%m.%Y"
+    until_txt = time.strftime(fmt, time.gmtime(until + 5 * 3600)) if until else "cheksiz"
     await msg.reply_text(
         f"✅ To'lov qabul qilindi — rahmat!\n\n💎 {title}\n📅 Amal qilish muddati: {until_txt} gacha\n\n"
         "Endi Xizmatlar bo'limidagi Pro funksiyalarni yoqishingiz mumkin.\n"
@@ -277,7 +289,6 @@ def register(app) -> None:
     # group=-1: eski ub:buy_* handleridan OLDIN ishlaydi va uni to'xtatadi
     app.add_handler(CallbackQueryHandler(buy_entry, pattern=r"^ub:buy_(pro|max)$"), group=-1)
     app.add_handler(CallbackQueryHandler(stars_callback, pattern=r"^pay:stars:"), group=0)
-    app.add_handler(CallbackQueryHandler(manual_callback, pattern=r"^pay:manual$"), group=0)
     app.add_handler(PreCheckoutQueryHandler(precheckout), group=0)
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment), group=0)
     app.add_handler(CommandHandler("paysupport", cmd_paysupport), group=0)
