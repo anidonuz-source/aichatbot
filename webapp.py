@@ -63,44 +63,16 @@ def verify_init_data(init_data: str) -> dict | None:
     return pairs
 
 
-_ADMIN_FAILS: dict = {}
-
-
-def _client_ip() -> str:
-    return (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr or "?")
-
-
 def verify_admin(init_data: str) -> dict | None:
-    """Faqat ADMIN_ID egasi (Telegram initData) yoki to'g'ri maxfiy kalit (X-Admin-Secret).
-    ADMIN_ID bo'sh bo'lsa hech kim kira olmaydi. Noto'g'ri kalit 10 daqiqada 8 martadan
-    ko'p urinilsa, shu IP vaqtincha bloklanadi.
-    """
-    import hmac
+    """Faqat ADMIN_ID egasi (Telegram Mini App initData orqali) kira oladi."""
     import logging
-    import time
     log = logging.getLogger("misumi-bot")
     if not ADMIN_ID:
         log.error("[verify_admin] ADMIN_ID sozlanmagan, admin panel yopiq")
         return None
-    if init_data:
-        data = verify_init_data(init_data)
-        if data:
-            if str(data.get("user", {}).get("id", "")) == ADMIN_ID:
-                return data
-            log.warning("[verify_admin] boshqa foydalanuvchi urindi")
-            return None
-    secret = request.headers.get("X-Admin-Secret", "")
-    if secret:
-        ip, now = _client_ip(), time.time()
-        fails = [t for t in _ADMIN_FAILS.get(ip, []) if now - t < 600]
-        _ADMIN_FAILS[ip] = fails
-        if len(fails) >= 8:
-            log.warning("[verify_admin] %s bloklandi (ko'p noto'g'ri urinish)", ip)
-            return None
-        expected = os.environ.get("ADMIN_SECRET") or ADMIN_ID
-        if hmac.compare_digest(secret.encode(), expected.encode()):
-            return {"user": {"id": int(ADMIN_ID)}}
-        fails.append(now)
+    data = verify_init_data(init_data) if init_data else None
+    if data and str(data.get("user", {}).get("id", "")) == ADMIN_ID:
+        return data
     return None
 
 
@@ -271,14 +243,6 @@ def api_admin_provider_test():
     if not verify_admin(body.get("initData", "")):
         return jsonify({"error": "Unauthorized"}), 403
     return jsonify(ai_core.provider_test(str(body.get("provider", ""))))
-
-
-@app.route("/api/admin/security", methods=["POST"])
-def api_admin_security():
-    body = request.get_json(silent=True) or {}
-    if not verify_admin(body.get("initData", "")):
-        return jsonify({"error": "Unauthorized"}), 403
-    return jsonify({"admin_secret_set": bool(os.environ.get("ADMIN_SECRET"))})
 
 
 @app.route("/api/admin/users", methods=["POST"])
