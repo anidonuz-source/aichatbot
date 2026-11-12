@@ -973,15 +973,6 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
   const getInitData = () => window.Telegram?.WebApp?.initData || tg?.initData || '';
-  // URL dan secret parametrini olamiz: /admin?secret=7607916773
-  const _qs = new URLSearchParams(window.location.search);
-  let _urlSecret = _qs.get('secret') || '';
-  try {
-    if (_urlSecret) { sessionStorage.setItem('mAdminKey', _urlSecret); _qs.delete('secret'); history.replaceState(null, '', location.pathname + (_qs.toString() ? '?' + _qs : '') + location.hash); }
-    else _urlSecret = sessionStorage.getItem('mAdminKey') || '';
-  } catch (_) {}
-  if (_urlSecret) window.__adminSecret = _urlSecret;
-
   const gateEl = document.getElementById('gate');
   const loadingEl = document.getElementById('loading');
   const dashEl = document.getElementById('dash');
@@ -1021,20 +1012,12 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
     // ADMIN_ID ni tg user dan olamiz yoki fallback
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
     const headers = {'Content-Type': 'application/json'};
-    // Agar initData bo'sh bo'lsa (desktop) — secret header yuboramiz
-    if (!idata && window.__adminSecret) {
-      headers['X-Admin-Secret'] = window.__adminSecret;
-    }
     const res = await fetch(path, {
       method: 'POST',
       headers,
       body: JSON.stringify({ initData: idata, ...body })
     });
     if (res.status === 403 || res.status === 401) {
-      if (!window.__adminSecret) {
-        const s = prompt('Admin kalitini kiriting:');
-        if (s && s.trim()) { window.__adminSecret = s.trim(); return api(path, body); }
-      }
       throw new Error('unauthorized');
     }
     try { return await res.json(); } catch { throw new Error('server ' + res.status); }
@@ -1172,15 +1155,6 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
     const t = e.target.closest('button'); if (!t) return;
     if (t.dataset.p) return testProv(t.dataset.p, t);
     if (t.id === 'provAll') { t.disabled = true; for (const p of (_prov?.providers || []).filter(p => p.configured)) { t.textContent = p.name + '…'; await testProv(p.id); } }
-  }
-  async function checkSec() {
-    try {
-      const r = await api('/api/admin/security', {});
-      if (r.admin_secret_set || document.getElementById('secWarn')) return;
-      const d = document.createElement('div'); d.id = 'secWarn'; d.className = 'secwarn';
-      d.textContent = "⚠️ Xavfsizlik: ADMIN_SECRET o'rnatilmagan, kirish kaliti hozir Telegram ID'ingiz. Render → Environment'ga ADMIN_SECRET=uzun-tasodifiy-matn qo'shing.";
-      dashEl.prepend(d);
-    } catch (_) {}
   }
   setTimeout(loadSys, 1200);
 
@@ -1887,7 +1861,6 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
       loadingEl.style.display = 'none';
       dashEl.style.display = 'block';
       loadPersona();
-      checkSec();
       loadDailyLimit();
       updateUBroadcastCount();
       if (isRefresh) showToast("Yangilandi ✓");
