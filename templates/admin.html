@@ -734,6 +734,10 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
       </div>
       <h2>Ruxsat yo'q</h2>
       <p>Bu sahifa faqat botning administratori uchun. Agar bu xato deb hisoblasangiz, ADMIN_ID sozlamasini tekshiring.</p>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
+        <input id="pwIn" type="password" placeholder="Admin parol" autocomplete="current-password" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.35);color:#fff;">
+        <button id="pwBtn" style="padding:10px 16px;border-radius:10px;border:0;background:#6c7bff;color:#fff;cursor:pointer;">Kirish</button>
+      </div>
     </div>
 
     <!-- Loading skeleton -->
@@ -972,7 +976,12 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
-  const getInitData = () => window.Telegram?.WebApp?.initData || tg?.initData || '';
+  const getInitData = () => {
+    const t = window.Telegram?.WebApp?.initData || tg?.initData || '';
+    if (t) return t;
+    try { const pw = sessionStorage.getItem('mAdminPw'); if (pw) return 'pwd:' + pw; } catch (_) {}
+    return '';
+  };
   const gateEl = document.getElementById('gate');
   const loadingEl = document.getElementById('loading');
   const dashEl = document.getElementById('dash');
@@ -1872,6 +1881,12 @@ body.wall .panel,body.wall .stat-card,body.wall .user-card,body.wall .group-card
       refreshBtn.classList.remove('spinning');
     }
   }
+
+  (function () {
+    const go = () => { const v = document.getElementById('pwIn').value; try { sessionStorage.setItem('mAdminPw', v); } catch (_) {} location.reload(); };
+    document.getElementById('pwBtn').addEventListener('click', go);
+    document.getElementById('pwIn').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  })();
 
   (function () {
     const cols = document.createElement('div'), L = document.createElement('div'), R = document.createElement('div');
