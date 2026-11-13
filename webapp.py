@@ -70,6 +70,12 @@ def verify_admin(init_data: str) -> dict | None:
     if not ADMIN_ID:
         log.error("[verify_admin] ADMIN_ID sozlanmagan, admin panel yopiq")
         return None
+    # Brauzer orqali kirish: ADMIN_PASSWORD (Render env) bilan
+    if init_data and init_data.startswith("pwd:"):
+        pw = os.environ.get("ADMIN_PASSWORD", "")
+        if pw and hmac.compare_digest(init_data[4:].encode(), pw.encode()):
+            return {"user": {"id": ADMIN_ID}}
+        return None
     data = verify_init_data(init_data) if init_data else None
     if data and str(data.get("user", {}).get("id", "")) == ADMIN_ID:
         return data
